@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
 import GoogleSheetsService from '../services/GoogleSheetsService';
+import AuthService from '../services/AuthService';
 
 const Login = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isSignedIn, setIsSignedIn] = useState(false);
 
-  // 使用 useGoogleLogin 获取 access_token
+  // Use useGoogleLogin to get access_token
   const login = useGoogleLogin({
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     onSuccess: async tokenResponse => {
       try {
         setIsLoading(true);
@@ -17,15 +18,37 @@ const Login = ({ onLoginSuccess }) => {
         const accessToken = tokenResponse.access_token;
         console.log('✅ Got access token:', accessToken);
 
-        // 存到 GoogleSheetsService
-        GoogleSheetsService.accessToken = accessToken;
+        // Store in GoogleSheetsService
+        GoogleSheetsService.setAccessToken(accessToken);
 
-        // 测试能否访问 Sheets
-        await GoogleSheetsService.getAllScores();
+        // Get user profile information
+        const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        
+        if (!userResponse.ok) {
+          throw new Error('Failed to get user information');
+        }
+        
+        const userData = await userResponse.json();
+        console.log('✅ Got user data:', userData);
+
+        // Initialize AuthService with user data (this will check authorization)
+        try {
+          console.log('🔍 Initializing user with AuthService:', userData.email);
+          await AuthService.initializeUser(userData, accessToken);
+          console.log('✅ User initialized and authorized successfully');
+        } catch (authError) {
+          console.error('❌ Authorization failed:', authError);
+          throw authError;
+        }
+        
         setIsSignedIn(true);
-        onLoginSuccess && onLoginSuccess();
+        onLoginSuccess && onLoginSuccess(userData);
       } catch (err) {
-        console.error('❌ Failed to access Sheets:', err);
+        console.error('❌ Failed to access Sheets or get user info:', err);
         setError('Access failed: ' + err.message);
       } finally {
         setIsLoading(false);
@@ -77,7 +100,7 @@ const Login = ({ onLoginSuccess }) => {
             Ethics Bowl Scoring System
           </h2>
           <p className="text-gray-600 mb-6">
-            Please login with your Google account to access Google Sheets
+            Please login with your authorized Google account to access the system
           </p>
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -115,7 +138,7 @@ const Login = ({ onLoginSuccess }) => {
             )}
           </button>
           <div className="mt-4 text-xs text-gray-500">
-            <p>After logging in, you can start scoring and data will be saved to Google Sheets</p>
+            <p>Only authorized users can access the system. Contact your administrator if you need access.</p>
           </div>
         </div>
       </div>
