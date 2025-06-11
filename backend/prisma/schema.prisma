@@ -1,0 +1,197 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite doesn't support enums, so we use String with validation in application code
+// enum Role {
+//   admin
+//   judge
+//   moderator
+// }
+
+// enum EventStatus {
+//   draft
+//   active
+//   completed
+// }
+
+// enum MatchStatus {
+//   scheduled
+//   in_progress
+//   completed
+//   cancelled
+// }
+
+// enum MatchStep {
+//   intro
+//   presentation_a
+//   commentary_b
+//   questions_a
+//   presentation_b
+//   commentary_a
+//   questions_b
+//   deliberation
+//   completed
+// }
+
+// enum ParticipantRole {
+//   judge
+//   moderator
+// }
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  role      String   // admin | judge | moderator
+  avatarUrl String?  @map("avatar_url")
+
+  // Google OAuth fields (required for all users)
+  googleId         String   @unique @map("google_id")
+  isEmailVerified  Boolean  @default(true) @map("is_email_verified")
+
+  isActive     Boolean   @default(false) @map("is_active") // New users require admin activation
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  createdEvents Event[]
+  moderatedMatches Match[] @relation("ModeratorMatches")
+  judgeAssignments MatchAssignment[]
+  scores Score[]
+  eventParticipations EventParticipant[]
+
+  @@map("users")
+}
+
+model Event {
+  id            String      @id @default(uuid())
+  name          String
+  description   String?
+  totalRounds   Int         @map("total_rounds")
+  currentRound  Int         @default(1) @map("current_round")
+  status        String      @default("draft") // draft | active | completed
+  startDate     DateTime?   @map("start_date")
+  endDate       DateTime?   @map("end_date")
+  scoringCriteria String?   @map("scoring_criteria") // JSON string
+  createdBy     String      @map("created_by")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  // Relationships
+  creator      User @relation(fields: [createdBy], references: [id])
+  teams        Team[]
+  matches      Match[]
+  participants EventParticipant[]
+
+  @@map("events")
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  school      String?
+  coachName   String?  @map("coach_name")
+  coachEmail  String?  @map("coach_email")
+  eventId     String   @map("event_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamAMatches Match[] @relation("TeamAMatches")
+  teamBMatches Match[] @relation("TeamBMatches")
+  wonMatches  Match[] @relation("WinnerMatches")
+  scores      Score[]
+
+  @@map("teams")
+}
+
+model Match {
+  id            String      @id @default(uuid())
+  eventId       String      @map("event_id")
+  roundNumber   Int         @map("round_number")
+  teamAId       String?     @map("team_a_id")
+  teamBId       String?     @map("team_b_id")
+  moderatorId   String?     @map("moderator_id")
+  room          String?
+  scheduledTime DateTime?   @map("scheduled_time")
+  status        String      @default("scheduled") // scheduled | in_progress | completed | cancelled
+  currentStep   String      @default("intro") @map("current_step") // intro | presentation_a | commentary_b | questions_a | presentation_b | commentary_a | questions_b | deliberation | completed
+  winnerId      String?     @map("winner_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  // Relationships
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamA       Team? @relation("TeamAMatches", fields: [teamAId], references: [id])
+  teamB       Team? @relation("TeamBMatches", fields: [teamBId], references: [id])
+  moderator   User? @relation("ModeratorMatches", fields: [moderatorId], references: [id])
+  winner      Team? @relation("WinnerMatches", fields: [winnerId], references: [id])
+  assignments MatchAssignment[]
+  scores      Score[]
+
+  @@map("matches")
+}
+
+model MatchAssignment {
+  id        String   @id @default(uuid())
+  matchId   String   @map("match_id")
+  judgeId   String   @map("judge_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  judge User  @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, judgeId])
+  @@map("match_assignments")
+}
+
+model Score {
+  id                String    @id @default(uuid())
+  matchId           String    @map("match_id")
+  judgeId           String    @map("judge_id")
+  teamId            String    @map("team_id")
+  presentationScore Int       @map("presentation_score")
+  commentaryScore   Int       @map("commentary_score")
+  notes             String?
+  isSubmitted       Boolean   @default(false) @map("is_submitted")
+  submittedAt       DateTime? @map("submitted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  judge User  @relation(fields: [judgeId], references: [id])
+  team  Team  @relation(fields: [teamId], references: [id])
+
+  @@unique([matchId, judgeId, teamId])
+  @@map("scores")
+}
+
+model EventParticipant {
+  id        String          @id @default(uuid())
+  eventId   String          @map("event_id")
+  userId    String          @map("user_id")
+  role      String          // judge | moderator
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  // Relationships
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_participants")
+} 
