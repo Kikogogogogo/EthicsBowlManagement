@@ -9,6 +9,10 @@ const { connectToDatabase, disconnectFromDatabase } = require('./config/database
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
+const eventRoutes = require('./routes/event.routes');
+const preApprovedEmailRoutes = require('./routes/pre-approved-email.routes');
+const teamRoutes = require('./routes/team.routes');
+const userRoutes = require('./routes/user.routes');
 
 // Validate environment variables
 validateEnv();
@@ -81,6 +85,10 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use(`${config.api.prefix}/auth`, authRoutes);
+app.use(`${config.api.prefix}/events`, eventRoutes);
+app.use(`${config.api.prefix}/pre-approved-emails`, preApprovedEmailRoutes);
+app.use(`${config.api.prefix}`, teamRoutes);
+app.use(`${config.api.prefix}`, userRoutes);
 
 // 404 handler for undefined routes
 app.use('*', (req, res) => {

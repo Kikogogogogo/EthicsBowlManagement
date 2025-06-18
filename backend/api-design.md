@@ -11,6 +11,13 @@ All protected endpoints require JWT token in Authorization header:
 Authorization: Bearer <jwt_token>
 ```
 
+## Permission Hierarchy
+- **Admin**: Can perform ALL operations (inherits all judge and moderator permissions)
+- **Moderator**: Can moderate matches and view related data
+- **Judge**: Can score matches and view assigned data
+
+Note: When an endpoint lists specific roles, admin can always access it as well.
+
 ## Error Response Format
 ```json
 {
@@ -176,7 +183,7 @@ Update team details
 #### DELETE /events/:eventId/teams/:teamId
 Remove team from event
 
-### 4. Users and Participants (Admin Only)
+### 4. Users (Admin Only)
 
 #### GET /users
 Get all users with filtering
@@ -229,18 +236,8 @@ Activate user account (Admin only)
 #### PUT /users/:userId
 Update user details
 
-#### POST /events/:eventId/participants
-Add participant to event
-```json
-// Request
-{
-  "userId": "uuid",
-  "role": "judge"
-}
-```
-
-#### DELETE /events/:eventId/participants/:userId
-Remove participant from event
+// Note: All active users are automatically available for all events.
+// No need for event-specific participant management.
 
 ### 5. Matches
 
@@ -391,6 +388,189 @@ Get detailed match results
     "teamAAverage": 85.0,
     "teamBAverage": 78.0
   }
+}
+```
+
+### 8. Pre-approved Emails (Admin/Moderator Only)
+
+#### GET /pre-approved-emails
+Get all pre-approved emails
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "preApprovedEmails": [
+      {
+        "id": "uuid",
+        "email": "judge@university.edu",
+        "role": "judge",
+        "notes": "Regional competition judge",
+        "creator": {
+          "id": "uuid",
+          "firstName": "Admin",
+          "lastName": "User",
+          "email": "admin@ethicsbowl.com"
+        },
+        "createdAt": "2024-01-15T10:00:00Z"
+      }
+    ],
+    "count": 1
+  },
+  "message": "Pre-approved emails retrieved successfully"
+}
+```
+
+#### POST /pre-approved-emails
+Add multiple pre-approved emails
+```json
+// Request
+{
+  "emails": [
+    {
+      "email": "judge1@university.edu",
+      "role": "judge",
+      "notes": "Regional competition judge"
+    },
+    {
+      "email": "moderator@university.edu",
+      "role": "moderator",
+      "notes": "Regional competition moderator"
+    }
+  ]
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "success": [
+      {
+        "id": "uuid",
+        "email": "judge1@university.edu",
+        "role": "judge",
+        "notes": "Regional competition judge",
+        "createdAt": "2024-01-15T10:00:00Z"
+      }
+    ],
+    "failed": [
+      {
+        "email": "invalid-email",
+        "reason": "Invalid email format"
+      }
+    ],
+    "duplicates": [
+      {
+        "email": "moderator@university.edu",
+        "reason": "Email already pre-approved",
+        "existingData": {
+          "id": "uuid",
+          "email": "moderator@university.edu",
+          "role": "moderator"
+        }
+      }
+    ]
+  },
+  "message": "Successfully processed 2 emails. 1 added, 1 duplicate, 0 failed."
+}
+```
+
+#### POST /pre-approved-emails/import
+Import pre-approved emails from text format
+```json
+// Request
+{
+  "emailsText": "judge1@university.edu\njudge2@university.edu,moderator@university.edu",
+  "defaultRole": "judge"
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "success": [...],
+    "failed": [...],
+    "duplicates": [...]
+  },
+  "message": "Import completed. 2 added, 1 duplicate, 0 failed."
+}
+```
+
+#### PUT /pre-approved-emails/:emailId
+Update pre-approved email details
+```json
+// Request
+{
+  "role": "moderator",
+  "notes": "Updated notes"
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "email": "judge@university.edu",
+    "role": "moderator",
+    "notes": "Updated notes",
+    "updatedAt": "2024-01-15T11:00:00Z"
+  },
+  "message": "Pre-approved email updated successfully"
+}
+```
+
+#### DELETE /pre-approved-emails/:emailId
+Delete single pre-approved email
+```json
+// Response
+{
+  "success": true,
+  "data": null,
+  "message": "Pre-approved email deleted successfully"
+}
+```
+
+#### DELETE /pre-approved-emails
+Delete multiple pre-approved emails
+```json
+// Request
+{
+  "emailIds": ["uuid1", "uuid2"]
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "success": ["uuid1"],
+    "failed": [
+      {
+        "id": "uuid2",
+        "reason": "Email not found"
+      }
+    ]
+  },
+  "message": "Deletion completed. 1 deleted, 1 failed."
+}
+```
+
+#### GET /pre-approved-emails/check/:email
+Check if email is pre-approved
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "isPreApproved": true,
+    "preApprovedData": {
+      "id": "uuid",
+      "email": "judge@university.edu",
+      "role": "judge",
+      "notes": "Regional competition judge",
+      "createdAt": "2024-01-15T10:00:00Z"
+    }
+  },
+  "message": "Email is pre-approved"
 }
 ```
 

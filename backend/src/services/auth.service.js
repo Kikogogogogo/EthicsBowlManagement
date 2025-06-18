@@ -154,7 +154,12 @@ class AuthService {
         });
       }
       
-      // Create new user (inactive by default, needs admin approval)
+      // Check if email is pre-approved
+      const preApprovedEmail = await prisma.preApprovedEmail.findUnique({
+        where: { email: googleUser.email },
+      });
+
+      // Create new user (check if pre-approved for auto-activation)
       return await prisma.user.create({
         data: {
           email: googleUser.email,
@@ -163,8 +168,8 @@ class AuthService {
           googleId: googleUser.googleId,
           avatarUrl: googleUser.avatarUrl,
           isEmailVerified: googleUser.isEmailVerified,
-          role: USER_ROLES.JUDGE, // Default role
-          isActive: false, // Requires admin activation
+          role: preApprovedEmail ? preApprovedEmail.role : USER_ROLES.JUDGE, // Use pre-approved role or default
+          isActive: preApprovedEmail ? true : false, // Auto-activate if pre-approved
         },
       });
     } catch (error) {

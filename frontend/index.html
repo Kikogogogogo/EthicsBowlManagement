@@ -106,6 +106,21 @@
                                 <div class="ml-4">
                                     <h1 class="text-xl font-semibold text-gray-900">Ethics Bowl</h1>
                                 </div>
+                                <!-- Navigation Menu -->
+                                <div id="main-nav" class="ml-10 flex items-baseline space-x-4">
+                                    <button id="nav-dashboard" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-black">
+                                        Dashboard
+                                    </button>
+                                    <button id="nav-events" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Events
+                                    </button>
+                                    <button id="nav-teams" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Teams
+                                    </button>
+                                    <button id="nav-users" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Users
+                                    </button>
+                                </div>
                             </div>
                             <div class="flex items-center space-x-4">
                                 <span id="user-name" class="text-sm text-gray-700"></span>
@@ -118,16 +133,1006 @@
                     </div>
                 </nav>
                 
-                <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                    <div class="px-4 py-6 sm:px-0">
-                        <div class="border-4 border-dashed border-gray-200 rounded-lg p-8">
-                            <div class="text-center">
-                                <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to Ethics Bowl</h2>
-                                <p class="text-gray-600">Dashboard coming soon...</p>
+                <main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                    <!-- Dashboard Header -->
+                    <div class="mb-8">
+                        <h1 class="text-3xl font-bold text-gray-900">Events Dashboard</h1>
+                        <p class="mt-2 text-lg text-gray-600">Click on an event to manage rounds, teams, and judges</p>
+                    </div>
+
+                    <!-- Events Section Header -->
+                    <div class="mb-8">
+                        <h2 class="text-xl font-semibold text-gray-900">Your Events</h2>
+                        <p class="text-gray-600">Manage rounds, assign judges, and organize matches</p>
+                    </div>
+
+                    <!-- Events Grid -->
+                    <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Event cards will be populated here -->
+                    </div>
+
+                    <!-- Loading state -->
+                    <div id="dashboard-loading" class="hidden text-center py-12">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+                        <p class="mt-4 text-sm text-gray-500">Loading events...</p>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div id="dashboard-empty" class="hidden text-center py-12">
+                        <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">No events found</h3>
+                        <p class="mt-2 text-gray-500">No ethics bowl events are currently available.</p>
+                    </div>
+                </main>
+            </div>
+
+            <!-- Event Management page (NEW!) -->
+            <div id="event-management-page" class="hidden min-h-screen bg-gray-50">
+                <nav class="bg-white shadow">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <img src="./src/assets/icon.png" alt="Ethics Bowl" class="h-8 w-8 rounded-full object-cover" 
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="h-8 w-8 hidden items-center justify-center rounded-full bg-black">
+                                        <span class="text-white font-bold text-sm">EB</span>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <h1 class="text-xl font-semibold text-gray-900">Event Management</h1>
+                                </div>
+                                <div class="ml-4">
+                                    <button id="back-to-dashboard-event" class="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                        </svg>
+                                        Back to Dashboard
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span id="user-name-event-mgmt" class="text-sm text-gray-700"></span>
+                                <span id="user-role-event-mgmt" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"></span>
+                                <button id="logout-btn-event-mgmt" class="text-sm text-gray-500 hover:text-gray-700">
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                    <!-- Event Header -->
+                    <div class="mb-8 bg-white rounded-lg border border-gray-300 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 id="event-mgmt-title" class="text-2xl font-bold text-gray-900">Event Name</h1>
+                                <p id="event-mgmt-description" class="mt-1 text-gray-600">Event description</p>
+                                <div class="mt-2 flex items-center space-x-4">
+                                    <span id="event-mgmt-date" class="text-sm text-gray-500">Date: -</span>
+                                    <span id="event-mgmt-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">Status</span>
+                                    <span id="event-mgmt-teams" class="text-sm text-gray-500">Teams: -</span>
+                                </div>
+                            </div>
+                            <div class="flex space-x-3">
+                                <button id="edit-event-btn" type="button" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                    Edit Event
+                                </button>
+                                <button id="start-event-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-5-4v8a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h6a2 2 0 012 2v4z"></path>
+                                    </svg>
+                                    Start Event
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Management Tabs -->
+                    <div class="bg-white rounded-lg border border-gray-300 mb-8">
+                        <div class="border-b border-gray-300">
+                            <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                                <button class="mgmt-tab-btn border-transparent text-black border-black whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="rounds">
+                                    Rounds
+                                </button>
+                                <button class="mgmt-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="teams">
+                                    Teams
+                                </button>
+                                <button class="mgmt-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="judges">
+                                    Judges
+                                </button>
+                                <button class="mgmt-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="matches">
+                                    Matches
+                                </button>
+                                <button class="mgmt-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="results">
+                                    Results
+                                </button>
+                            </nav>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="p-6">
+                            <!-- Rounds Tab -->
+                            <div id="rounds-tab" class="mgmt-tab-content">
+                                <h3 class="text-lg font-medium text-gray-900 mb-4">Round Management</h3>
+                                <p class="text-gray-600 mb-4">Configure rounds and competition structure</p>
+                                <div class="space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div class="bg-gray-50 rounded-lg p-4">
+                                            <h4 class="font-medium text-gray-900">Total Rounds</h4>
+                                            <p id="total-rounds-display" class="text-2xl font-bold text-gray-900">-</p>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-4">
+                                            <h4 class="font-medium text-gray-900">Current Round</h4>
+                                            <p id="current-round-display" class="text-2xl font-bold text-gray-900">-</p>
+                                        </div>
+                                        <div class="bg-gray-50 rounded-lg p-4">
+                                            <h4 class="font-medium text-gray-900">Round Status</h4>
+                                            <p id="round-status-display" class="text-sm font-medium text-gray-900">-</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex space-x-3">
+                                        <button id="start-round-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                            Start Next Round
+                                        </button>
+                                        <button id="end-round-btn" type="button" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                            End Current Round
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Teams Tab -->
+                            <div id="teams-tab" class="mgmt-tab-content hidden">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Team Management</h3>
+                                    <button id="add-team-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                        </svg>
+                                        Add Team
+                                    </button>
+                                </div>
+                                <div id="teams-list" class="space-y-3">
+                                    <!-- Teams will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Judges Tab -->
+                            <div id="judges-tab" class="mgmt-tab-content hidden">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Judge Assignment</h3>
+                                    <button id="assign-judges-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                        </svg>
+                                        Auto-assign Judges
+                                    </button>
+                                </div>
+                                <div id="judges-list" class="space-y-3">
+                                    <!-- Judges will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Matches Tab -->
+                            <div id="matches-tab" class="mgmt-tab-content hidden">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Match Management</h3>
+                                    <button id="generate-matches-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                        </svg>
+                                        Generate Matches
+                                    </button>
+                                </div>
+                                <div id="matches-list" class="space-y-3">
+                                    <!-- Matches will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Results Tab -->
+                            <div id="results-tab" class="mgmt-tab-content hidden">
+                                <h3 class="text-lg font-medium text-gray-900 mb-4">Event Results</h3>
+                                <div id="results-content" class="space-y-4">
+                                    <!-- Results will be populated here -->
+                                </div>
                             </div>
                         </div>
                     </div>
                 </main>
+            </div>
+
+            <!-- Events Management page -->
+            <div id="events-page" class="hidden min-h-screen bg-gray-50">
+                <nav class="bg-white shadow">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <img src="./src/assets/icon.png" alt="Ethics Bowl" class="h-8 w-8 rounded-full object-cover" 
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="h-8 w-8 hidden items-center justify-center rounded-full bg-black">
+                                        <span class="text-white font-bold text-sm">EB</span>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <h1 class="text-xl font-semibold text-gray-900">Ethics Bowl</h1>
+                                </div>
+                                <!-- Navigation Menu for Admin -->
+                                <div class="ml-10 flex items-baseline space-x-4">
+                                    <button id="nav-dashboard-events" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Dashboard
+                                    </button>
+                                    <button id="nav-events-events" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-black">
+                                        Events
+                                    </button>
+                                    <button id="nav-teams-events" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Teams
+                                    </button>
+                                    <button id="nav-users-events" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Users
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span id="user-name-events" class="text-sm text-gray-700"></span>
+                                <span id="user-role-events" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"></span>
+                                <button id="logout-btn-events" class="text-sm text-gray-500 hover:text-gray-700">
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div class="px-4 py-6 sm:px-0">
+                        <!-- Error/Success Messages for Events Page -->
+                        <div id="events-error-message" class="hidden rounded-md bg-red-50 p-4 mb-6">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 id="events-error-title" class="text-sm font-medium text-red-800">Error</h3>
+                                    <div id="events-error-text" class="mt-2 text-sm text-red-700"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="events-success-message" class="hidden rounded-md bg-green-50 p-4 mb-6">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 id="events-success-title" class="text-sm font-medium text-green-800">Success</h3>
+                                    <div id="events-success-text" class="mt-2 text-sm text-green-700"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Events Header -->
+                        <div class="sm:flex sm:items-center">
+                            <div class="sm:flex-auto">
+                                <h1 class="text-2xl font-semibold text-gray-900">Events</h1>
+                                <p class="mt-2 text-sm text-gray-700">Manage ethics bowl events and competitions</p>
+                            </div>
+                            <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+                                <button id="create-event-btn" type="button" class="inline-flex items-center justify-center rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2">
+                                    Create Event
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Events List -->
+                        <div class="mt-8 flex flex-col">
+                            <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                                <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                                    <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                                        <table class="min-w-full divide-y divide-gray-300">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Name
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Date
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Status
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Teams
+                                                    </th>
+                                                    <th scope="col" class="relative px-6 py-3">
+                                                        <span class="sr-only">Actions</span>
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="events-table-body" class="bg-white divide-y divide-gray-200">
+                                                <!-- Events will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Loading state for events -->
+                        <div id="events-loading" class="hidden text-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                            <p class="mt-2 text-sm text-gray-500">Loading events...</p>
+                        </div>
+
+                        <!-- Empty state for events -->
+                        <div id="events-empty" class="hidden text-center py-8">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M34 40h10v-4a6 6 0 00-10.712-3.714M34 40H14m20 0v-4a9.971 9.971 0 00-.712-3.714M14 40H4v-4a6 6 0 0110.712-3.714M14 40v-4a9.971 9.971 0 01.712-3.714M34 40v-4a9.971 9.971 0 00-.712-3.714m0 0A9.971 9.971 0 0134 32V20a10 10 0 00-10-10V8a2 2 0 00-2-2h-8a2 2 0 00-2 2v2a10 10 0 00-10 10v12c0 1.657.502 3.189 1.364 4.463" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900">No events</h3>
+                            <p class="mt-1 text-sm text-gray-500">Get started by creating a new event.</p>
+                            <div class="mt-6">
+                                <button id="create-event-empty-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Create Event
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- Team Form Modal -->
+            <div id="team-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="team-modal-title" class="text-lg font-medium text-gray-900">Add Team</h3>
+                            <button type="button" class="text-gray-400 hover:text-gray-600 close-team-modal">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Team Form -->
+                        <form id="team-form" class="space-y-6">
+                            <div>
+                                <label for="team-name" class="block text-sm font-medium text-gray-700">Team Name</label>
+                                <input type="text" id="team-name" name="name" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter team name">
+                                <div id="name-error" class="hidden text-red-500 text-sm mt-1"></div>
+                            </div>
+
+                            <div>
+                                <label for="team-school" class="block text-sm font-medium text-gray-700">School</label>
+                                <input type="text" id="team-school" name="school" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter school name">
+                                <div id="school-error" class="hidden text-red-500 text-sm mt-1"></div>
+                            </div>
+
+                            <div>
+                                <label for="team-coach-name" class="block text-sm font-medium text-gray-700">Coach Name</label>
+                                <input type="text" id="team-coach-name" name="coachName" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter coach name">
+                                <div id="coachName-error" class="hidden text-red-500 text-sm mt-1"></div>
+                            </div>
+
+                            <div>
+                                <label for="team-coach-email" class="block text-sm font-medium text-gray-700">Coach Email</label>
+                                <input type="email" id="team-coach-email" name="coachEmail" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter coach email">
+                                <div id="coachEmail-error" class="hidden text-red-500 text-sm mt-1"></div>
+                            </div>
+
+                            <div class="flex justify-end space-x-3 pt-6">
+                                <button type="button" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black close-team-modal">
+                                    Cancel
+                                </button>
+                                <button type="submit" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-black border border-transparent rounded-md shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Save Team
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teams Management page -->
+            <div id="teams-page" class="hidden min-h-screen bg-gray-50">
+                <nav class="bg-white shadow">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <img src="./src/assets/icon.png" alt="Ethics Bowl" class="h-8 w-8 rounded-full object-cover" 
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="h-8 w-8 hidden items-center justify-center rounded-full bg-black">
+                                        <span class="text-white font-bold text-sm">EB</span>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <h1 class="text-xl font-semibold text-gray-900">Ethics Bowl</h1>
+                                </div>
+                                <!-- Navigation Menu -->
+                                <div class="ml-10 flex items-baseline space-x-4">
+                                    <button id="nav-dashboard-teams" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Dashboard
+                                    </button>
+                                    <button id="nav-events-teams" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Events
+                                    </button>
+                                    <button id="nav-teams-teams" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-black">
+                                        Teams
+                                    </button>
+                                    <button id="nav-users-teams" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Users
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span id="user-name-teams" class="text-sm text-gray-700"></span>
+                                <span id="user-role-teams" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"></span>
+                                <button id="logout-btn-teams" class="text-sm text-gray-500 hover:text-gray-700">
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                    <div class="px-4 py-6 sm:px-0">
+                        <!-- Error/Success Messages for Teams Page -->
+                        <div id="teams-error-message" class="hidden rounded-md bg-red-50 p-4 mb-6">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 id="teams-error-title" class="text-sm font-medium text-red-800">Error</h3>
+                                    <div id="teams-error-text" class="mt-2 text-sm text-red-700"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="teams-success-message" class="hidden rounded-md bg-green-50 p-4 mb-6">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 id="teams-success-title" class="text-sm font-medium text-green-800">Success</h3>
+                                    <div id="teams-success-text" class="mt-2 text-sm text-green-700"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Teams Header -->
+                        <div class="sm:flex sm:items-center">
+                            <div class="sm:flex-auto">
+                                <h1 class="text-2xl font-semibold text-gray-900">Teams Management</h1>
+                                <p class="mt-2 text-sm text-gray-700">Manage teams for your ethics bowl events</p>
+                            </div>
+                        </div>
+
+                        <!-- Event Selector -->
+                        <div class="mt-6">
+                            <label for="team-event-selector" class="block text-sm font-medium text-gray-700">Select Event</label>
+                            <select id="team-event-selector" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                <option value="">Select an event...</option>
+                            </select>
+                        </div>
+
+                        <!-- Create Team Button -->
+                        <div class="mt-6 flex justify-end">
+                            <button id="create-team-btn" type="button" class="inline-flex items-center justify-center rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2">
+                                Create Team
+                            </button>
+                        </div>
+
+                        <!-- Teams Table -->
+                        <div class="mt-8 flex flex-col">
+                            <div class="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                                <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                                    <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                                        <table class="min-w-full divide-y divide-gray-300">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Team Name
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        School
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Coach Name
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Coach Email
+                                                    </th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                                        Matches
+                                                    </th>
+                                                    <th scope="col" class="relative px-6 py-3">
+                                                        <span class="sr-only">Actions</span>
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="teams-table-body" class="bg-white divide-y divide-gray-200">
+                                                <!-- Teams will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- Users Management page -->
+            <div id="users-page" class="hidden min-h-screen bg-gray-100">
+                <nav class="bg-white shadow border-b border-gray-300">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <img src="./src/assets/icon.png" alt="Ethics Bowl" class="h-8 w-8 rounded-full object-cover" 
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="h-8 w-8 hidden items-center justify-center rounded-full bg-black">
+                                        <span class="text-white font-bold text-sm">EB</span>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <h1 class="text-xl font-semibold text-gray-900">Ethics Bowl</h1>
+                                </div>
+                                <!-- Navigation Menu for Admin -->
+                                <div class="ml-10 flex items-baseline space-x-4">
+                                    <button id="nav-dashboard-users" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Dashboard
+                                    </button>
+                                    <button id="nav-events-users" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Events
+                                    </button>
+                                    <button id="nav-teams-users" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-transparent hover:border-gray-300">
+                                        Teams
+                                    </button>
+                                    <button id="nav-users-users" class="text-black px-3 py-2 rounded-md text-sm font-medium border-b-2 border-black">
+                                        Users
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span id="user-name-users" class="text-sm text-gray-700"></span>
+                                <span id="user-role-users" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800"></span>
+                                <button id="logout-btn-users" class="text-sm text-gray-500 hover:text-gray-700">
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                    <!-- Page Header with Back Button -->
+                    <div class="mb-8 flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-900">User Management</h1>
+                            <p class="mt-2 text-lg text-gray-600">Manage users, permissions, and pre-approved email addresses</p>
+                        </div>
+                        <button id="back-to-dashboard" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                            </svg>
+                            Back to Dashboard
+                        </button>
+                    </div>
+
+                    <!-- Error/Success Messages -->
+                    <div id="users-error-message" class="hidden rounded-lg bg-red-50 border border-red-200 p-4 mb-6">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 id="users-error-title" class="text-sm font-medium text-red-800">Error</h3>
+                                <div id="users-error-text" class="mt-2 text-sm text-red-700"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="users-success-message" class="hidden rounded-lg bg-green-50 border border-green-200 p-4 mb-6">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h3 id="users-success-title" class="text-sm font-medium text-green-800">Success</h3>
+                                <div id="users-success-text" class="mt-2 text-sm text-green-700"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Simple Tab Navigation -->
+                    <div class="bg-white rounded-lg shadow border border-gray-300 mb-8">
+                        <div class="border-b border-gray-300">
+                            <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                                <button class="view-btn border-transparent text-black border-black whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-view="all">
+                                    All Users
+                                </button>
+                                <button class="view-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-view="pending">
+                                    Pending Approval
+                                </button>
+                                <button class="view-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-view="preapproved">
+                                    Pre-approved Emails
+                                </button>
+                            </nav>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="p-6">
+                            <!-- All Users Section -->
+                            <div id="all-section" class="view-section">
+                                <!-- Stats Cards -->
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                                    <div class="bg-white border border-gray-300 rounded-lg p-6">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="ml-4">
+                                                <p class="text-gray-500 text-sm">Total Users</p>
+                                                <p class="text-2xl font-bold text-gray-900" id="total-users-count">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-white border border-gray-300 rounded-lg p-6">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="ml-4">
+                                                <p class="text-gray-500 text-sm">Active Users</p>
+                                                <p class="text-2xl font-bold text-gray-900" id="active-users-count">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-white border border-gray-300 rounded-lg p-6">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="ml-4">
+                                                <p class="text-gray-500 text-sm">Pending</p>
+                                                <p class="text-2xl font-bold text-gray-900" id="pending-users-count">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-white border border-gray-300 rounded-lg p-6">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="ml-4">
+                                                <p class="text-gray-500 text-sm">Admins</p>
+                                                <p class="text-2xl font-bold text-gray-900" id="admin-users-count">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Filters Card -->
+                                <div class="bg-white rounded-lg border border-gray-300 p-6 mb-8">
+                                    <h3 class="text-lg font-medium text-gray-900 mb-4">Filters & Search</h3>
+                                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                                        <div>
+                                            <label for="role-filter" class="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                                            <select id="role-filter" class="w-full rounded-md border-gray-300 shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                                <option value="">All Roles</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="judge">Judge</option>
+                                                <option value="moderator">Moderator</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="active-filter" class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                                            <select id="active-filter" class="w-full rounded-md border-gray-300 shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                                <option value="">All</option>
+                                                <option value="true">Active</option>
+                                                <option value="false">Inactive</option>
+                                            </select>
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label for="search-input" class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                            <div class="relative">
+                                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                                    </svg>
+                                                </div>
+                                                <input type="text" id="search-input" placeholder="Search by name or email..." class="w-full pl-10 rounded-md border-gray-300 shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Users Table Card -->
+                                <div class="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                                    <div class="px-6 py-4 border-b border-gray-300">
+                                        <h3 class="text-lg font-medium text-gray-900">All Users</h3>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-300">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Events</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                                                    <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="users-table-body" class="bg-white divide-y divide-gray-200">
+                                                <!-- Users will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Pagination -->
+                                <div id="users-pagination" class="mt-6">
+                                    <!-- Pagination will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Pending Users Section -->
+                            <div id="pending-section" class="view-section hidden">
+                                <div class="text-center mb-8">
+                                    <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gray-100">
+                                        <svg class="h-6 w-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <h2 class="mt-4 text-2xl font-bold text-gray-900">Pending Users</h2>
+                                    <p class="mt-2 text-lg text-gray-600">Users awaiting administrator approval</p>
+                                </div>
+
+                                <div class="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email Status</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
+                                                    <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="pending-users-table-body" class="bg-white divide-y divide-gray-200">
+                                                <!-- Pending users will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pre-approved Emails Section -->
+                            <div id="preapproved-section" class="view-section hidden">
+                                <div class="text-center mb-8">
+                                    <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gray-100">
+                                        <svg class="h-6 w-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <h2 class="mt-4 text-2xl font-bold text-gray-900">Pre-approved Emails</h2>
+                                    <p class="mt-2 text-lg text-gray-600">Manage pre-approved email addresses for user registration</p>
+                                </div>
+
+                                <div class="flex justify-end space-x-3 mb-6">
+                                    <button id="import-preapproved-emails-btn" type="button" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                                        </svg>
+                                        Import Emails
+                                    </button>
+                                    <button id="add-preapproved-email-btn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                        </svg>
+                                        Add Email
+                                    </button>
+                                </div>
+
+                                <div class="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+                                                    <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="preapproved-emails-table-body" class="bg-white divide-y divide-gray-200">
+                                                <!-- Pre-approved emails will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- User Form Modal -->
+            <div id="user-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="user-modal-title" class="text-lg font-medium text-gray-900">Edit User</h3>
+                            <button type="button" class="text-gray-400 hover:text-gray-600 close-user-modal">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <form id="user-form" class="space-y-6">
+                            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                <div>
+                                    <label for="user-first-name" class="block text-sm font-medium text-gray-700">First Name</label>
+                                    <input type="text" id="user-first-name" name="firstName" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                    <div id="firstName-error" class="hidden text-red-500 text-sm mt-1"></div>
+                                </div>
+                                <div>
+                                    <label for="user-last-name" class="block text-sm font-medium text-gray-700">Last Name</label>
+                                    <input type="text" id="user-last-name" name="lastName" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                    <div id="lastName-error" class="hidden text-red-500 text-sm mt-1"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="user-role" class="block text-sm font-medium text-gray-700">Role</label>
+                                <select id="user-role" name="role" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                    <option value="judge">Judge</option>
+                                    <option value="moderator">Moderator</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+
+                            <div class="flex items-center">
+                                <input type="checkbox" id="user-is-active" name="isActive" checked class="h-4 w-4 text-black focus:ring-black border-gray-300 rounded">
+                                <label for="user-is-active" class="ml-2 block text-sm text-gray-900">Active User</label>
+                            </div>
+
+                            <div class="flex justify-end space-x-3 pt-6">
+                                <button type="button" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black close-user-modal">
+                                    Cancel
+                                </button>
+                                <button type="submit" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-black border border-transparent rounded-md shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Save User
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pre-approved Email Modal -->
+            <div id="preapproved-email-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="preapproved-email-modal-title" class="text-lg font-medium text-gray-900">Add Pre-approved Email</h3>
+                            <button type="button" class="text-gray-400 hover:text-gray-600 close-preapproved-email-modal">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <form id="preapproved-email-form" class="space-y-6">
+                            <div>
+                                <label for="preapproved-email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                                <input type="email" id="preapproved-email" name="email" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                            </div>
+
+                            <div>
+                                <label for="preapproved-role" class="block text-sm font-medium text-gray-700">Default Role</label>
+                                <select id="preapproved-role" name="role" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                    <option value="judge">Judge</option>
+                                    <option value="moderator">Moderator</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="preapproved-notes" class="block text-sm font-medium text-gray-700">Notes (Optional)</label>
+                                <textarea id="preapproved-notes" name="notes" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Any additional notes about this email..."></textarea>
+                            </div>
+
+                            <div class="flex justify-end space-x-3 pt-6">
+                                <button type="button" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black close-preapproved-email-modal">
+                                    Cancel
+                                </button>
+                                <button type="submit" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-black border border-transparent rounded-md shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Add Email
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Pre-approved Emails Modal -->
+            <div id="import-preapproved-emails-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-medium text-gray-900">Import Pre-approved Emails</h3>
+                            <button type="button" class="text-gray-400 hover:text-gray-600 close-import-preapproved-emails-modal">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <form id="import-preapproved-emails-form" class="space-y-6">
+                            <div>
+                                <label for="import-emails-text" class="block text-sm font-medium text-gray-700">Emails</label>
+                                <textarea id="import-emails-text" name="emailsText" rows="10" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter one email per line or comma-separated emails:&#10;&#10;user1@example.com&#10;user2@example.com&#10;user3@example.com"></textarea>
+                                <p class="mt-2 text-sm text-gray-500">Enter emails separated by lines, commas, semicolons, or spaces. You can also include notes after each email using a colon (e.g., "user@example.com: Special notes").</p>
+                            </div>
+
+                            <div>
+                                <label for="import-default-role" class="block text-sm font-medium text-gray-700">Default Role</label>
+                                <select id="import-default-role" name="defaultRole" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                    <option value="judge">Judge</option>
+                                    <option value="moderator">Moderator</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <p class="mt-2 text-sm text-gray-500">This role will be assigned to all imported emails unless specified individually.</p>
+                            </div>
+
+                            <div class="flex justify-end space-x-3 pt-6">
+                                <button type="button" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black close-import-preapproved-emails-modal">
+                                    Cancel
+                                </button>
+                                <button type="submit" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    Import Emails
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
             
             <!-- Account pending approval page -->
@@ -153,9 +1158,88 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Event Form Modal -->
+            <div id="event-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="event-modal-title" class="text-lg font-medium text-gray-900">Create Event</h3>
+                            <button id="close-event-modal" type="button" class="text-gray-400 hover:text-gray-600">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <!-- Error message in modal -->
+                        <div id="event-modal-error" class="hidden rounded-md bg-red-50 p-4 mb-4">
+                            <div class="flex">
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-red-800">Error</h3>
+                                    <div class="mt-2 text-sm text-red-700" id="event-modal-error-text"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Event Form -->
+                        <form id="event-form" class="space-y-6">
+                            <div>
+                                <label for="event-name" class="block text-sm font-medium text-gray-700">Event Name</label>
+                                <input type="text" id="event-name" name="name" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter event name">
+                            </div>
+
+                            <div>
+                                <label for="event-description" class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea id="event-description" name="description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter event description"></textarea>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                <div>
+                                    <label for="event-date" class="block text-sm font-medium text-gray-700">Event Date</label>
+                                    <input type="date" id="event-date" name="eventDate" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="event-status" class="block text-sm font-medium text-gray-700">Status</label>
+                                    <select id="event-status" name="status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm">
+                                        <option value="draft">Draft</option>
+                                        <option value="active">Active</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="event-location" class="block text-sm font-medium text-gray-700">Location</label>
+                                <input type="text" id="event-location" name="location" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter event location">
+                            </div>
+
+                            <div>
+                                <label for="event-max-teams" class="block text-sm font-medium text-gray-700">Maximum Teams</label>
+                                <input type="number" id="event-max-teams" name="maxTeams" min="1" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm" placeholder="Enter maximum number of teams">
+                            </div>
+
+                            <div class="flex justify-end space-x-3 pt-6">
+                                <button type="button" id="cancel-event-btn" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Cancel
+                                </button>
+                                <button type="submit" id="save-event-btn" class="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-black border border-transparent rounded-md shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
+                                    Save Event
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
+    <script src="./src/pages/dashboard.js"></script>
+    <script src="./src/pages/event-management.js"></script>
+    <script src="./src/pages/events.js"></script>
+    <script src="./src/pages/teams.js"></script>
+    <script src="./src/pages/users.js"></script>
     <script type="module" src="./src/js/main.js"></script>
 </body>
 </html> 
