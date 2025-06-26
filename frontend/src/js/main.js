@@ -4,7 +4,15 @@
  */
 
 import { authManager, OAuthCallbackHandler, ApiError } from './auth.js';
-import { authService, healthService, eventService, teamService, userService, preApprovedEmailService } from './api.js';
+import { authService, healthService, eventService, teamService, userService, preApprovedEmailService, matchService, scoreService, statisticsService } from './api.js';
+
+// Import page modules
+import '../pages/dashboard.js';
+import '../pages/events.js';
+import '../pages/teams.js';
+import '../pages/users.js';
+
+import '../pages/event-workspace.js';
 
 /**
  * UI Manager - handles DOM manipulation and page routing
@@ -46,7 +54,7 @@ class UIManager {
       navUsers: document.getElementById('nav-users'),
       
       // Event Management page
-      eventManagementPage: document.getElementById('event-management-page'),
+
       
       // Events page
       eventsPage: document.getElementById('events-page'),
@@ -143,24 +151,39 @@ class UIManager {
    * Show specific page
    */
   showPage(pageName) {
+    console.log(`UIManager.showPage(${pageName}) called`);
+    
     // Hide all pages
     Object.values(this.elements).forEach(el => {
       if (el && el.id && el.id.endsWith('-page')) {
+        console.log(`Hiding page: ${el.id}`);
         el.classList.add('hidden');
       }
     });
 
+    // Also hide event-workspace-page specifically
+    const eventWorkspacePage = document.getElementById('event-workspace-page');
+    if (eventWorkspacePage) {
+      console.log('Hiding event-workspace-page');
+      eventWorkspacePage.classList.add('hidden');
+    }
+
     // Show requested page
     let page;
-    if (pageName === 'event-management') {
-      page = this.elements.eventManagementPage;
+    if (pageName === 'event-workspace') {
+      page = document.getElementById('event-workspace-page');
     } else {
       page = this.elements[pageName + 'Page'];
     }
     
+    console.log(`Target page for '${pageName}':`, page);
+    
     if (page) {
+      console.log(`Showing page: ${page.id}`);
       page.classList.remove('hidden');
       this.currentPage = pageName;
+    } else {
+      console.error(`Page not found for: ${pageName}`);
     }
   }
 
@@ -421,20 +444,21 @@ class App {
     
     // Initialize page classes - these are defined as global classes in their respective script files
     this.dashboardPage = new DashboardPage(this.ui);
-    this.eventManagementPage = new EventManagementPage(this.ui);
     this.eventsPage = new EventsPage(this.ui);
     this.teamsPage = new TeamsPage();
     this.usersPage = new UsersPage();
+    this.eventWorkspacePage = new EventWorkspacePage(this.ui);
     
     // Set UI manager for new pages
     this.teamsPage.setUIManager(this.ui);
     this.usersPage.setUIManager(this.ui);
     
     // Make pages globally accessible for pagination and inter-page communication
+    window.eventsPage = this.eventsPage;
     window.teamsPage = this.teamsPage;
     window.usersPage = this.usersPage;
     window.dashboardPage = this.dashboardPage;
-    window.eventManagementPage = this.eventManagementPage;
+    window.eventWorkspacePage = this.eventWorkspacePage;
     
     this.initializeEventListeners();
     this.initialize();
@@ -591,43 +615,49 @@ class App {
   }
 
   /**
-   * Initialize application
+   * Initialize the application
    */
   async initialize() {
-    console.log('🚀 Initializing Ethics Bowl Frontend...');
-    
     try {
-      this.ui.showLoading();
+      // Make services globally available
+      window.authService = authService;
+      window.eventService = eventService;
+      window.teamService = teamService;
+      window.userService = userService;
+      window.preApprovedEmailService = preApprovedEmailService;
+      window.matchService = matchService;
+      window.scoreService = scoreService;
+      window.statisticsService = statisticsService;
+      window.authManager = authManager;
 
-      // Check if this is an OAuth callback first (highest priority)
+      // Set up authentication state listener
+      authManager.addListener((authState) => {
+        this.handleAuthStateChange(authState);
+      });
+
+      // Check for OAuth callback
       if (OAuthCallbackHandler.isCallback()) {
-        console.log('🔄 Handling OAuth callback...');
         await this.handleOAuthCallback();
         return;
       }
 
-      // Check backend health in background (non-blocking)
-      healthService.checkHealth()
-        .then(() => console.log('✅ Backend connection established'))
-        .catch(error => console.warn('⚠️ Backend health check failed:', error.message));
-
-      // Check for existing authentication with timeout
-      console.log('🔍 Checking existing authentication...');
-      const authPromise = authManager.initialize();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Auth check timeout')), 8000)
-      );
+      // Check current authentication state
+      const result = await authManager.initialize();
       
-      const authResult = await Promise.race([authPromise, timeoutPromise]);
-      console.log('🔐 Auth result:', authResult.status);
-      
-      await this.handleAuthResult(authResult);
-
+      if (result.status === 'authenticated') {
+        await this.showDashboard();
+      } else if (result.status === 'pending_approval') {
+        this.ui.showPage('pending');
+        this.ui.hideLoading();
+      } else {
+        this.ui.showPage('login');
+        this.ui.hideLoading();
+      }
     } catch (error) {
-      console.error('❌ App initialization failed:', error);
-      this.ui.hideLoading();
+      console.error('Application initialization error:', error);
+      this.ui.showError('System Error', 'Failed to initialize application');
       this.ui.showPage('login');
-      this.ui.showError('Initialization Error', 'Failed to initialize app. Please refresh the page.');
+      this.ui.hideLoading();
     }
   }
 
@@ -863,22 +893,6 @@ class App {
       this.ui.showPage('dashboard');
       await this.dashboardPage.init();
       this.updateNavigation('dashboard');
-    }
-  }
-
-  /**
-   * Show event management page
-   */
-  async showEventManagementPage(eventId = null) {
-    if (authManager.currentUser) {
-      this.ui.showPage('event-management');
-      await this.eventManagementPage.init();
-      
-      if (eventId) {
-        await this.eventManagementPage.setCurrentEvent(eventId);
-      }
-      
-      this.updateNavigation('event-management');
     }
   }
 

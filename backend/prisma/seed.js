@@ -31,6 +31,160 @@ async function main() {
 
     console.log('✅ Admin user created/updated:', adminUser.email);
 
+    // Create sample judge and moderator users
+    const judgesData = [
+      {
+        email: 'judge1@university.edu',
+        firstName: 'Emily',
+        lastName: 'Chen',
+        role: 'judge',
+        googleId: 'seed_google_id_judge1',
+      },
+      {
+        email: 'judge2@college.edu',
+        firstName: 'Michael',
+        lastName: 'Rodriguez',
+        role: 'judge',
+        googleId: 'seed_google_id_judge2',
+      },
+      {
+        email: 'judge3@institute.edu',
+        firstName: 'Sarah',
+        lastName: 'Thompson',
+        role: 'judge',
+        googleId: 'seed_google_id_judge3',
+      },
+      {
+        email: 'judge4@academy.edu',
+        firstName: 'David',
+        lastName: 'Kim',
+        role: 'judge',
+        googleId: 'seed_google_id_judge4',
+      },
+      {
+        email: 'judge5@school.edu',
+        firstName: 'Jennifer',
+        lastName: 'Davis',
+        role: 'judge',
+        googleId: 'seed_google_id_judge5',
+      },
+      {
+        email: 'judge6@ethics.edu',
+        firstName: 'Robert',
+        lastName: 'Wilson',
+        role: 'judge',
+        googleId: 'seed_google_id_judge6',
+      },
+      {
+        email: 'judge7@philosophy.edu',
+        firstName: 'Lisa',
+        lastName: 'Anderson',
+        role: 'judge',
+        googleId: 'seed_google_id_judge7',
+      },
+      {
+        email: 'judge8@moral.edu',
+        firstName: 'James',
+        lastName: 'Miller',
+        role: 'judge',
+        googleId: 'seed_google_id_judge8',
+      }
+    ];
+
+    const moderatorsData = [
+      {
+        email: 'moderator1@university.edu',
+        firstName: 'Professor',
+        lastName: 'Martinez',
+        role: 'moderator',
+        googleId: 'seed_google_id_mod1',
+      },
+      {
+        email: 'moderator2@college.edu',
+        firstName: 'Dr. Angela',
+        lastName: 'Foster',
+        role: 'moderator',
+        googleId: 'seed_google_id_mod2',
+      },
+      {
+        email: 'moderator3@institute.edu',
+        firstName: 'Prof. Kevin',
+        lastName: 'Chang',
+        role: 'moderator',
+        googleId: 'seed_google_id_mod3',
+      },
+      {
+        email: 'moderator4@academy.edu',
+        firstName: 'Dr. Nicole',
+        lastName: 'Johnson',
+        role: 'moderator',
+        googleId: 'seed_google_id_mod4',
+      },
+      {
+        email: 'moderator5@school.edu',
+        firstName: 'Prof. Mark',
+        lastName: 'Taylor',
+        role: 'moderator',
+        googleId: 'seed_google_id_mod5',
+      }
+    ];
+
+    // Create judges
+    const createdJudges = [];
+    for (const judgeData of judgesData) {
+      const judge = await prisma.user.upsert({
+        where: { email: judgeData.email },
+        update: {
+          isActive: true,
+          role: judgeData.role,
+          firstName: judgeData.firstName,
+          lastName: judgeData.lastName,
+          isEmailVerified: true,
+          lastLoginAt: new Date(),
+        },
+        create: {
+          email: judgeData.email,
+          firstName: judgeData.firstName,
+          lastName: judgeData.lastName,
+          role: judgeData.role,
+          googleId: judgeData.googleId,
+          isEmailVerified: true,
+          isActive: true,
+          lastLoginAt: new Date(),
+        },
+      });
+      createdJudges.push(judge);
+      console.log(`✅ Judge created/updated: ${judge.firstName} ${judge.lastName} (${judge.email})`);
+    }
+
+    // Create moderators
+    const createdModerators = [];
+    for (const moderatorData of moderatorsData) {
+      const moderator = await prisma.user.upsert({
+        where: { email: moderatorData.email },
+        update: {
+          isActive: true,
+          role: moderatorData.role,
+          firstName: moderatorData.firstName,
+          lastName: moderatorData.lastName,
+          isEmailVerified: true,
+          lastLoginAt: new Date(),
+        },
+        create: {
+          email: moderatorData.email,
+          firstName: moderatorData.firstName,
+          lastName: moderatorData.lastName,
+          role: moderatorData.role,
+          googleId: moderatorData.googleId,
+          isEmailVerified: true,
+          isActive: true,
+          lastLoginAt: new Date(),
+        },
+      });
+      createdModerators.push(moderator);
+      console.log(`✅ Moderator created/updated: ${moderator.firstName} ${moderator.lastName} (${moderator.email})`);
+    }
+
     // Create multiple sample events with different statuses
     const eventScoringCriteria = JSON.stringify({
       presentationMaxScore: 100,
@@ -308,15 +462,26 @@ async function main() {
     console.log('🎉 Database seeding completed successfully!');
     console.log('\n📋 Summary:');
     console.log(`👤 Admin user: ${adminUser.email} (isActive: ${adminUser.isActive})`);
+    console.log(`👨‍⚖️ Judges created: ${createdJudges.length}`);
+    console.log(`🎯 Moderators created: ${createdModerators.length}`);
     console.log(`📅 Events created: ${createdEvents.length}`);
     console.log(`   - Draft events: ${createdEvents.filter(e => e.status === 'draft').length}`);
     console.log(`   - Active events: ${createdEvents.filter(e => e.status === 'active').length}`);
     console.log(`   - Completed events: ${createdEvents.filter(e => e.status === 'completed').length}`);
     console.log(`🏆 Teams created: ${createdTeams.length}`);
     console.log(`📧 Pre-approved emails created: ${preApprovedEmailsData.length}`);
+    console.log('\n👥 Total active users:');
+    console.log(`   - 1 Admin: ${adminUser.firstName} ${adminUser.lastName}`);
+    console.log(`   - ${createdJudges.length} Judges: ${createdJudges.map(j => j.firstName + ' ' + j.lastName).join(', ')}`);
+    console.log(`   - ${createdModerators.length} Moderators: ${createdModerators.map(m => m.firstName + ' ' + m.lastName).join(', ')}`);
     console.log('\n🚀 You can now log in with your Google account and test the system!');
     console.log('📝 New users with pre-approved emails will be automatically activated upon first login.');
-    console.log('👥 All active users are available for all events - no event-specific participant management needed.');
+    console.log('🎮 All active users are ready for assignment to matches and events!');
+    console.log('\n💡 Test Features:');
+    console.log('   - Create matches with multiple judges (2-3 required)');
+    console.log('   - Assign moderators to matches');
+    console.log('   - Delete scheduled matches');
+    console.log('   - All users are immediately available for selection!');
 
   } catch (error) {
     console.error('❌ Error during seeding:', error);

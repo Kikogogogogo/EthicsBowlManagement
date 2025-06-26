@@ -60,7 +60,12 @@ class EventsPage {
     this.eventService = window.eventService;
     this.authManager = window.authManager;
     
+    console.log('EventsPage.show() called');
+    console.log('AuthManager:', this.authManager);
+    console.log('Current user:', this.authManager?.currentUser);
+    
     if (this.authManager.currentUser) {
+      console.log('User authenticated, showing events page');
       this.ui.updateEventsPage(this.authManager.currentUser);
       this.ui.showPage('events');
       this.ui.hideMessages(); // Clear any previous messages
@@ -75,6 +80,8 @@ class EventsPage {
       }
       
       await this.loadEvents();
+    } else {
+      console.error('No current user found, cannot show events page');
     }
   }
 
@@ -123,18 +130,30 @@ class EventsPage {
    */
   createEventRow(event) {
     const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-50';
+    row.className = 'hover:bg-gray-50 cursor-pointer';
     
     const eventDate = new Date(event.eventDate).toLocaleDateString();
     const statusBadge = this.getStatusBadge(event.status);
-    const teamCount = event.teams ? event.teams.length : 0;
+    const teamCount = event.stats?.teamsCount || 0;
     
     // Only show actions for admin users
     const isAdmin = this.authManager.currentUser && this.authManager.currentUser.role === 'admin';
     
     row.innerHTML = `
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-        ${event.name}
+        <div class="flex items-center space-x-3">
+          <div class="flex-shrink-0">
+            <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+            </div>
+          </div>
+          <div>
+            <div class="font-medium text-gray-900">${event.name}</div>
+            <div class="text-sm text-gray-500">Click to enter workspace</div>
+          </div>
+        </div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
         ${eventDate}
@@ -150,6 +169,14 @@ class EventsPage {
       </td>
     `;
     
+    // Add click handler for the entire row (except actions column)
+    row.addEventListener('click', (e) => {
+      // Don't navigate if clicking on action buttons
+      if (!e.target.closest('.event-actions')) {
+        this.openEventWorkspace(event.id);
+      }
+    });
+    
     // Add event listeners for admin users
     if (isAdmin) {
       const actionsContainer = row.querySelector('.event-actions');
@@ -159,6 +186,7 @@ class EventsPage {
       editBtn.className = 'text-black hover:text-gray-700 mr-4 disabled:opacity-50 disabled:cursor-not-allowed';
       editBtn.textContent = 'Edit';
       editBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent row click
         if (this.isOperationInProgress) return;
         
         // Disable button during operation
@@ -177,6 +205,7 @@ class EventsPage {
       deleteBtn.className = 'text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed';
       deleteBtn.textContent = 'Delete';
       deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent row click
         if (this.isOperationInProgress) return;
         
         // Disable button during operation
@@ -195,6 +224,28 @@ class EventsPage {
     }
     
     return row;
+  }
+
+  /**
+   * Open event workspace
+   */
+  openEventWorkspace(eventId) {
+    console.log('Opening event workspace for event:', eventId);
+    
+    try {
+      // Use the global instance that was created in main.js
+      if (!window.eventWorkspacePage) {
+        console.error('EventWorkspacePage instance not found! Make sure it is initialized in main.js');
+        this.ui.showError('Error', 'Event workspace not available. Please refresh the page.');
+        return;
+      }
+      
+      console.log('Calling show method with eventId:', eventId);
+      window.eventWorkspacePage.show(eventId);
+    } catch (error) {
+      console.error('Error opening event workspace:', error);
+      this.ui.showError('Error', 'Failed to open event workspace: ' + error.message);
+    }
   }
 
   /**

@@ -13,7 +13,6 @@ class UserService {
       const { role, search, isActive } = filters;
       const { page, limit } = pagination;
       
-      // Temporarily remove all filters to debug
       const where = {};
       
       // Only apply filters if they have actual values (not empty strings)
@@ -21,16 +20,16 @@ class UserService {
         where.role = role;
       }
       
-      // TEMPORARILY DISABLE isActive filter to see all users
-      // if (isActive !== undefined && isActive !== '') {
-      //   where.isActive = isActive === 'true';
-      // }
+      // Restore isActive filter
+      if (isActive !== undefined && isActive !== '') {
+        where.isActive = isActive === 'true';
+      }
       
       if (search && search !== '') {
         where.OR = [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } }
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { email: { contains: search } }
         ];
       }
 
@@ -39,68 +38,73 @@ class UserService {
 
       const skip = (page - 1) * limit;
       
-      const [users, total] = await Promise.all([
-        prisma.user.findMany({
-          where,
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-            avatarUrl: true,
-            isActive: true,
-            isEmailVerified: true,
-            lastLoginAt: true,
-            createdAt: true,
-            updatedAt: true,
-            _count: {
-              select: {
-                createdEvents: true,
-                moderatedMatches: true,
-                judgeAssignments: true,
-                scores: true
+      try {
+        const [users, total] = await Promise.all([
+          prisma.user.findMany({
+            where,
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+              avatarUrl: true,
+              isActive: true,
+              isEmailVerified: true,
+              lastLoginAt: true,
+              createdAt: true,
+              updatedAt: true,
+              _count: {
+                select: {
+                  createdEvents: true,
+                  moderatedMatches: true,
+                  judgeAssignments: true,
+                  scores: true
+                }
               }
-            }
-          },
-          orderBy: [
-            { isActive: 'desc' },
-            { createdAt: 'desc' }
-          ],
-          skip,
-          take: limit
-        }),
-        prisma.user.count({ where })
-      ]);
+            },
+            orderBy: [
+              { isActive: 'desc' },
+              { createdAt: 'desc' }
+            ],
+            skip,
+            take: limit
+          }),
+          prisma.user.count({ where })
+        ]);
 
-      console.log('Users found:', users.length); // Debug log
-      console.log('Total users:', total); // Debug log
-      console.log('First few users:', users.slice(0, 2)); // Debug log
+        console.log('Users found:', users.length); // Debug log
+        console.log('Total users:', total); // Debug log
+        console.log('First few users:', users.slice(0, 2)); // Debug log
 
-      const totalPages = Math.ceil(total / limit);
+        const totalPages = Math.ceil(total / limit);
 
-      return {
-        users: users.map(user => ({
-          ...user,
-          eventsCount: user._count.createdEvents + user._count.moderatedMatches + user._count.judgeAssignments,
-          eventsCreated: user._count.createdEvents,
-          matchesModerated: user._count.moderatedMatches,
-          judgeAssignments: user._count.judgeAssignments,
-          scoresGiven: user._count.scores,
-          _count: undefined
-        })),
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      };
+        return {
+          users: users.map(user => ({
+            ...user,
+            eventsCount: user._count.createdEvents + user._count.moderatedMatches + user._count.judgeAssignments,
+            eventsCreated: user._count.createdEvents,
+            matchesModerated: user._count.moderatedMatches,
+            judgeAssignments: user._count.judgeAssignments,
+            scoresGiven: user._count.scores,
+            _count: undefined
+          })),
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
+      } catch (dbError) {
+        console.error('Database query error:', dbError);
+        throw new Error(`Database query failed: ${dbError.message}`);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
-      throw new Error('Failed to fetch users');
+      throw new Error(`Failed to fetch users: ${error.message}`);
     }
   }
 

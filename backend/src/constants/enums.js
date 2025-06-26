@@ -13,7 +13,7 @@ const EVENT_STATUS = {
   COMPLETED: 'completed'
 };
 
-const MATCH_STATUS = {
+const MATCH_STATUSES = {
   SCHEDULED: 'scheduled',
   IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
@@ -40,7 +40,7 @@ const PARTICIPANT_ROLES = {
 // Validation arrays
 const VALID_USER_ROLES = Object.values(USER_ROLES);
 const VALID_EVENT_STATUS = Object.values(EVENT_STATUS);
-const VALID_MATCH_STATUS = Object.values(MATCH_STATUS);
+const VALID_MATCH_STATUSES = Object.values(MATCH_STATUSES);
 const VALID_MATCH_STEPS = Object.values(MATCH_STEPS);
 const VALID_PARTICIPANT_ROLES = Object.values(PARTICIPANT_ROLES);
 
@@ -54,7 +54,7 @@ function isValidEventStatus(status) {
 }
 
 function isValidMatchStatus(status) {
-  return VALID_MATCH_STATUS.includes(status);
+  return VALID_MATCH_STATUSES.includes(status);
 }
 
 function isValidMatchStep(step) {
@@ -69,14 +69,14 @@ module.exports = {
   // Constants
   USER_ROLES,
   EVENT_STATUS,
-  MATCH_STATUS,
+  MATCH_STATUSES,
   MATCH_STEPS,
   PARTICIPANT_ROLES,
   
   // Validation arrays
   VALID_USER_ROLES,
   VALID_EVENT_STATUS,
-  VALID_MATCH_STATUS,
+  VALID_MATCH_STATUSES,
   VALID_MATCH_STEPS,
   VALID_PARTICIPANT_ROLES,
   

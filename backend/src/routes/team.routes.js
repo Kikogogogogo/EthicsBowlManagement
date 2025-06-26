@@ -20,16 +20,18 @@ const teamController = new TeamController();
 // Apply rate limiting to all team routes
 router.use(teamLimit);
 
-// All team routes require authentication and admin role
+// All team routes require authentication
 router.use(authenticateToken);
-router.use(requireRole('admin'));
 
 /**
  * @route GET /events/:eventId/teams
  * @desc Get all teams for an event
- * @access Admin only
+ * @access Admin, Judge, Moderator
  */
 router.get('/events/:eventId/teams', teamController.getEventTeams);
+
+// Admin-only routes for team management
+router.use(requireRole('admin'));
 
 /**
  * @route POST /events/:eventId/teams

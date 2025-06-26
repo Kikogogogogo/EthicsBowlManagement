@@ -48,7 +48,7 @@ const config = {
     prefix: '/api/v1',
     rateLimit: {
       windowMs: 15 * 60 * 1000, // 15 minutes
-      max: process.env.NODE_ENV === 'development' ? 1000 : 100, // More lenient for development
+      max: process.env.NODE_ENV === 'development' ? 10000 : 500, // Much more lenient for development
     },
   },
   

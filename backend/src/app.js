@@ -13,6 +13,7 @@ const eventRoutes = require('./routes/event.routes');
 const preApprovedEmailRoutes = require('./routes/pre-approved-email.routes');
 const teamRoutes = require('./routes/team.routes');
 const userRoutes = require('./routes/user.routes');
+const matchRoutes = require('./routes/match.routes');
 
 // Validate environment variables
 validateEnv();
@@ -40,19 +41,24 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.api.rateLimit.windowMs,
-  max: config.api.rateLimit.max,
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.',
-    error: 'RATE_LIMIT_EXCEEDED'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
+// Rate limiting (only in production)
+if (config.nodeEnv === 'production') {
+  const limiter = rateLimit({
+    windowMs: config.api.rateLimit.windowMs,
+    max: config.api.rateLimit.max,
+    message: {
+      success: false,
+      message: 'Too many requests from this IP, please try again later.',
+      error: 'RATE_LIMIT_EXCEEDED'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(limiter);
+  console.log('Rate limiting enabled for production');
+} else {
+  console.log('Rate limiting disabled for development');
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -85,6 +91,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use(`${config.api.prefix}/auth`, authRoutes);
+app.use(`${config.api.prefix}`, matchRoutes);
 app.use(`${config.api.prefix}/events`, eventRoutes);
 app.use(`${config.api.prefix}/pre-approved-emails`, preApprovedEmailRoutes);
 app.use(`${config.api.prefix}`, teamRoutes);

@@ -147,9 +147,12 @@ class EventController {
         });
       }
 
-      // Convert totalRounds to integer if provided
+      // Convert totalRounds and currentRound to integer if provided
       if (updateData.totalRounds) {
         updateData.totalRounds = parseInt(updateData.totalRounds);
+      }
+      if (updateData.currentRound) {
+        updateData.currentRound = parseInt(updateData.currentRound);
       }
 
       const event = await this.eventService.updateEvent(eventId, updateData, req.user.id);

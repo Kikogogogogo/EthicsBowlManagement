@@ -29,6 +29,32 @@ const ENDPOINTS = {
     update: (eventId, teamId) => `${API_BASE_URL}/events/${eventId}/teams/${teamId}`,
     delete: (eventId, teamId) => `${API_BASE_URL}/events/${eventId}/teams/${teamId}`
   },
+  matches: {
+    listByEvent: (eventId) => `${API_BASE_URL}/events/${eventId}/matches`,
+    createByEvent: (eventId) => `${API_BASE_URL}/events/${eventId}/matches`,
+    updateByEvent: (eventId, matchId) => `${API_BASE_URL}/events/${eventId}/matches/${matchId}`,
+    deleteByEvent: (eventId, matchId) => `${API_BASE_URL}/events/${eventId}/matches/${matchId}`,
+    myMatches: `${API_BASE_URL}/matches/my`,
+    updateStep: (matchId) => `${API_BASE_URL}/matches/${matchId}/step`,
+    updateStatus: (matchId) => `${API_BASE_URL}/matches/${matchId}/status`,
+    assignJudge: (matchId) => `${API_BASE_URL}/matches/${matchId}/assignments`,
+    removeJudge: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/assignments/${judgeId}`
+  },
+  scores: {
+    getByMatch: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores`,
+    create: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores`,
+    update: (matchId, scoreId) => `${API_BASE_URL}/matches/${matchId}/scores/${scoreId}`,
+    submit: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores/submit`,
+    delete: (matchId, scoreId) => `${API_BASE_URL}/matches/${matchId}/scores/${scoreId}`
+  },
+  statistics: {
+    eventStandings: (eventId) => `${API_BASE_URL}/events/${eventId}/standings`,
+    matchResults: (eventId, matchId) => `${API_BASE_URL}/events/${eventId}/matches/${matchId}/results`,
+    eventStatistics: (eventId) => `${API_BASE_URL}/events/${eventId}/statistics`,
+    roundResults: (eventId, roundNumber) => `${API_BASE_URL}/events/${eventId}/rounds/${roundNumber}/results`,
+    teamPerformance: (teamId) => `${API_BASE_URL}/teams/${teamId}/performance`,
+    judgeStatistics: (judgeId) => `${API_BASE_URL}/judges/${judgeId}/statistics`
+  },
   users: {
     list: `${API_BASE_URL}/users`,
     pending: `${API_BASE_URL}/users/pending`,
@@ -396,8 +422,6 @@ class UserService {
   }
 }
 
-
-
 /**
  * Pre-approved email management service
  */
@@ -461,13 +485,199 @@ class PreApprovedEmailService {
   }
 }
 
-// Create and export service instances
+/**
+ * Match Management Service
+ */
+class MatchService {
+  constructor(apiClient) {
+    this.api = apiClient;
+  }
+
+  /**
+   * Get all matches for an event
+   */
+  async getEventMatches(eventId, filters = {}) {
+    return this.api.get(ENDPOINTS.matches.listByEvent(eventId), filters);
+  }
+
+  /**
+   * Create a new match for an event
+   */
+  async createEventMatch(eventId, matchData) {
+    return this.api.post(ENDPOINTS.matches.createByEvent(eventId), matchData);
+  }
+
+  /**
+   * Update a match for an event
+   */
+  async updateEventMatch(eventId, matchId, matchData) {
+    return this.api.put(ENDPOINTS.matches.updateByEvent(eventId, matchId), matchData);
+  }
+
+  /**
+   * Get matches assigned to current user
+   */
+  async getMyMatches() {
+    return this.api.get(ENDPOINTS.matches.myMatches);
+  }
+
+  /**
+   * Update match step (for moderators)
+   */
+  async updateMatchStep(matchId, step) {
+    return this.api.put(ENDPOINTS.matches.updateStep(matchId), { step });
+  }
+
+  /**
+   * Update match status (for moderators)
+   */
+  async updateMatchStatus(matchId, status) {
+    return this.api.put(ENDPOINTS.matches.updateStatus(matchId), { status });
+  }
+
+  /**
+   * Assign judge to match (for admins)
+   */
+  async assignJudge(matchId, judgeId, isHeadJudge = false) {
+    return this.api.post(ENDPOINTS.matches.assignJudge(matchId), {
+      judgeId,
+      isHeadJudge
+    });
+  }
+
+  /**
+   * Remove judge from match (for admins)
+   */
+  async removeJudge(matchId, judgeId) {
+    return this.api.delete(ENDPOINTS.matches.removeJudge(matchId, judgeId));
+  }
+
+  /**
+   * Delete a match from an event (for admins)
+   */
+  async deleteEventMatch(eventId, matchId) {
+    return this.api.delete(ENDPOINTS.matches.deleteByEvent(eventId, matchId));
+  }
+}
+
+/**
+ * Score Management Service
+ */
+class ScoreService {
+  constructor(apiClient) {
+    this.api = apiClient;
+  }
+
+  /**
+   * Get all scores for a match
+   */
+  async getMatchScores(matchId) {
+    return this.api.get(ENDPOINTS.scores.getByMatch(matchId));
+  }
+
+  /**
+   * Submit a score for a team in a match
+   */
+  async createScore(matchId, scoreData) {
+    return this.api.post(ENDPOINTS.scores.create(matchId), scoreData);
+  }
+
+  /**
+   * Update a score before submission
+   */
+  async updateScore(matchId, scoreId, scoreData) {
+    return this.api.put(ENDPOINTS.scores.update(matchId, scoreId), scoreData);
+  }
+
+  /**
+   * Submit all scores for a match
+   */
+  async submitScores(matchId, scoreIds) {
+    return this.api.post(ENDPOINTS.scores.submit(matchId), { scoreIds });
+  }
+
+  /**
+   * Delete a score before submission
+   */
+  async deleteScore(matchId, scoreId) {
+    return this.api.delete(ENDPOINTS.scores.delete(matchId, scoreId));
+  }
+}
+
+/**
+ * Statistics Service
+ */
+class StatisticsService {
+  constructor(apiClient) {
+    this.api = apiClient;
+  }
+
+  /**
+   * Get team standings for an event
+   */
+  async getEventStandings(eventId) {
+    return this.api.get(ENDPOINTS.statistics.eventStandings(eventId));
+  }
+
+  /**
+   * Get detailed match results
+   */
+  async getMatchResults(eventId, matchId) {
+    return this.api.get(ENDPOINTS.statistics.matchResults(eventId, matchId));
+  }
+
+  /**
+   * Get comprehensive event statistics
+   */
+  async getEventStatistics(eventId) {
+    return this.api.get(ENDPOINTS.statistics.eventStatistics(eventId));
+  }
+
+  /**
+   * Get results for a specific round
+   */
+  async getRoundResults(eventId, roundNumber) {
+    return this.api.get(ENDPOINTS.statistics.roundResults(eventId, roundNumber));
+  }
+
+  /**
+   * Get team performance data
+   */
+  async getTeamPerformance(teamId) {
+    return this.api.get(ENDPOINTS.statistics.teamPerformance(teamId));
+  }
+
+  /**
+   * Get judge statistics
+   */
+  async getJudgeStatistics(judgeId) {
+    return this.api.get(ENDPOINTS.statistics.judgeStatistics(judgeId));
+  }
+}
+
+// Export services and utilities
+export {
+  ApiClient,
+  ApiError,
+  AuthService,
+  HealthService,
+  EventService,
+  TeamService,
+  UserService,
+  PreApprovedEmailService,
+  MatchService,
+  ScoreService,
+  StatisticsService
+};
+
+// Create global instances
 const apiClient = new ApiClient();
 export const authService = new AuthService(apiClient);
 export const healthService = new HealthService(apiClient);
 export const eventService = new EventService(apiClient);
 export const teamService = new TeamService(apiClient);
 export const userService = new UserService(apiClient);
-
 export const preApprovedEmailService = new PreApprovedEmailService(apiClient);
-export { ApiError }; 
+export const matchService = new MatchService(apiClient);
+export const scoreService = new ScoreService(apiClient);
+export const statisticsService = new StatisticsService(apiClient); 

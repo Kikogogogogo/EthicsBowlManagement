@@ -109,8 +109,8 @@ class DashboardPage {
     const statusText = this.getStatusText(event.status);
     
     // Calculate team count and other stats
-    const teamCount = event._count?.teams || 0;
-    const matchCount = event._count?.matches || 0;
+    const teamCount = event.stats?.teamsCount || 0;
+    const matchCount = event.stats?.matchesCount || 0;
     
     return `
       <div id="event-card-${event.id}" class="bg-white rounded-lg border border-gray-300 p-6 hover:shadow-lg transition-shadow cursor-pointer group">
@@ -196,18 +196,25 @@ class DashboardPage {
   }
 
   async openEventManagement(eventId) {
-    console.log('Opening event management for event:', eventId);
+    console.log('Opening event workspace for event:', eventId);
     
-    // Store the selected event ID for the event management page
-    if (window.app && window.app.eventManagementPage) {
-      // Initialize the event management page first
-      await window.app.eventManagementPage.init();
-      // Then set the current event
-      await window.app.eventManagementPage.setCurrentEvent(eventId);
+    try {
+      // Initialize EventWorkspacePage if needed
+      if (!window.eventWorkspacePage) {
+        if (window.EventWorkspacePage) {
+          window.eventWorkspacePage = new window.EventWorkspacePage(this.uiManager);
+        } else {
+          console.error('EventWorkspacePage class not found!');
+          return;
+        }
+      }
+      
+      // Navigate to event workspace
+      window.eventWorkspacePage.show(eventId);
+    } catch (error) {
+      console.error('Error opening event workspace:', error);
+      this.showError('Failed to open event workspace: ' + error.message);
     }
-    
-    // Navigate to event management page
-    this.uiManager.showPage('event-management');
   }
 
   showLoading(show) {

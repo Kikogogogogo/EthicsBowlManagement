@@ -225,6 +225,7 @@ class EventService {
         name,
         description,
         totalRounds,
+        currentRound,
         eventDate,
         startDate,
         endDate,
@@ -237,6 +238,10 @@ class EventService {
       // Validate data if provided
       if (totalRounds && (totalRounds < 1 || totalRounds > 20)) {
         throw new Error('Total rounds must be between 1 and 20');
+      }
+
+      if (currentRound && (currentRound < 1 || (totalRounds && currentRound > totalRounds))) {
+        throw new Error('Current round must be between 1 and total rounds');
       }
 
       // Validate maxTeams if provided
@@ -257,6 +262,7 @@ class EventService {
       if (name !== undefined) updatePayload.name = name;
       if (description !== undefined) updatePayload.description = description;
       if (totalRounds !== undefined) updatePayload.totalRounds = totalRounds;
+      if (currentRound !== undefined) updatePayload.currentRound = currentRound;
       if (eventDate !== undefined) updatePayload.eventDate = eventDate ? new Date(eventDate) : null;
       if (startDate !== undefined) updatePayload.startDate = startDate ? new Date(startDate) : null;
       if (endDate !== undefined) updatePayload.endDate = endDate ? new Date(endDate) : null;
