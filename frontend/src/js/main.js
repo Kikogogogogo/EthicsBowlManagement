@@ -54,7 +54,7 @@ class UIManager {
       navUsers: document.getElementById('nav-users'),
       
       // Event Management page
-
+      eventWorkspacePage: document.getElementById('event-workspace-page'),
       
       // Events page
       eventsPage: document.getElementById('events-page'),
@@ -162,16 +162,15 @@ class UIManager {
     });
 
     // Also hide event-workspace-page specifically
-    const eventWorkspacePage = document.getElementById('event-workspace-page');
-    if (eventWorkspacePage) {
+    if (this.elements.eventWorkspacePage) {
       console.log('Hiding event-workspace-page');
-      eventWorkspacePage.classList.add('hidden');
+      this.elements.eventWorkspacePage.classList.add('hidden');
     }
 
     // Show requested page
     let page;
     if (pageName === 'event-workspace') {
-      page = document.getElementById('event-workspace-page');
+      page = this.elements.eventWorkspacePage;
     } else {
       page = this.elements[pageName + 'Page'];
     }

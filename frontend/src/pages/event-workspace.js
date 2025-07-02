@@ -15,6 +15,10 @@ class EventWorkspacePage {
     this.currentTab = 'overview';
     this.judgeScoresCache = new Map(); // Cache for judge scores status
     
+    // Scores modal tracking
+    this.currentScoresInterval = null;
+    this.currentViewingMatchId = null;
+    
     // Service references
     this.eventService = null;
     this.teamService = null;
@@ -174,15 +178,17 @@ class EventWorkspacePage {
    */
   async show(eventId) {
     try {
-      console.log('Opening event workspace for event:', eventId);
+      console.log('🚀 [EventWorkspace] Opening event workspace for event:', eventId);
       
       // Initialize services
+      console.log('🔧 [EventWorkspace] Initializing services...');
       this.eventService = window.eventService;
       this.teamService = window.teamService;
       this.matchService = window.matchService;
       this.userService = window.userService;
       this.scoreService = window.scoreService;
       this.authManager = window.authManager;
+      console.log('✅ [EventWorkspace] Services initialized');
       
       // Check authentication first
       if (!this.authManager.currentUser) {
@@ -197,13 +203,57 @@ class EventWorkspacePage {
       
       this.currentEventId = eventId;
       
-      // Get the workspace page element
-      const workspacePage = document.getElementById('event-workspace-page');
+      // Get the workspace page element, restore DOM if needed
+      let workspacePage = document.getElementById('event-workspace-page');
       if (!workspacePage) {
-        throw new Error('Event workspace page element not found');
+        console.log('Event workspace page element not found, attempting to restore DOM...');
+        
+        // Attempt to restore original DOM structure
+        const appEl = document.getElementById('app');
+        if (window._appOriginalHTML && appEl) {
+          console.log('Restoring original DOM structure...');
+          appEl.innerHTML = window._appOriginalHTML;
+          
+          // Rebuild UIManager element references
+          if (window.app && window.app.ui && typeof window.app.ui.initializeElements === 'function') {
+            window.app.ui.initializeElements();
+          }
+          
+          // Try to get the workspace page element again
+          workspacePage = document.getElementById('event-workspace-page');
+        }
+        
+        // If still not found, create it
+        if (!workspacePage) {
+          console.log('Creating event workspace page element...');
+          const appEl = document.getElementById('app');
+          if (appEl) {
+            appEl.innerHTML = `
+              <div id="event-workspace-page" class="hidden">
+                <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+                  <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p class="mt-4 text-gray-600">Initializing workspace...</p>
+                  </div>
+                </div>
+              </div>
+            `;
+            workspacePage = document.getElementById('event-workspace-page');
+          }
+        }
+        
+        if (!workspacePage) {
+          throw new Error('Unable to create or restore event workspace page element');
+        }
       }
       
-      // Show loading state
+      // Ensure workspace page is visible and show loading state
+      console.log('🔧 [EventWorkspace] Setting up page visibility...');
+      workspacePage.className = workspacePage.className.replace('hidden', '').trim();
+      workspacePage.classList.remove('hidden');
+      workspacePage.style.display = 'block';
+      console.log('✅ [EventWorkspace] Page visibility configured');
+      
       workspacePage.innerHTML = `
         <div class="min-h-screen bg-gray-50 flex items-center justify-center">
           <div class="text-center">
@@ -214,7 +264,9 @@ class EventWorkspacePage {
       `;
       
       // Load event data
+      console.log('📊 [EventWorkspace] Starting to load event data...');
       await this.loadEventData();
+      console.log('✅ [EventWorkspace] Event data loaded successfully');
       
       // Set default tab based on user role
       const currentUser = this.authManager.currentUser;
@@ -225,22 +277,102 @@ class EventWorkspacePage {
       }
       
       // Render the workspace
+      console.log('🎨 [EventWorkspace] Rendering workspace...');
       this.renderWorkspace();
+      console.log('✅ [EventWorkspace] Workspace rendered successfully');
+      
+      // Ensure the page is visible after rendering
+      console.log('👁️ [EventWorkspace] Ensuring page visibility...');
+      const workspacePageAfterRender = document.getElementById('event-workspace-page');
+      if (workspacePageAfterRender) {
+        workspacePageAfterRender.classList.remove('hidden');
+        console.log('✅ [EventWorkspace] Page visibility ensured');
+        
+        // Hide loading and show content first
+        if (window.app && window.app.ui) {
+          console.log('🔄 [EventWorkspace] Hiding loading screen...');
+          if (typeof window.app.ui.hideLoading === 'function') {
+            window.app.ui.hideLoading();
+            console.log('✅ [EventWorkspace] Loading screen hidden');
+          }
+          
+          // Then show the specific page
+          if (typeof window.app.ui.showPage === 'function') {
+            console.log('📱 [EventWorkspace] Calling UIManager.showPage...');
+            window.app.ui.showPage('event-workspace');
+            console.log('✅ [EventWorkspace] UIManager.showPage called');
+          }
+        }
+      } else {
+        console.error('❌ [EventWorkspace] Workspace page element not found after rendering!');
+      }
       
       // Initialize event listeners after rendering
       if (!this.eventListenersInitialized) {
         this.initializeEventListeners();
       }
       
+      // Final check with delay to ensure everything is visible
+      setTimeout(() => {
+        console.log('🔍 [EventWorkspace] Final visibility check...');
+        const finalPage = document.getElementById('event-workspace-page');
+        if (finalPage) {
+          const isHidden = finalPage.classList.contains('hidden');
+          const computedStyle = window.getComputedStyle(finalPage);
+          const isDisplayed = computedStyle.display !== 'none';
+          const isVisible = computedStyle.visibility !== 'hidden';
+          
+          console.log('📊 [EventWorkspace] Final status:', {
+            hasHiddenClass: isHidden,
+            display: computedStyle.display,
+            visibility: computedStyle.visibility,
+            isDisplayed,
+            isVisible
+          });
+          
+          if (isHidden || !isDisplayed || !isVisible) {
+            console.log('⚠️ [EventWorkspace] Page still not visible, forcing display...');
+            finalPage.classList.remove('hidden');
+            finalPage.style.display = 'block';
+            finalPage.style.visibility = 'visible';
+            console.log('✅ [EventWorkspace] Forced display applied');
+          } else {
+            console.log('✅ [EventWorkspace] Page is properly visible');
+          }
+        } else {
+          console.error('❌ [EventWorkspace] Final page element not found!');
+        }
+      }, 500);
+      
       return true;
     } catch (error) {
       console.error('Failed to load event workspace:', error);
       
       // Get the workspace page element again in case it was removed
-      const workspacePage = document.getElementById('event-workspace-page');
+      let workspacePage = document.getElementById('event-workspace-page');
       if (!workspacePage) {
-        console.error('Event workspace page element not found during error handling');
-        return false;
+        console.error('Event workspace page element not found during error handling, attempting to restore...');
+        
+        // Attempt to restore original DOM structure
+        const appEl = document.getElementById('app');
+        if (window._appOriginalHTML && appEl) {
+          appEl.innerHTML = window._appOriginalHTML;
+          workspacePage = document.getElementById('event-workspace-page');
+        }
+        
+        // If still not found, create a basic structure for error display
+        if (!workspacePage) {
+          const appEl = document.getElementById('app');
+          if (appEl) {
+            appEl.innerHTML = `<div id="event-workspace-page" class="hidden"></div>`;
+            workspacePage = document.getElementById('event-workspace-page');
+          }
+        }
+        
+        if (!workspacePage) {
+          console.error('Unable to restore workspace page element for error display');
+          return false;
+        }
       }
       
       // Show error with suggestion to re-login if it's an auth error
@@ -287,22 +419,27 @@ class EventWorkspacePage {
   async loadEventData() {
     try {
       // Load event details
+      console.log('📋 [EventWorkspace] Loading event details for ID:', this.currentEventId);
       const eventResponse = await this.eventService.getEventById(this.currentEventId);
       this.currentEvent = eventResponse.data || eventResponse;
+      console.log('✅ [EventWorkspace] Event details loaded:', this.currentEvent?.name);
 
       // Load teams for this event (with permission handling)
+      console.log('👥 [EventWorkspace] Loading teams...');
       try {
         const teamsResponse = await this.teamService.getEventTeams(this.currentEventId);
         this.teams = teamsResponse.data || teamsResponse || [];
-        console.log('Loaded teams:', this.teams.length, 'teams');
+        console.log('✅ [EventWorkspace] Loaded teams:', this.teams.length, 'teams');
       } catch (teamError) {
-        console.warn('Failed to load teams (permission denied):', teamError);
+        console.warn('⚠️ [EventWorkspace] Failed to load teams (permission denied):', teamError);
         this.teams = []; // Fallback to empty array if no permission
       }
 
       // Load matches for this event
+      console.log('🥊 [EventWorkspace] Loading matches...');
       const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
       const allMatches = matchesResponse.data?.matches || [];
+      console.log('✅ [EventWorkspace] Raw matches loaded:', allMatches.length, 'matches');
 
       // Filter matches based on user role
       const currentUser = this.authManager.currentUser;
@@ -328,20 +465,25 @@ class EventWorkspacePage {
 
       // Load all active users (for judge assignments) - only for admins
       if (this.authManager.currentUser.role === 'admin') {
+        console.log('👤 [EventWorkspace] Loading users (admin only)...');
         try {
           const usersResponse = await this.userService.getAllUsers({ isActive: true });
           this.users = usersResponse.users || [];
+          console.log('✅ [EventWorkspace] Loaded users:', this.users.length, 'users');
         } catch (userError) {
-          console.warn('Failed to load users:', userError);
+          console.warn('⚠️ [EventWorkspace] Failed to load users:', userError);
           this.users = [];
         }
       } else {
         this.users = [];
+        console.log('ℹ️ [EventWorkspace] Skipping users load (not admin)');
       }
 
       // Preload judge scores status if current user is a judge
       if (this.authManager.currentUser.role === 'judge') {
+        console.log('📊 [EventWorkspace] Preloading judge scores status...');
         await this.preloadJudgeScoresStatus();
+        console.log('✅ [EventWorkspace] Judge scores status preloaded');
       }
     } catch (error) {
       console.error('Error loading event data:', error);
@@ -381,9 +523,11 @@ class EventWorkspacePage {
    * Render the main workspace interface
    */
   renderWorkspace() {
+    console.log('🎨 [EventWorkspace] renderWorkspace() called');
     const isAdmin = this.authManager.currentUser.role === 'admin';
     const isModerator = this.authManager.currentUser.role === 'moderator';
     const isJudge = this.authManager.currentUser.role === 'judge';
+    console.log('👤 [EventWorkspace] User role:', this.authManager.currentUser.role);
 
     const workspaceHTML = `
       <div class="min-h-screen bg-gray-50">
@@ -458,12 +602,21 @@ class EventWorkspacePage {
       ${this.renderModals()}
     `;
 
+    console.log('🔍 [EventWorkspace] Looking for event-workspace-page element...');
     const eventWorkspaceElement = document.getElementById('event-workspace-page');
     if (!eventWorkspaceElement) {
-      console.error('Event workspace page element not found');
+      console.error('❌ [EventWorkspace] Event workspace page element not found');
       return;
     }
+    console.log('✅ [EventWorkspace] Found event-workspace-page element, setting innerHTML...');
     eventWorkspaceElement.innerHTML = workspaceHTML;
+    console.log('✅ [EventWorkspace] HTML content set successfully');
+    
+    // Ensure page is visible immediately after content is set
+    console.log('🔄 [EventWorkspace] Ensuring immediate visibility...');
+    eventWorkspaceElement.classList.remove('hidden');
+    eventWorkspaceElement.style.display = 'block';
+    console.log('✅ [EventWorkspace] Immediate visibility set');
     
     // Add event listener for back button after rendering - with timeout to ensure DOM is ready
     setTimeout(() => {
@@ -2312,193 +2465,47 @@ class EventWorkspacePage {
         return;
       }
 
+      // Clear any existing auto-refresh intervals
+      if (this.currentScoresInterval) {
+        clearInterval(this.currentScoresInterval);
+        this.currentScoresInterval = null;
+      }
+
+      // Store the current match ID being viewed
+      this.currentViewingMatchId = matchId;
+
       // Function to fetch and display scores
       const fetchAndDisplayScores = async () => {
         try {
+          // Double-check we're still viewing the same match
+          if (this.currentViewingMatchId !== matchId) {
+            return [];
+          }
+
           // Get scores for the match
           const scoresResponse = await this.scoreService.getMatchScores(matchId);
           const scores = scoresResponse.data?.scores || scoresResponse.scores || scoresResponse.data || scoresResponse || [];
           
-          console.log('Scores response:', scoresResponse);
+          console.log('Scores response for match', matchId, ':', scoresResponse);
           console.log('Parsed scores:', scores);
 
           // Ensure scores is an array
           const scoresArray = Array.isArray(scores) ? scores : [];
 
-          // Update the modal content if it exists
+          // Update the modal content if it exists and is for the correct match
           const modal = document.getElementById('viewScoresModal');
-          if (modal && modal.style.display === 'flex') {
+          if (modal && modal.style.display === 'flex' && this.currentViewingMatchId === matchId) {
             this.updateScoresModalContent(match, scoresArray);
           }
 
           return scoresArray;
         } catch (error) {
-          console.error('Error fetching scores:', error);
+          console.error('Error fetching scores for match', matchId, ':', error);
           return [];
         }
       };
 
-      // Initial fetch
-      const scoresArray = await fetchAndDisplayScores();
-
-      // Set up auto-refresh
-      const autoRefreshInterval = setInterval(async () => {
-        const modal = document.getElementById('viewScoresModal');
-        if (modal && modal.style.display === 'flex') {
-          await fetchAndDisplayScores();
-        } else {
-          // Stop refreshing if modal is closed
-          clearInterval(autoRefreshInterval);
-        }
-      }, 5000); // Refresh every 5 seconds
-      
-      // Group scores by judge
-      const scoresByJudge = {};
-      scoresArray.forEach(score => {
-        const judgeId = score.judge.id;
-        if (!scoresByJudge[judgeId]) {
-          scoresByJudge[judgeId] = {
-            judge: score.judge,
-            scores: []
-          };
-        }
-        scoresByJudge[judgeId].scores.push(score);
-      });
-
-      // Get team names
-      const teamA = this.teams.find(t => t.id === match.teamAId);
-      const teamB = this.teams.find(t => t.id === match.teamBId);
-
-      // Create modal content
-      const modalContent = `
-        <div class="max-w-6xl w-full mx-auto">
-          <div class="bg-white rounded-lg shadow-lg max-h-[90vh] flex flex-col">
-            <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
-                <button onclick="document.getElementById('viewScoresModal').style.display='none'" class="text-gray-400 hover:text-gray-600">
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                </button>
-              </div>
-              <div class="mt-2 text-sm text-gray-600">
-                ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'} • Round ${match.roundNumber} • ${match.room || 'No room assigned'}
-              </div>
-            </div>
-            
-            <div class="p-6 overflow-y-auto flex-grow">
-              ${Object.keys(scoresByJudge).length === 0 ? `
-                <div class="text-center py-8 text-gray-500">
-                  <p>No scores submitted yet.</p>
-                </div>
-              ` : `
-                <div class="space-y-4">
-                  ${Object.values(scoresByJudge).map(judgeData => `
-                    <div class="border border-gray-200 rounded-lg p-4">
-                      <h3 class="text-base font-medium text-gray-900 mb-3">
-                        Judge: ${judgeData.judge.firstName} ${judgeData.judge.lastName}
-                      </h3>
-                      
-                      <div class="grid grid-cols-2 gap-4">
-                        ${judgeData.scores.map(score => {
-                          const team = this.teams.find(t => t.id === score.teamId);
-                          
-                          // Parse scores if they are strings (from database JSON)
-                          let criteriaScores = score.criteriaScores || {};
-                          let commentScores = score.commentScores || [];
-                          
-                          if (typeof criteriaScores === 'string') {
-                            try {
-                              criteriaScores = JSON.parse(criteriaScores);
-                            } catch (e) {
-                              console.error('Error parsing criteriaScores:', e);
-                              criteriaScores = {};
-                            }
-                          }
-                          
-                          if (typeof commentScores === 'string') {
-                            try {
-                              commentScores = JSON.parse(commentScores);
-                            } catch (e) {
-                              console.error('Error parsing commentScores:', e);
-                              commentScores = [];
-                            }
-                          }
-                          
-                          // Ensure commentScores is an array
-                          if (!Array.isArray(commentScores)) {
-                            commentScores = [];
-                          }
-                          
-                          // Calculate totals
-                          const criteriaTotal = Object.values(criteriaScores).reduce((sum, val) => sum + (val || 0), 0);
-                          const commentTotal = commentScores.reduce((sum, val) => sum + (val || 0), 0);
-                          const grandTotal = criteriaTotal + commentTotal;
-                          
-                          return `
-                            <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                              <h4 class="font-medium text-gray-900 mb-2">${team?.name || 'Unknown Team'}</h4>
-                              
-                              <div class="space-y-3 text-sm">
-                                <div>
-                                  <h5 class="font-medium text-gray-700 mb-1">Criteria Scores:</h5>
-                                  <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-                                    ${Object.entries(criteriaScores).map(([key, value]) => `
-                                      <div class="flex justify-between">
-                                        <span class="capitalize">${key.replace(/_/g, ' ')}:</span>
-                                        <span class="font-medium">${value || 0}</span>
-                                      </div>
-                                    `).join('')}
-                                  </div>
-                                  <div class="flex justify-between font-medium pt-1 mt-1 border-t">
-                                    <span>Criteria Total:</span>
-                                    <span>${criteriaTotal}</span>
-                                  </div>
-                                </div>
-                              
-                                <div>
-                                  <h5 class="font-medium text-gray-700 mb-1">Judge Questions:</h5>
-                                  <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-                                    ${commentScores.map((score, idx) => `
-                                      <div class="flex justify-between">
-                                        <span>Q${idx + 1}:</span>
-                                        <span class="font-medium">${score || 0}</span>
-                                      </div>
-                                    `).join('')}
-                                  </div>
-                                  <div class="flex justify-between font-medium pt-1 mt-1 border-t">
-                                    <span>Questions Total:</span>
-                                    <span>${commentTotal}</span>
-                                  </div>
-                                </div>
-                              
-                                <div class="flex justify-between text-base font-bold text-gray-900 pt-1 mt-1 border-t">
-                                  <span>Total Score:</span>
-                                  <span>${grandTotal}</span>
-                                </div>
-                                
-                                ${score.notes ? `
-                                  <div class="mt-2 pt-1 border-t">
-                                    <h5 class="font-medium text-gray-700 mb-1">Notes:</h5>
-                                    <p class="text-gray-600 italic text-xs">${score.notes}</p>
-                                  </div>
-                                ` : ''}
-                              </div>
-                            </div>
-                          `;
-                        }).join('')}
-                      </div>
-                    </div>
-                  `).join('')}
-                </div>
-              `}
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Create and show modal
+      // Create and show modal first with loading state
       let modal = document.getElementById('viewScoresModal');
       if (!modal) {
         modal = document.createElement('div');
@@ -2510,13 +2517,59 @@ class EventWorkspacePage {
         // Add close event listener to stop auto-refresh
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
-            modal.style.display = 'none';
+            this.closeScoresModal();
           }
         });
       }
-      
-      modal.innerHTML = modalContent;
+
+      // Show loading state immediately
+      modal.innerHTML = `
+        <div class="max-w-6xl w-full mx-auto">
+          <div class="bg-white rounded-lg shadow-lg max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
+                <button onclick="window.eventWorkspacePage.closeScoresModal()" class="text-gray-400 hover:text-gray-600">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-2 text-sm text-gray-600">
+                Loading match details...
+              </div>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow">
+              <div class="text-center py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-gray-500">Loading scores and judge information...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
       modal.style.display = 'flex';
+
+      // Initial fetch and display
+      const scoresArray = await fetchAndDisplayScores();
+      
+      // Use the consistent updateScoresModalContent method for initial display
+      this.updateScoresModalContent(match, scoresArray);
+
+      // Set up auto-refresh with proper cleanup
+      this.currentScoresInterval = setInterval(async () => {
+        const modal = document.getElementById('viewScoresModal');
+        if (modal && modal.style.display === 'flex' && this.currentViewingMatchId === matchId) {
+          await fetchAndDisplayScores();
+        } else {
+          // Stop refreshing if modal is closed or match changed
+          clearInterval(this.currentScoresInterval);
+          this.currentScoresInterval = null;
+        }
+      }, 5000); // Refresh every 5 seconds
+
+
 
     } catch (error) {
       console.error('Error viewing match scores:', error);
@@ -2669,6 +2722,26 @@ class EventWorkspacePage {
   closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
     document.getElementById(modalId).classList.remove('flex');
+  }
+
+  /**
+   * Close scores modal with proper cleanup
+   */
+  closeScoresModal() {
+    // Clear auto-refresh interval
+    if (this.currentScoresInterval) {
+      clearInterval(this.currentScoresInterval);
+      this.currentScoresInterval = null;
+    }
+    
+    // Clear current viewing match ID
+    this.currentViewingMatchId = null;
+    
+    // Hide modal
+    const modal = document.getElementById('viewScoresModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
   }
 
   groupMatchesByRound() {
@@ -3243,7 +3316,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <div class="flex justify-between items-center">
               <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
-              <button onclick="document.getElementById('viewScoresModal').style.display='none'" class="text-gray-400 hover:text-gray-600">
+              <button onclick="window.eventWorkspacePage.closeScoresModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>

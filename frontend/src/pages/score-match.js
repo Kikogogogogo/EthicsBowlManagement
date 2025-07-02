@@ -15,6 +15,7 @@ class ScoreMatchPage {
     this.teams = [];
     this.scores = [];
     this.scoresSubmitted = false;
+    this.isSubmitting = false;
   }
 
   /**
@@ -26,33 +27,45 @@ class ScoreMatchPage {
     if (backButton) {
       backButton.addEventListener('click', async () => {
         try {
-          // Navigate back to the event workspace matches tab
-          if (this.currentMatch?.eventId) {
-            // First ensure the page is loaded
-            const pageLoaded = await this.ui.showPage('event-workspace');
+          // Simple and reliable navigation back to workspace
+          if (this.currentMatch?.eventId && window.app?.ui) {
+            console.log('Back button clicked, navigating to workspace...');
             
-            if (!pageLoaded) {
-              throw new Error('Failed to load event workspace page');
+            // Ensure we have the workspace page available
+            if (!window.eventWorkspacePage && window.EventWorkspacePage) {
+              window.eventWorkspacePage = new window.EventWorkspacePage(window.app.ui);
             }
             
-            // Wait a moment for the page to initialize
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Then show the event and switch to matches tab
             if (window.eventWorkspacePage) {
-              await window.eventWorkspacePage.show(this.currentMatch.eventId);
-              window.eventWorkspacePage.switchTab('matches');
+              // Use the same reliable method as the submit success
+              window.app.ui.showPage('event-workspace');
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
+              const success = await window.eventWorkspacePage.show(this.currentMatch.eventId);
+              if (success) {
+                setTimeout(() => {
+                  window.eventWorkspacePage.switchTab('matches');
+                }, 100);
+              } else {
+                // If workspace fails, go to dashboard
+                window.app.showDashboard();
+              }
             } else {
-              throw new Error('Event workspace page not initialized');
+              // If no workspace available, go to dashboard
+              window.app.showDashboard();
             }
           } else {
             // Fallback: go to dashboard
-            this.ui.showPage('dashboard');
+            if (window.app) {
+              window.app.showDashboard();
+            } else {
+              window.location.reload();
+            }
           }
         } catch (error) {
-          console.error('Navigation error:', error);
-          // Fallback: go to dashboard
-          this.ui.showPage('dashboard');
+          console.error('Back button navigation error:', error);
+          // Ultimate fallback: reload page
+          window.location.reload();
         }
       });
     }
@@ -260,6 +273,12 @@ class ScoreMatchPage {
   async handleSubmitScores(event) {
     event.preventDefault();
     
+    // Prevent double submission
+    if (this.isSubmitting) {
+      console.log('Submission already in progress, ignoring');
+      return;
+    }
+    
     // Validate form first
     const validationErrors = this.validateForm();
     if (validationErrors.length > 0) {
@@ -269,11 +288,22 @@ class ScoreMatchPage {
     }
     
     const submitButton = document.getElementById('submitScoresBtn');
+    if (!submitButton) {
+      console.error('Submit button not found');
+      return;
+    }
+    
     const originalText = submitButton.textContent;
+    const originalClasses = Array.from(submitButton.classList);
+    
+    // Set submission state
+    this.isSubmitting = true;
     
     try {
+      // Update button to loading state
       submitButton.disabled = true;
       submitButton.textContent = 'Submitting...';
+      submitButton.className = 'bg-blue-600 text-white px-6 py-2 rounded-md cursor-not-allowed';
 
       // Collect scores for each team
       const allScores = [];
@@ -316,80 +346,180 @@ class ScoreMatchPage {
 
       console.log('Submitting scores:', allScores);
       
-      try {
-        // Create all scores first
-        const results = await Promise.all(
-          allScores.map(scoreData => 
-            this.scoreService.createScore(this.currentMatch.id, scoreData)
-          )
-        );
-        console.log('Score submission results:', results);
+      // Create all scores first
+      const results = await Promise.all(
+        allScores.map(scoreData => 
+          this.scoreService.createScore(this.currentMatch.id, scoreData)
+        )
+      );
+      console.log('Score submission results:', results);
 
-        // Extract score IDs
-        const scoreIds = results.map(result => {
-          const id = result?.data?.id || result?.id;
-          console.log('Extracting score ID:', { result, id });
-          return id;
-        }).filter(id => id);
-        
-        console.log('Final scoreIds array:', scoreIds);
-        
-        if (scoreIds.length === 0) {
-          throw new Error('No valid score IDs found to submit');
-        }
-        
-        // Submit all scores as final
-        const submitResult = await this.scoreService.submitScores(this.currentMatch.id, scoreIds);
-        console.log('Submit result:', submitResult);
-        
-        if (!submitResult?.success) {
-          throw new Error('Failed to submit scores: ' + (submitResult?.message || 'Unknown error'));
-        }
-        
-        // Mark as submitted locally
-        this.scoresSubmitted = true;
-
-        // Show success message
-        await this.ui.showSuccess('Success', 'Scores submitted successfully! Returning to match list...');
-        
-        // Wait a moment for the success message to be seen
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Navigate back
-        const appEl = document.getElementById('app');
-        if (window._appOriginalHTML && appEl) {
-          appEl.innerHTML = window._appOriginalHTML;
-
-          // Re-bootstrap the application (dashboard, workspace etc.)
-          if (window.app && this.currentMatch?.eventId) {
-            // Ensure workspace page is visible then show event workspace
-            window.app.ui.showPage('event-workspace');
-            await window.eventWorkspacePage.show(this.currentMatch.eventId);
-            window.eventWorkspacePage.switchTab('matches');
-          } else if (window.app) {
-            window.app.showDashboard();
-          }
-
-          // Rebuild UIManager element references after DOM replacement
-          if (window.app && window.app.ui && typeof window.app.ui.initializeElements === 'function') {
-            window.app.ui.initializeElements();
-          }
-        } else {
-          // Fallback: full reload
-          window.location.reload();
-        }
-      } catch (submitError) {
-        console.error('Error in score submission:', submitError);
-        throw submitError;
+      // Extract score IDs
+      const scoreIds = results.map(result => {
+        const id = result?.data?.id || result?.id;
+        console.log('Extracting score ID:', { result, id });
+        return id;
+      }).filter(id => id);
+      
+      console.log('Final scoreIds array:', scoreIds);
+      
+      if (scoreIds.length === 0) {
+        throw new Error('No valid score IDs found to submit');
       }
+      
+      // Submit all scores as final
+      const submitResult = await this.scoreService.submitScores(this.currentMatch.id, scoreIds);
+      console.log('Submit result:', submitResult);
+      
+      if (!submitResult?.success) {
+        throw new Error('Failed to submit scores: ' + (submitResult?.message || 'Unknown error'));
+      }
+      
+      // Mark as submitted locally
+      this.scoresSubmitted = true;
+
+      // Update button to success state
+      submitButton.textContent = 'Scores Submitted Successfully!';
+      submitButton.className = 'bg-green-600 text-white px-6 py-2 rounded-md cursor-not-allowed';
+
+      // Show success notification
+      this.showSuccessNotification('Scores submitted successfully!');
+      
+      console.log('Scores submitted successfully, navigating back...');
+      
+      // Wait a moment for the success state to be seen
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Navigate back smoothly
+      await this.navigateBackToWorkspace();
       
     } catch (error) {
       console.error('Failed to submit scores:', error);
-      await this.ui.showError('Error', 'Failed to submit scores: ' + error.message);
       
-      // Re-enable submit button on error
+      // Show error notification
+      this.showErrorNotification('Failed to submit scores: ' + error.message);
+      
+      // Reset button state on error
       submitButton.disabled = false;
       submitButton.textContent = originalText;
+      submitButton.className = originalClasses.join(' ');
+      
+    } finally {
+      // Always reset submission state
+      this.isSubmitting = false;
+    }
+  }
+
+  /**
+   * Show success notification
+   */
+  showSuccessNotification(message) {
+    // Create a temporary success notification
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center';
+    notification.innerHTML = `
+      <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+      </svg>
+      ${message}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove notification after 3 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 3000);
+  }
+
+  /**
+   * Show error notification
+   */
+  showErrorNotification(message) {
+    // Create a temporary error notification
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center';
+    notification.innerHTML = `
+      <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+      </svg>
+      ${message}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove notification after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Navigate back to workspace smoothly
+   */
+  async navigateBackToWorkspace() {
+    try {
+      console.log('Navigating back to event workspace...');
+      
+      // Check if we have the required globals
+      if (!window.app || !window.app.ui) {
+        console.error('App or UI manager not found, forcing reload');
+        window.location.reload();
+        return;
+      }
+
+      // Check if EventWorkspacePage is available
+      if (!window.eventWorkspacePage) {
+        if (window.EventWorkspacePage) {
+          console.log('Creating new EventWorkspacePage instance');
+          window.eventWorkspacePage = new window.EventWorkspacePage(window.app.ui);
+        } else {
+          console.error('EventWorkspacePage class not found, forcing reload');
+          window.location.reload();
+          return;
+        }
+      }
+
+      // Show the workspace page first
+      console.log('Showing event-workspace page');
+      window.app.ui.showPage('event-workspace');
+      
+      // Small delay to ensure page is shown
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Navigate to the specific event workspace  
+      console.log('Loading event workspace for event:', this.currentMatch?.eventId);
+      const success = await window.eventWorkspacePage.show(this.currentMatch.eventId);
+      
+      if (success) {
+        // Switch to matches tab after a brief delay
+        setTimeout(() => {
+          try {
+            window.eventWorkspacePage.switchTab('matches');
+            console.log('Successfully navigated back to matches tab');
+          } catch (error) {
+            console.error('Error switching to matches tab:', error);
+          }
+        }, 100);
+      } else {
+        console.error('Failed to load event workspace, falling back to dashboard');
+        window.app.showDashboard();
+      }
+      
+    } catch (error) {
+      console.error('Error navigating back to workspace:', error);
+      
+      // Show error notification
+      this.showErrorNotification('Navigation failed. Refreshing page...');
+      
+      // Fallback after showing error
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     }
   }
 
