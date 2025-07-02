@@ -37,9 +37,18 @@ class ScoreService {
         }
         whereClause.judgeId = userId;
       } else if (userRole === USER_ROLES.MODERATOR) {
-        // Moderators can see all scores for their matches
+        // Moderators can see all scores for their matches (Admin can see all)
         if (match.moderatorId !== userId) {
-          throw new Error('You are not assigned as moderator for this match');
+          // Get user info to check if they are admin
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+          });
+          
+          // Allow admins to bypass moderator assignment check
+          if (!user || user.role !== USER_ROLES.ADMIN) {
+            throw new Error('You are not assigned as moderator for this match');
+          }
         }
       }
       // Admins can see all scores (no additional filtering)
@@ -128,7 +137,15 @@ class ScoreService {
       });
 
       if (!assignment) {
-        throw new Error('Judge is not assigned to this match');
+        // Check if user is admin - admins can score without being assigned
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Judge is not assigned to this match');
+        }
       }
 
       // Verify team belongs to this match
@@ -239,7 +256,15 @@ class ScoreService {
       }
 
       if (score.judgeId !== judgeId) {
-        throw new Error('You can only update your own scores');
+        // Check if user is admin - admins can update any scores
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('You can only update your own scores');
+        }
       }
 
       if (score.isSubmitted) {
@@ -318,7 +343,15 @@ class ScoreService {
       });
 
       if (!assignment) {
-        throw new Error('Judge is not assigned to this match');
+        // Check if user is admin - admins can submit scores without being assigned
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Judge is not assigned to this match');
+        }
       }
 
       // Validate scoreIds array
@@ -506,7 +539,15 @@ class ScoreService {
       }
 
       if (score.judgeId !== judgeId) {
-        throw new Error('You can only delete your own scores');
+        // Check if user is admin - admins can delete any scores
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('You can only delete your own scores');
+        }
       }
 
       if (score.isSubmitted) {

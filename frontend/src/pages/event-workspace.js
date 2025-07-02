@@ -19,6 +19,10 @@ class EventWorkspacePage {
     this.currentScoresInterval = null;
     this.currentViewingMatchId = null;
     
+    // Role switching for admin users
+    this.effectiveRole = null; // null means use original role
+    this.originalRole = null;
+    
     // Service references
     this.eventService = null;
     this.teamService = null;
@@ -169,6 +173,11 @@ class EventWorkspacePage {
       }
       if (e.target.matches('#editJudgeIds')) {
         this.updateEditJudgeSelectionCounter(e.target);
+      }
+      
+      // Role switcher change
+      if (e.target.matches('#role-switcher')) {
+        this.handleRoleSwitch(e.target.value);
       }
     });
   }
@@ -441,30 +450,36 @@ class EventWorkspacePage {
       const allMatches = matchesResponse.data?.matches || [];
       console.log('✅ [EventWorkspace] Raw matches loaded:', allMatches.length, 'matches');
 
-      // Filter matches based on user role
+      // Filter matches based on effective role
       const currentUser = this.authManager.currentUser;
-      if (currentUser.role === 'admin') {
+      const effectiveRole = this.getEffectiveRole();
+      
+      if (effectiveRole === 'admin') {
         // Admin sees all matches
         this.matches = allMatches;
-      } else if (currentUser.role === 'judge') {
+      } else if (effectiveRole === 'judge') {
         // Judge sees only matches they are assigned to
+        // For admin users switching to judge view, only show matches they're actually assigned to as judge
         this.matches = allMatches.filter(match => 
           match.assignments && match.assignments.some(assignment => 
             assignment.judge && assignment.judge.id === currentUser.id
           )
         );
-      } else if (currentUser.role === 'moderator') {
+        console.log('🔍 [EventWorkspace] Filtered matches for judge view:', this.matches.length, 'matches');
+      } else if (effectiveRole === 'moderator') {
         // Moderator sees only matches they are assigned to moderate
+        // For admin users switching to moderator view, only show matches they're actually assigned to as moderator
         this.matches = allMatches.filter(match => 
           match.moderatorId === currentUser.id
         );
+        console.log('🔍 [EventWorkspace] Filtered matches for moderator view:', this.matches.length, 'matches');
       } else {
         // Other roles see no matches
         this.matches = [];
       }
 
       // Load all active users (for judge assignments) - only for admins
-      if (this.authManager.currentUser.role === 'admin') {
+      if (effectiveRole === 'admin') {
         console.log('👤 [EventWorkspace] Loading users (admin only)...');
         try {
           const usersResponse = await this.userService.getAllUsers({ isActive: true });
@@ -479,8 +494,8 @@ class EventWorkspacePage {
         console.log('ℹ️ [EventWorkspace] Skipping users load (not admin)');
       }
 
-      // Preload judge scores status if current user is a judge
-      if (this.authManager.currentUser.role === 'judge') {
+      // Preload judge scores status if effective role is judge
+      if (effectiveRole === 'judge') {
         console.log('📊 [EventWorkspace] Preloading judge scores status...');
         await this.preloadJudgeScoresStatus();
         console.log('✅ [EventWorkspace] Judge scores status preloaded');
@@ -524,10 +539,12 @@ class EventWorkspacePage {
    */
   renderWorkspace() {
     console.log('🎨 [EventWorkspace] renderWorkspace() called');
-    const isAdmin = this.authManager.currentUser.role === 'admin';
-    const isModerator = this.authManager.currentUser.role === 'moderator';
-    const isJudge = this.authManager.currentUser.role === 'judge';
-    console.log('👤 [EventWorkspace] User role:', this.authManager.currentUser.role);
+    const effectiveRole = this.getEffectiveRole();
+    const originalRole = this.authManager.currentUser.role;
+    const isAdmin = effectiveRole === 'admin';
+    const isModerator = effectiveRole === 'moderator';
+    const isJudge = effectiveRole === 'judge';
+    console.log('👤 [EventWorkspace] Original role:', originalRole, 'Effective role:', effectiveRole);
 
     const workspaceHTML = `
       <div class="min-h-screen bg-gray-50">
@@ -553,17 +570,20 @@ class EventWorkspacePage {
                 </div>
               </div>
               
-              ${isAdmin ? `
-                <div class="flex space-x-3">
-                  <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
-                    Create Match
-                  </button>
-                  <button data-action="advance-round" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium" 
-                          ${this.currentEvent.currentRound >= this.currentEvent.totalRounds ? 'disabled' : ''}>
-                    Advance Round
-                  </button>
-                </div>
-              ` : ''}
+              <div class="flex items-center space-x-3">
+                ${this.renderRoleSwitcher()}
+                ${isAdmin ? `
+                  <div class="flex space-x-3">
+                    <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+                      Create Match
+                    </button>
+                    <button data-action="advance-round" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium" 
+                            ${this.currentEvent.currentRound >= this.currentEvent.totalRounds ? 'disabled' : ''}>
+                      Advance Round
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
             </div>
           </div>
         </div>
@@ -724,9 +744,10 @@ class EventWorkspacePage {
    */
   renderOverviewTab() {
     const currentUser = this.authManager.currentUser;
-    const isAdmin = currentUser.role === 'admin';
-    const isJudge = currentUser.role === 'judge';
-    const isModerator = currentUser.role === 'moderator';
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    const isJudge = effectiveRole === 'judge';
+    const isModerator = effectiveRole === 'moderator';
     
     const matchesByRound = this.groupMatchesByRound();
     const totalMatches = this.matches.length;
@@ -763,6 +784,7 @@ class EventWorkspacePage {
         </div>
       `;
     } else if (isJudge) {
+      const isAdminInJudgeView = currentUser.role === 'admin' && effectiveRole === 'judge';
       roleInfo = `
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div class="flex items-center">
@@ -772,15 +794,23 @@ class EventWorkspacePage {
               </svg>
             </div>
             <div class="ml-3">
-              <h3 class="text-sm font-medium text-blue-800">Welcome, Judge ${currentUser.firstName}!</h3>
+              <h3 class="text-sm font-medium text-blue-800">
+                ${isAdminInJudgeView ? 'Admin - Judge View' : `Welcome, Judge ${currentUser.firstName}!`}
+              </h3>
               <div class="mt-2 text-sm text-blue-700">
                 <p>You are assigned to ${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in this event.</p>
+                ${isAdminInJudgeView && totalMatches === 0 ? `
+                  <p class="mt-1 text-blue-600">
+                    💡 You're not assigned as a judge to any matches. Switch to Admin View to assign yourself to matches.
+                  </p>
+                ` : ''}
               </div>
             </div>
           </div>
         </div>
       `;
     } else if (isModerator) {
+      const isAdminInModeratorView = currentUser.role === 'admin' && effectiveRole === 'moderator';
       roleInfo = `
         <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
           <div class="flex items-center">
@@ -790,9 +820,16 @@ class EventWorkspacePage {
               </svg>
             </div>
             <div class="ml-3">
-              <h3 class="text-sm font-medium text-green-800">Welcome, Moderator ${currentUser.firstName}!</h3>
+              <h3 class="text-sm font-medium text-green-800">
+                ${isAdminInModeratorView ? 'Admin - Moderator View' : `Welcome, Moderator ${currentUser.firstName}!`}
+              </h3>
               <div class="mt-2 text-sm text-green-700">
                 <p>You are moderating ${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in this event.</p>
+                ${isAdminInModeratorView && totalMatches === 0 ? `
+                  <p class="mt-1 text-green-600">
+                    💡 You're not assigned as a moderator to any matches. Switch to Admin View to assign yourself to matches.
+                  </p>
+                ` : ''}
               </div>
             </div>
           </div>
@@ -895,9 +932,10 @@ class EventWorkspacePage {
    */
   renderMatchesTab() {
     const currentUser = this.authManager.currentUser;
-    const isAdmin = currentUser.role === 'admin';
-    const isModerator = currentUser.role === 'moderator';
-    const isJudge = currentUser.role === 'judge';
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    const isModerator = effectiveRole === 'moderator';
+    const isJudge = effectiveRole === 'judge';
     
     // Use already filtered matches from loadEventData
     let displayMatches = this.matches;
@@ -950,12 +988,22 @@ class EventWorkspacePage {
         ${displayMatches.length === 0 ? `
           <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
             <div class="text-gray-500">
-              ${isAdmin ? 'No matches created yet.' : 'No matches assigned to you.'}
+              ${isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
+                isAdmin && this.getEffectiveRole() === 'judge' ? 'You are not assigned as a judge to any matches in this event.' :
+                isAdmin && this.getEffectiveRole() === 'moderator' ? 'You are not assigned as a moderator to any matches in this event.' :
+                'No matches assigned to you.'}
             </div>
-            ${isAdmin ? `
+            ${isAdmin && this.getEffectiveRole() === 'admin' ? `
               <button data-action="create-match" class="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
                 Create First Match
               </button>
+            ` : ''}
+            ${isAdmin && (this.getEffectiveRole() === 'judge' || this.getEffectiveRole() === 'moderator') ? `
+              <div class="mt-4">
+                <p class="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+                  💡 Switch back to Admin View to assign yourself to matches, then return to this view to score them.
+                </p>
+              </div>
             ` : ''}
           </div>
         ` : ''}
@@ -968,13 +1016,15 @@ class EventWorkspacePage {
    */
   renderMatchCard(match) {
     const currentUser = this.authManager.currentUser;
-    const isAdmin = currentUser.role === 'admin';
-    const isModerator = currentUser.role === 'moderator' && match.moderatorId === currentUser.id;
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    // Check if user can moderate this match (either as moderator role or admin assigned as moderator)
+    const isModerator = effectiveRole === 'moderator' && match.moderatorId === currentUser.id;
     const isAssignedJudge = match.assignments && 
                            match.assignments.some(a => a.judge?.id === currentUser.id);
     
     // Check if admin is also assigned as judge to this match
-    const isAdminAssignedAsJudge = isAdmin && isAssignedJudge;
+    const isAdminAssignedAsJudge = currentUser.role === 'admin' && isAssignedJudge;
 
     const scheduledTime = match.scheduledTime ? 
       new Date(match.scheduledTime).toLocaleString() : 'Not scheduled';
@@ -1026,7 +1076,7 @@ class EventWorkspacePage {
               </button>
             ` : ''}
 
-            ${isAssignedJudge && !isAdmin ? `
+            ${isAssignedJudge && effectiveRole === 'judge' ? `
               ${hasSubmittedScores ? `
                 <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
                   <div class="flex items-center space-x-1">
@@ -1046,7 +1096,7 @@ class EventWorkspacePage {
             ` : ''}
             
             ${isAdmin ? `
-              ${isAdminAssignedAsJudge && this.canJudgesScore(match.status) ? `
+              ${isAdminAssignedAsJudge && this.canJudgesScore(match.status) && effectiveRole === 'admin' ? `
                 <div class="bg-blue-50 border border-blue-200 rounded px-3 py-1 text-xs text-blue-800">
                   <div class="flex items-center space-x-1">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -3437,6 +3487,108 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     if (modal) {
       modal.innerHTML = modalContent;
     }
+  }
+
+  /**
+   * Get the effective role for the current user
+   */
+  getEffectiveRole() {
+    return this.effectiveRole || this.authManager.currentUser.role;
+  }
+
+  /**
+   * Handle role switching for admin users
+   */
+  async handleRoleSwitch(newRole) {
+    try {
+      console.log('🔄 [RoleSwitcher] Switching role from', this.getEffectiveRole(), 'to', newRole);
+      
+      // Only allow admin users to switch roles
+      if (this.authManager.currentUser.role !== 'admin') {
+        console.warn('⚠️ [RoleSwitcher] Role switching only allowed for admin users');
+        return;
+      }
+
+      // Store original role if not already stored
+      if (!this.originalRole) {
+        this.originalRole = this.authManager.currentUser.role;
+      }
+
+      // Set effective role
+      this.effectiveRole = newRole === 'admin' ? null : newRole;
+      
+      console.log('✅ [RoleSwitcher] Role switched to:', this.getEffectiveRole());
+      
+      // Reload event data with new role perspective
+      await this.loadEventData();
+      
+      // Update current tab based on new role
+      const effectiveRole = this.getEffectiveRole();
+      if (effectiveRole === 'judge' || effectiveRole === 'moderator') {
+        this.currentTab = 'matches';
+      } else {
+        this.currentTab = 'overview';
+      }
+      
+      // Re-render the workspace
+      this.renderWorkspace();
+      
+      console.log('🎉 [RoleSwitcher] Role switch completed successfully');
+      
+    } catch (error) {
+      console.error('❌ [RoleSwitcher] Error switching role:', error);
+      
+      // Reset to original role on error
+      this.effectiveRole = null;
+      
+      // Show error notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md shadow-lg z-50';
+      notification.innerHTML = `
+        <div class="flex items-center">
+          <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+          Failed to switch role. Please try again.
+        </div>
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 3000);
+    }
+  }
+
+  /**
+   * Render role switcher dropdown for admin users
+   */
+  renderRoleSwitcher() {
+    const currentUser = this.authManager.currentUser;
+    if (currentUser.role !== 'admin') {
+      return '';
+    }
+
+    const effectiveRole = this.getEffectiveRole();
+    
+    return `
+      <div class="relative inline-block text-left mr-4">
+        <div>
+          <select id="role-switcher" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <option value="admin" ${effectiveRole === 'admin' ? 'selected' : ''}>👑 Admin View</option>
+            <option value="judge" ${effectiveRole === 'judge' ? 'selected' : ''}>⚖️ Judge View</option>
+            <option value="moderator" ${effectiveRole === 'moderator' ? 'selected' : ''}>🎯 Moderator View</option>
+          </select>
+        </div>
+        ${effectiveRole !== 'admin' ? `
+          <div class="absolute -bottom-6 left-0 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded whitespace-nowrap">
+            Viewing as ${effectiveRole}
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 }
 

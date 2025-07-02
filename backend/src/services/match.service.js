@@ -321,9 +321,26 @@ class MatchService {
       let matches = [];
 
       if (userRole === USER_ROLES.MODERATOR || userRole === USER_ROLES.ADMIN) {
-        // Get matches where user is moderator
+        // Get user info to check if they are admin
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true }
+        });
+
+        let whereClause = {};
+        
+        // If user is admin, they can see all matches when in moderator view
+        // Otherwise, only show matches where they are assigned as moderator
+        if (user && user.role === USER_ROLES.ADMIN) {
+          // Admin can see all matches (no restriction)
+          whereClause = {};
+        } else {
+          // Regular moderators only see their assigned matches
+          whereClause = { moderatorId: userId };
+        }
+
         matches = await prisma.match.findMany({
-          where: { moderatorId: userId },
+          where: whereClause,
           include: {
             event: {
               select: { id: true, name: true, status: true }
@@ -351,38 +368,74 @@ class MatchService {
           ]
         });
       } else if (userRole === USER_ROLES.JUDGE) {
-        // Get matches where user is assigned as judge
-        const assignments = await prisma.matchAssignment.findMany({
-          where: { judgeId: userId },
-          include: {
-            match: {
-              include: {
-                event: {
-                  select: { id: true, name: true, status: true }
-                },
-                teamA: {
-                  select: { id: true, name: true, school: true }
-                },
-                teamB: {
-                  select: { id: true, name: true, school: true }
-                },
-                moderator: {
-                  select: { id: true, firstName: true, lastName: true }
-                },
-                scores: {
-                  where: { judgeId: userId },
-                  select: { id: true, isSubmitted: true }
+        // Get user info to check if they are admin
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true }
+        });
+
+        if (user && user.role === USER_ROLES.ADMIN) {
+          // Admin in judge view: get all matches with judge assignments
+          const allMatches = await prisma.match.findMany({
+            include: {
+              event: {
+                select: { id: true, name: true, status: true }
+              },
+              teamA: {
+                select: { id: true, name: true, school: true }
+              },
+              teamB: {
+                select: { id: true, name: true, school: true }
+              },
+              moderator: {
+                select: { id: true, firstName: true, lastName: true }
+              },
+              scores: {
+                where: { judgeId: userId },
+                select: { id: true, isSubmitted: true }
+              }
+            }
+          });
+
+          matches = allMatches.map(match => ({
+            ...match,
+            myScoresSubmitted: match.scores.length > 0 && 
+                             match.scores.every(score => score.isSubmitted)
+          }));
+        } else {
+          // Regular judges: get matches where user is assigned as judge
+          const assignments = await prisma.matchAssignment.findMany({
+            where: { judgeId: userId },
+            include: {
+              match: {
+                include: {
+                  event: {
+                    select: { id: true, name: true, status: true }
+                  },
+                  teamA: {
+                    select: { id: true, name: true, school: true }
+                  },
+                  teamB: {
+                    select: { id: true, name: true, school: true }
+                  },
+                  moderator: {
+                    select: { id: true, firstName: true, lastName: true }
+                  },
+                  scores: {
+                    where: { judgeId: userId },
+                    select: { id: true, isSubmitted: true }
+                  }
                 }
               }
             }
-          }
-        });
+          });
 
-        matches = assignments.map(assignment => ({
-          ...assignment.match,
-          myScoresSubmitted: assignment.match.scores.length > 0 && 
-                           assignment.match.scores.every(score => score.isSubmitted)
-        }));
+          matches = assignments.map(assignment => ({
+            ...assignment.match,
+            myScoresSubmitted: assignment.match.scores.length > 0 && 
+                             assignment.match.scores.every(score => score.isSubmitted)
+          }));
+        }
       }
 
       return matches;
@@ -467,7 +520,15 @@ class MatchService {
       }
 
       if (match.moderatorId !== moderatorId) {
-        throw new Error('You are not assigned as moderator for this match');
+        // Check if user is admin - admins can moderate any match
+        const user = await prisma.user.findUnique({
+          where: { id: moderatorId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('You are not assigned as moderator for this match');
+        }
       }
 
       // Get judge questions count from event settings
@@ -621,7 +682,15 @@ class MatchService {
       }
 
       if (match.moderatorId !== moderatorId) {
-        throw new Error('You are not assigned as moderator for this match');
+        // Check if user is admin - admins can moderate any match
+        const user = await prisma.user.findUnique({
+          where: { id: moderatorId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('You are not assigned as moderator for this match');
+        }
       }
 
       // Get judge questions count from event settings

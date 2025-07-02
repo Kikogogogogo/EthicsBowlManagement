@@ -658,7 +658,7 @@ async function main() {
       // Assignments for draft matches
       { matchId: 'match-draft-1', judgeId: createdJudges[0].id },
       { matchId: 'match-draft-1', judgeId: createdJudges[1].id },
-      { matchId: 'match-draft-1', judgeId: createdJudges[2].id },
+      { matchId: 'match-draft-1', judgeId: adminUser.id }, // Admin as judge
       
       { matchId: 'match-draft-2', judgeId: createdJudges[3].id },
       { matchId: 'match-draft-2', judgeId: createdJudges[4].id },
