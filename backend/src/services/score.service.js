@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { USER_ROLES, MATCH_STATUSES } = require('../constants/enums');
+const { USER_ROLES, MATCH_STATUSES, canJudgesScore } = require('../constants/enums');
 
 const prisma = new PrismaClient();
 
@@ -18,9 +18,7 @@ class ScoreService {
         where: { id: matchId },
         include: {
           moderator: true,
-          assignments: {
-            where: { judgeId: userId }
-          }
+          assignments: true
         }
       });
 
@@ -32,8 +30,8 @@ class ScoreService {
 
       // Apply role-based filtering
       if (userRole === USER_ROLES.JUDGE) {
-        // Judges can only see their own scores
-        const isAssigned = match.assignments.length > 0;
+        // Check if judge is assigned to this match
+        const isAssigned = match.assignments.some(assignment => assignment.judgeId === userId);
         if (!isAssigned) {
           throw new Error('You are not assigned to this match');
         }
@@ -65,7 +63,32 @@ class ScoreService {
         ]
       });
 
-      return scores;
+      // Parse JSON scores back to objects
+      const parsedScores = scores.map(score => {
+        const parsedScore = { ...score };
+        
+        if (parsedScore.criteriaScores) {
+          try {
+            parsedScore.criteriaScores = JSON.parse(parsedScore.criteriaScores);
+          } catch (e) {
+            console.error('Error parsing criteriaScores for score', parsedScore.id, e);
+            parsedScore.criteriaScores = {};
+          }
+        }
+        
+        if (parsedScore.commentScores) {
+          try {
+            parsedScore.commentScores = JSON.parse(parsedScore.commentScores);
+          } catch (e) {
+            console.error('Error parsing commentScores for score', parsedScore.id, e);
+            parsedScore.commentScores = [];
+          }
+        }
+        
+        return parsedScore;
+      });
+
+      return parsedScores;
     } catch (error) {
       console.error('Error getting match scores:', error);
       throw error;
@@ -73,9 +96,9 @@ class ScoreService {
   }
 
   /**
-   * Create a new score
+   * Create or update a score
    * @param {Object} scoreData - Score data
-   * @returns {Object} Created score
+   * @returns {Object} Created or updated score
    */
   async createScore(scoreData) {
     try {
@@ -113,6 +136,11 @@ class ScoreService {
         throw new Error('Team does not belong to this match');
       }
 
+      // Validate match status - judges can score from moderator_period_1 onwards
+      if (!canJudgesScore(match.status)) {
+        throw new Error('Judges cannot score at this match stage');
+      }
+
       // Check if score already exists for this judge-team-match combination
       const existingScore = await prisma.score.findUnique({
         where: {
@@ -124,37 +152,58 @@ class ScoreService {
         }
       });
 
+      let score;
       if (existingScore) {
-        throw new Error('Score already exists for this judge-team-match combination');
-      }
-
-      // Validate match status
-      if (match.status === MATCH_STATUSES.COMPLETED) {
-        throw new Error('Cannot submit scores for completed matches');
-      }
-
-      const score = await prisma.score.create({
-        data: {
-          matchId,
-          judgeId,
-          teamId,
-          criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
-          commentScores: commentScores ? JSON.stringify(commentScores) : null,
-          notes,
-          isSubmitted: false
-        },
-        include: {
-          judge: {
-            select: { id: true, firstName: true, lastName: true }
-          },
-          team: {
-            select: { id: true, name: true, school: true }
-          },
-          match: {
-            select: { id: true, roundNumber: true, status: true }
-          }
+        // Update existing score if not submitted
+        if (existingScore.isSubmitted) {
+          throw new Error('Cannot update already submitted scores');
         }
-      });
+
+        score = await prisma.score.update({
+          where: { id: existingScore.id },
+          data: {
+            criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
+            commentScores: commentScores ? JSON.stringify(commentScores) : null,
+            notes,
+            updatedAt: new Date()
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true }
+            },
+            team: {
+              select: { id: true, name: true, school: true }
+            },
+            match: {
+              select: { id: true, roundNumber: true, status: true }
+            }
+          }
+        });
+      } else {
+        // Create new score
+        score = await prisma.score.create({
+          data: {
+            matchId,
+            judgeId,
+            teamId,
+            criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
+            commentScores: commentScores ? JSON.stringify(commentScores) : null,
+            notes,
+            isSubmitted: false
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true }
+            },
+            team: {
+              select: { id: true, name: true, school: true }
+            },
+            match: {
+              select: { id: true, roundNumber: true, status: true }
+            }
+          }
+        });
+      }
 
       // Parse scores back to objects if they exist
       if (score.criteriaScores) {
@@ -166,7 +215,7 @@ class ScoreService {
 
       return score;
     } catch (error) {
-      console.error('Error creating score:', error);
+      console.error('Error creating/updating score:', error);
       throw error;
     }
   }
@@ -197,8 +246,8 @@ class ScoreService {
         throw new Error('Cannot update submitted scores');
       }
 
-      if (score.match.status === MATCH_STATUSES.COMPLETED) {
-        throw new Error('Cannot update scores for completed matches');
+      if (!canJudgesScore(score.match.status)) {
+        throw new Error('Cannot update scores at this match stage');
       }
 
       // Handle JSON fields
@@ -272,6 +321,11 @@ class ScoreService {
         throw new Error('Judge is not assigned to this match');
       }
 
+      // Validate scoreIds array
+      if (!scoreIds || !Array.isArray(scoreIds) || scoreIds.length === 0) {
+        throw new Error('Invalid scoreIds array provided');
+      }
+
       // Verify all scores belong to this judge and match
       const scores = await prisma.score.findMany({
         where: {
@@ -300,15 +354,36 @@ class ScoreService {
       }
 
       // Submit all scores
-      const submittedScores = await prisma.score.updateMany({
-        where: {
-          id: { in: scoreIds },
-          judgeId
-        },
-        data: {
-          isSubmitted: true,
-          submittedAt: new Date()
-        }
+      const submittedScores = await prisma.$transaction(async (prisma) => {
+        // Update scores to submitted status
+        await prisma.score.updateMany({
+          where: {
+            id: { in: scoreIds },
+            judgeId
+          },
+          data: {
+            isSubmitted: true,
+            submittedAt: new Date()
+          }
+        });
+
+        // Fetch updated scores with full details
+        return await prisma.score.findMany({
+          where: {
+            id: { in: scoreIds }
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true }
+            },
+            team: {
+              select: { id: true, name: true, school: true }
+            },
+            match: {
+              select: { id: true, roundNumber: true, status: true }
+            }
+          }
+        });
       });
 
       // Check if all judges have submitted their scores
@@ -320,6 +395,14 @@ class ScoreService {
         where: {
           matchId,
           isSubmitted: true
+        },
+        include: {
+          judge: {
+            select: { id: true, firstName: true, lastName: true }
+          },
+          team: {
+            select: { id: true, name: true, school: true }
+          }
         }
       });
 
@@ -363,14 +446,42 @@ class ScoreService {
             winnerId,
             status: MATCH_STATUSES.COMPLETED,
             currentStep: 'completed'
+          },
+          include: {
+            teamA: true,
+            teamB: true,
+            winner: true
           }
         });
       }
 
+      // Parse scores back to objects
+      const parsedSubmittedScores = submittedScores.map(score => {
+        const parsedScore = { ...score };
+        if (parsedScore.criteriaScores) {
+          parsedScore.criteriaScores = JSON.parse(parsedScore.criteriaScores);
+        }
+        if (parsedScore.commentScores) {
+          parsedScore.commentScores = JSON.parse(parsedScore.commentScores);
+        }
+        return parsedScore;
+      });
+
       return {
-        submittedCount: submittedScores.count,
+        scores: parsedSubmittedScores,
+        submittedCount: submittedScores.length,
         isMatchComplete,
-        matchUpdate
+        matchUpdate,
+        allSubmittedScores: allSubmittedScores.map(score => {
+          const parsedScore = { ...score };
+          if (parsedScore.criteriaScores) {
+            parsedScore.criteriaScores = JSON.parse(parsedScore.criteriaScores);
+          }
+          if (parsedScore.commentScores) {
+            parsedScore.commentScores = JSON.parse(parsedScore.commentScores);
+          }
+          return parsedScore;
+        })
       };
     } catch (error) {
       console.error('Error submitting match scores:', error);

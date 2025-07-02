@@ -1038,17 +1038,25 @@ class App {
  */
 let app; // Global variable for onclick handlers
 
-document.addEventListener('DOMContentLoaded', () => {
+function bootstrapApp() {
+  if (app) return; // Prevent multiple initializations
   app = new App();
-  
-  // Make app, authManager, and API services globally accessible
+
+  // Make globals accessible
   window.app = app;
   window.authManager = authManager;
   window.eventService = eventService;
   window.teamService = teamService;
   window.userService = userService;
   window.preApprovedEmailService = preApprovedEmailService;
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+  // DOM already loaded – initialize immediately
+  bootstrapApp();
+}
 
 // Handle page visibility changes (for token refresh)
 document.addEventListener('visibilitychange', () => {

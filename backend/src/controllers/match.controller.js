@@ -327,6 +327,52 @@ class MatchController {
   };
 
   /**
+   * GET /matches/:matchId/status-options
+   * Get available status options for moderator
+   */
+  getStatusOptions = async (req, res) => {
+    try {
+      const { matchId } = req.params;
+      const moderatorId = req.user.id;
+
+      if (!matchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Match ID is required',
+          error: 'MISSING_MATCH_ID'
+        });
+      }
+
+      const statusOptions = await this.matchService.getAvailableStatusOptions(matchId, moderatorId);
+      
+      res.json({
+        success: true,
+        data: { statusOptions },
+        message: 'Status options retrieved successfully'
+      });
+    } catch (error) {
+      console.error('Get status options error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'STATUS_OPTIONS_FETCH_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'MATCH_NOT_FOUND';
+      } else if (error.message.includes('not assigned') || error.message.includes('permission')) {
+        statusCode = 403;
+        errorCode = 'PERMISSION_DENIED';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to retrieve status options',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
    * POST /matches/:matchId/assignments
    * Assign judge to match (Admin only)
    */

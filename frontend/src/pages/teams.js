@@ -95,9 +95,14 @@ class TeamsPage {
       return;
     }
 
+    const currentEvent = this.events.find(e => e.id === this.currentEventId);
+    const isDraftEvent = currentEvent?.status === 'draft';
+
     tableBody.innerHTML = this.teams.map(team => {
       const matchesCount = team.matchesCount || 0;
-      const canDelete = matchesCount === 0;
+      const canDelete = matchesCount === 0 && isDraftEvent;
+      const deleteDisabledReason = !isDraftEvent ? `Cannot delete teams from ${currentEvent?.status} events` :
+                                  matchesCount > 0 ? 'Cannot delete team with matches' : '';
       
       return `
         <tr class="hover:bg-gray-50 border-b border-gray-200">
@@ -115,7 +120,7 @@ class TeamsPage {
             <button type="button" 
                     class="text-red-600 hover:text-red-900 delete-team-btn ${!canDelete ? 'opacity-50 cursor-not-allowed' : ''}" 
                     data-team-id="${team.id}"
-                    ${!canDelete ? 'disabled title="Cannot delete team with matches"' : ''}>
+                    ${!canDelete ? `disabled title="${deleteDisabledReason}"` : ''}>
               Delete
             </button>
           </td>
@@ -388,6 +393,15 @@ class TeamsPage {
     const team = this.teams.find(t => t.id === teamId);
     if (!team) return;
 
+    const currentEvent = this.events.find(e => e.id === this.currentEventId);
+    if (!currentEvent) return;
+
+    // Check if event is not in draft status
+    if (currentEvent.status !== 'draft') {
+      this.showError(`Cannot delete teams from ${currentEvent.status} events`);
+      return;
+    }
+
     const confirmed = confirm(
       `Are you sure you want to delete team "${team.name}"?\n\n` +
       'This action cannot be undone.'
@@ -408,8 +422,8 @@ class TeamsPage {
       
       if (error.message.includes('matches')) {
         errorMessage = 'Cannot delete team that has participated in matches';
-      } else if (error.message.includes('active')) {
-        errorMessage = 'Cannot delete teams from active events';
+      } else if (error.message.includes('active') || error.message.includes('completed')) {
+        errorMessage = error.message;
       }
       
       this.showError(errorMessage);

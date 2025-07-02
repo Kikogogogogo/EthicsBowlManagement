@@ -68,6 +68,12 @@ router.put('/matches/:matchId/step', requireRole(USER_ROLES.MODERATOR, USER_ROLE
 router.put('/matches/:matchId/status', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN), matchController.updateMatchStatus);
 
 /**
+ * GET /matches/:matchId/status-options
+ * Get available status options (Moderator only)
+ */
+router.get('/matches/:matchId/status-options', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN), matchController.getStatusOptions);
+
+/**
  * POST /matches/:matchId/assignments
  * Assign judge to match (Admin only)
  */

@@ -231,39 +231,41 @@ class TeamService {
   async deleteTeam(teamId, eventId) {
     try {
       // Verify team exists and belongs to the event
-      const existingTeam = await prisma.team.findFirst({
-        where: {
-          id: teamId,
-          eventId
-        },
+      const existingTeam = await prisma.team.findUnique({
+        where: { id: teamId },
         include: {
           event: true,
-          _count: {
-            select: {
-              teamAMatches: true,
-              teamBMatches: true
-            }
-          }
-        }
+          teamAMatches: true,
+          teamBMatches: true,
+          wonMatches: true,
+          scores: true,
+        },
       });
 
       if (!existingTeam) {
         throw new Error('Team not found');
       }
 
-      // Don't allow deletion if team has matches
-      const totalMatches = existingTeam._count.teamAMatches + existingTeam._count.teamBMatches;
-      if (totalMatches > 0) {
-        throw new Error('Cannot delete team that has participated in matches');
+      // Only allow deletion if event is in draft status
+      if (existingTeam.event.status !== 'draft') {
+        throw new Error(`Cannot delete teams from ${existingTeam.event.status} events`);
       }
 
-      // Don't allow deletion for active/completed events unless no matches
-      if (existingTeam.event.status === 'active') {
-        throw new Error('Cannot delete teams from active events');
+      // Check if team has any matches
+      if (existingTeam.teamAMatches.length > 0 || existingTeam.teamBMatches.length > 0 || existingTeam.wonMatches.length > 0) {
+        throw new Error('Cannot delete team with existing matches');
       }
 
+      // Delete any scores associated with the team first
+      if (existingTeam.scores.length > 0) {
+        await prisma.score.deleteMany({
+          where: { teamId: teamId },
+        });
+      }
+
+      // Now delete the team
       await prisma.team.delete({
-        where: { id: teamId }
+        where: { id: teamId },
       });
 
       return true;
@@ -271,7 +273,8 @@ class TeamService {
       console.error('Error deleting team:', error);
       if (error.message.includes('not found') || 
           error.message.includes('Cannot delete') ||
-          error.message.includes('active')) {
+          error.message.includes('active') ||
+          error.message.includes('completed')) {
         throw error;
       }
       throw new Error('Failed to delete team');

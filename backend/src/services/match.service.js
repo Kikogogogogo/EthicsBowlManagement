@@ -1,5 +1,15 @@
 const { PrismaClient } = require('@prisma/client');
-const { MATCH_STATUSES, MATCH_STEPS, USER_ROLES } = require('../constants/enums');
+const { 
+  MATCH_STATUSES, 
+  MATCH_STEPS, 
+  USER_ROLES, 
+  getValidMatchStatuses,
+  getMatchStatusDisplayName,
+  canJudgesScore,
+  canModeratorAdvance,
+  getNextStatus,
+  getPreviousStatus
+} = require('../constants/enums');
 
 const prisma = new PrismaClient();
 
@@ -150,7 +160,7 @@ class MatchService {
           moderatorId,
           room,
           scheduledTime,
-          status: MATCH_STATUSES.SCHEDULED,
+          status: MATCH_STATUSES.DRAFT,
           currentStep: MATCH_STEPS.INTRO
         },
         include: {
@@ -407,23 +417,8 @@ class MatchService {
         throw new Error('You are not assigned as moderator for this match');
       }
 
-      if (match.status !== MATCH_STATUSES.IN_PROGRESS && match.status !== MATCH_STATUSES.SCHEDULED) {
-        throw new Error('Cannot update step for completed or cancelled matches');
-      }
-
-      // Validate step
-      const validSteps = Object.values(MATCH_STEPS);
-      if (!validSteps.includes(step)) {
-        throw new Error(`Invalid step. Must be one of: ${validSteps.join(', ')}`);
-      }
-
-      // Update match step and status if needed
-      const updateData = { currentStep: step };
-      if (step === MATCH_STEPS.INTRO && match.status === MATCH_STATUSES.SCHEDULED) {
-        updateData.status = MATCH_STATUSES.IN_PROGRESS;
-      } else if (step === MATCH_STEPS.COMPLETED) {
-        updateData.status = MATCH_STATUSES.COMPLETED;
-      }
+      // This method is deprecated - use updateMatchStatus instead
+      throw new Error('Match step updates are deprecated. Use status updates instead.');
 
       const updatedMatch = await prisma.match.update({
         where: { id: matchId },
@@ -459,7 +454,12 @@ class MatchService {
     try {
       // Verify match exists and user is assigned as moderator
       const match = await prisma.match.findUnique({
-        where: { id: matchId }
+        where: { id: matchId },
+        include: {
+          event: {
+            select: { scoringCriteria: true }
+          }
+        }
       });
 
       if (!match) {
@@ -470,15 +470,36 @@ class MatchService {
         throw new Error('You are not assigned as moderator for this match');
       }
 
+      // Get judge questions count from event settings
+      let judgeQuestionsCount = 3; // default
+      if (match.event.scoringCriteria) {
+        try {
+          const criteria = JSON.parse(match.event.scoringCriteria);
+          judgeQuestionsCount = criteria.commentQuestionsCount || 3;
+        } catch (e) {
+          console.warn('Failed to parse scoring criteria, using default judge questions count');
+        }
+      }
+
       // Validate status
-      const validStatuses = Object.values(MATCH_STATUSES);
+      const validStatuses = getValidMatchStatuses(judgeQuestionsCount);
       if (!validStatuses.includes(status)) {
-        throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+        throw new Error(`Invalid status. Must be one of: ${validStatuses.map(s => getMatchStatusDisplayName(s)).join(', ')}`);
       }
 
       // Validate status transitions
       if (match.status === MATCH_STATUSES.COMPLETED && status !== MATCH_STATUSES.COMPLETED) {
         throw new Error('Cannot change status of completed match');
+      }
+
+      // Check if moderator can advance to this status
+      if (!canModeratorAdvance(status)) {
+        throw new Error('Moderators cannot set this status');
+      }
+
+      // Special validation for completing a match
+      if (status === MATCH_STATUSES.COMPLETED) {
+        await this.validateMatchCompletion(matchId);
       }
 
       const updatedMatch = await prisma.match.update({
@@ -493,6 +514,13 @@ class MatchService {
           },
           moderator: {
             select: { id: true, firstName: true, lastName: true }
+          },
+          assignments: {
+            include: {
+              judge: {
+                select: { id: true, firstName: true, lastName: true }
+              }
+            }
           }
         }
       });
@@ -500,6 +528,130 @@ class MatchService {
       return updatedMatch;
     } catch (error) {
       console.error('Error updating match status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate that all judges have submitted scores before completing match
+   * @param {string} matchId - Match ID
+   */
+  async validateMatchCompletion(matchId) {
+    try {
+      // Get all judge assignments for this match
+      const assignments = await prisma.matchAssignment.findMany({
+        where: { matchId },
+        include: {
+          judge: { select: { id: true, firstName: true, lastName: true } }
+        }
+      });
+
+      if (assignments.length === 0) {
+        throw new Error('Cannot complete match: No judges assigned');
+      }
+
+      // Check if all judges have submitted scores for both teams
+      const teams = await prisma.match.findUnique({
+        where: { id: matchId },
+        select: { teamAId: true, teamBId: true }
+      });
+
+      if (!teams.teamAId || !teams.teamBId) {
+        throw new Error('Cannot complete match: Teams not properly assigned');
+      }
+
+      for (const assignment of assignments) {
+        // Check scores for Team A
+        const teamAScore = await prisma.score.findUnique({
+          where: {
+            matchId_judgeId_teamId: {
+              matchId,
+              judgeId: assignment.judgeId,
+              teamId: teams.teamAId
+            }
+          }
+        });
+
+        // Check scores for Team B
+        const teamBScore = await prisma.score.findUnique({
+          where: {
+            matchId_judgeId_teamId: {
+              matchId,
+              judgeId: assignment.judgeId,
+              teamId: teams.teamBId
+            }
+          }
+        });
+
+        if (!teamAScore || !teamAScore.isSubmitted) {
+          throw new Error(`Cannot complete match: Judge ${assignment.judge.firstName} ${assignment.judge.lastName} has not submitted scores for Team A`);
+        }
+
+        if (!teamBScore || !teamBScore.isSubmitted) {
+          throw new Error(`Cannot complete match: Judge ${assignment.judge.firstName} ${assignment.judge.lastName} has not submitted scores for Team B`);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error validating match completion:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get available status options for moderator
+   * @param {string} matchId - Match ID
+   * @param {string} moderatorId - Moderator ID
+   * @returns {Array} Available status options
+   */
+  async getAvailableStatusOptions(matchId, moderatorId) {
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: {
+            select: { scoringCriteria: true }
+          }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      if (match.moderatorId !== moderatorId) {
+        throw new Error('You are not assigned as moderator for this match');
+      }
+
+      // Get judge questions count from event settings
+      let judgeQuestionsCount = 3;
+      if (match.event.scoringCriteria) {
+        try {
+          const criteria = JSON.parse(match.event.scoringCriteria);
+          judgeQuestionsCount = criteria.commentQuestionsCount || 3;
+        } catch (e) {
+          console.warn('Failed to parse scoring criteria, using default judge questions count');
+        }
+      }
+
+      const validStatuses = getValidMatchStatuses(judgeQuestionsCount);
+      
+      // Filter statuses that moderator can set
+      const moderatorStatuses = validStatuses.filter(status => {
+        // Moderators can set any status from moderator_period_1 to final_scoring
+        if (status === MATCH_STATUSES.DRAFT) return false;
+        if (status === MATCH_STATUSES.COMPLETED) return true; // Allow completion if all scores submitted
+        return canModeratorAdvance(status);
+      });
+
+      return moderatorStatuses.map(status => ({
+        value: status,
+        label: getMatchStatusDisplayName(status),
+        canSelect: true
+      }));
+    } catch (error) {
+      console.error('Error getting available status options:', error);
       throw error;
     }
   }
@@ -599,7 +751,7 @@ class MatchService {
         throw new Error('Judge assignment not found');
       }
 
-      if (assignment.match.status === MATCH_STATUSES.IN_PROGRESS) {
+      if (assignment.match.status !== MATCH_STATUSES.DRAFT) {
         throw new Error('Cannot remove judge from match that has started');
       }
 
@@ -668,9 +820,9 @@ class MatchService {
         throw new Error('Match does not belong to this event');
       }
 
-      // Only allow deletion of scheduled matches
-      if (match.status !== MATCH_STATUSES.SCHEDULED) {
-        throw new Error('Cannot delete match that is not scheduled. Only scheduled matches can be deleted.');
+      // Only allow deletion of draft matches
+      if (match.status !== MATCH_STATUSES.DRAFT) {
+        throw new Error('Cannot delete match that is not in draft status. Only draft matches can be deleted.');
       }
 
       // Check if any scores have been submitted

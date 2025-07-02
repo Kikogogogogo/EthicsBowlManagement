@@ -24,14 +24,45 @@ class ScoreMatchPage {
     // Back to match button
     const backButton = document.querySelector('[data-action="back-to-match"]');
     if (backButton) {
-      backButton.addEventListener('click', () => this.router.navigate('/matches'));
+      backButton.addEventListener('click', async () => {
+        try {
+          // Navigate back to the event workspace matches tab
+          if (this.currentMatch?.eventId) {
+            // First ensure the page is loaded
+            const pageLoaded = await this.ui.showPage('event-workspace');
+            
+            if (!pageLoaded) {
+              throw new Error('Failed to load event workspace page');
+            }
+            
+            // Wait a moment for the page to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Then show the event and switch to matches tab
+            if (window.eventWorkspacePage) {
+              await window.eventWorkspacePage.show(this.currentMatch.eventId);
+              window.eventWorkspacePage.switchTab('matches');
+            } else {
+              throw new Error('Event workspace page not initialized');
+            }
+          } else {
+            // Fallback: go to dashboard
+            this.ui.showPage('dashboard');
+          }
+        } catch (error) {
+          console.error('Navigation error:', error);
+          // Fallback: go to dashboard
+          this.ui.showPage('dashboard');
+        }
+      });
     }
 
     // Add input event listeners for all score inputs
-    const scoreInputs = document.querySelectorAll('.criteria-score-input, [name^="commentScore_"]');
+    const scoreInputs = document.querySelectorAll('.criteria-score-input, .comment-score-input');
     scoreInputs.forEach(input => {
       input.addEventListener('input', () => {
         this.updateTotalScores();
+        this.updateSubmitButtonState();
       });
     });
 
@@ -63,11 +94,21 @@ class ScoreMatchPage {
       await this.loadMatchData(matchId);
       await this.loadExistingScores();
       
-      document.getElementById('app').innerHTML = this.renderScorePage();
+      // Cache original app markup to allow navigation back later
+      const appEl = document.getElementById('app');
+      if (appEl && !window._appOriginalHTML) {
+        window._appOriginalHTML = appEl.innerHTML;
+      }
+
+      // Replace app content with scoring page
+      appEl.innerHTML = this.renderScorePage();
       this.initializeEventListeners();
       
-      // Initialize total score calculations
-      setTimeout(() => this.updateTotalScores(), 100);
+      // Initialize total score calculations and submit button state
+      setTimeout(() => {
+        this.updateTotalScores();
+        this.updateSubmitButtonState();
+      }, 100);
       
     } catch (error) {
       console.error('Error loading score page:', error);
@@ -115,16 +156,39 @@ class ScoreMatchPage {
   async loadExistingScores() {
     try {
       const response = await this.scoreService.getMatchScores(this.currentMatch.id);
-      this.scores = response.data || [];
+      
+      // Handle different response formats
+      if (response.data && response.data.scores) {
+        this.scores = response.data.scores;
+      } else if (Array.isArray(response.data)) {
+        this.scores = response.data;
+      } else {
+        this.scores = [];
+      }
       
       // Check if current judge has already submitted scores
       const currentJudgeScores = this.scores.filter(
         score => score.judgeId === this.authManager.currentUser.id
       );
       
-      if (currentJudgeScores.length > 0 && currentJudgeScores.every(score => score.isSubmitted)) {
-        // All scores are submitted, show read-only view
-        this.scoresSubmitted = true;
+      // Check if we have scores for both teams
+      const hasTeamAScore = currentJudgeScores.some(score => score.teamId === this.teams[0]?.id);
+      const hasTeamBScore = currentJudgeScores.some(score => score.teamId === this.teams[1]?.id);
+      
+      // Check if all existing scores are submitted
+      const allSubmitted = currentJudgeScores.length > 0 && 
+                         currentJudgeScores.every(score => score.isSubmitted);
+      
+      // Update submitted state
+      this.scoresSubmitted = allSubmitted;
+      
+      // If we have submitted scores, make sure we're in read-only mode
+      if (this.scoresSubmitted) {
+        console.log('Scores are already submitted, enabling read-only mode');
+        // Update UI to reflect submitted state
+        setTimeout(() => this.updateSubmitButtonState(), 100);
+      } else if (hasTeamAScore || hasTeamBScore) {
+        console.log('Found existing unsubmitted scores:', { hasTeamAScore, hasTeamBScore });
       }
     } catch (error) {
       console.error('Error loading existing scores:', error);
@@ -133,13 +197,81 @@ class ScoreMatchPage {
   }
 
   /**
+   * Validate all required fields are filled and within valid ranges
+   */
+  validateForm() {
+    const errors = [];
+    const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+    const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
+    
+    for (const team of this.teams) {
+      if (!team?.id) continue;
+      
+      const teamName = team.name || `Team ${this.teams.indexOf(team) + 1}`;
+      
+      // Check criteria scores
+      const criteriaInputs = document.querySelectorAll(`[name^="criteriaScore_${team.id}_"]`);
+      criteriaInputs.forEach(input => {
+        const value = input.value.trim();
+        const criteriaKey = input.dataset.criteriaKey;
+        const criteriaName = criteriaKey?.replace(/_/g, ' ') || 'criteria';
+        const maxScore = criteria[criteriaKey]?.maxScore || 0;
+        
+        if (value === '') {
+          errors.push(`${teamName}: ${criteriaName} score is required`);
+        } else if (isNaN(value)) {
+          errors.push(`${teamName}: ${criteriaName} score must be a number`);
+        } else {
+          const numValue = parseFloat(value);
+          if (numValue < 0) {
+            errors.push(`${teamName}: ${criteriaName} score cannot be negative`);
+          } else if (numValue > maxScore) {
+            errors.push(`${teamName}: ${criteriaName} score cannot exceed ${maxScore}`);
+          }
+        }
+      });
+      
+      // Check comment scores
+      const commentInputs = document.querySelectorAll(`[name^="commentScore_${team.id}_"]`);
+      commentInputs.forEach((input, index) => {
+        const value = input.value.trim();
+        
+        if (value === '') {
+          errors.push(`${teamName}: Judge question ${index + 1} score is required`);
+        } else if (isNaN(value)) {
+          errors.push(`${teamName}: Judge question ${index + 1} score must be a number`);
+        } else {
+          const numValue = parseFloat(value);
+          if (numValue < 0) {
+            errors.push(`${teamName}: Judge question ${index + 1} score cannot be negative`);
+          } else if (numValue > commentMaxScore) {
+            errors.push(`${teamName}: Judge question ${index + 1} score cannot exceed ${commentMaxScore}`);
+          }
+        }
+      });
+    }
+    
+    return errors;
+  }
+
+  /**
    * Handle submit scores
    */
   async handleSubmitScores(event) {
     event.preventDefault();
     
+    // Validate form first
+    const validationErrors = this.validateForm();
+    if (validationErrors.length > 0) {
+      await this.ui.showError('Validation Error', 
+        'Please fill in all required fields:\n\n' + validationErrors.join('\n'));
+      return;
+    }
+    
+    const submitButton = document.getElementById('submitScoresBtn');
+    const originalText = submitButton.textContent;
+    
     try {
-      const submitButton = document.getElementById('submitScoresBtn');
       submitButton.disabled = true;
       submitButton.textContent = 'Submitting...';
 
@@ -160,11 +292,12 @@ class ScoreMatchPage {
 
         // Collect comment scores
         const commentScores = [];
-        const commentInputs = document.querySelectorAll(`[name^="commentScore_${team.id}_"]`);
+        const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
         
-        commentInputs.forEach(input => {
-          commentScores.push(parseFloat(input.value) || 0);
-        });
+        for (let i = 0; i < commentQuestionsCount; i++) {
+          const input = document.querySelector(`[name="commentScore_${team.id}_${i}"]`);
+          commentScores.push(parseFloat(input?.value) || 0);
+        }
 
         // Get notes
         const notes = document.querySelector(`[name="notes_${team.id}"]`)?.value || '';
@@ -181,28 +314,82 @@ class ScoreMatchPage {
         allScores.push(scoreData);
       }
 
-      // Submit all scores
-      const promises = allScores.map(scoreData => 
-        this.scoreService.createScore(scoreData)
-      );
-
-      await Promise.all(promises);
-
-      // Show success message
-      this.ui.showSuccess('Success', 'Scores submitted successfully');
+      console.log('Submitting scores:', allScores);
       
-      // Navigate back to match page
-      this.router.navigate('/matches');
+      try {
+        // Create all scores first
+        const results = await Promise.all(
+          allScores.map(scoreData => 
+            this.scoreService.createScore(this.currentMatch.id, scoreData)
+          )
+        );
+        console.log('Score submission results:', results);
 
-    } catch (error) {
-      console.error('Error submitting scores:', error);
-      this.ui.showError('Error', 'Failed to submit scores: ' + error.message);
-    } finally {
-      const submitButton = document.getElementById('submitScoresBtn');
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Submit Scores';
+        // Extract score IDs
+        const scoreIds = results.map(result => {
+          const id = result?.data?.id || result?.id;
+          console.log('Extracting score ID:', { result, id });
+          return id;
+        }).filter(id => id);
+        
+        console.log('Final scoreIds array:', scoreIds);
+        
+        if (scoreIds.length === 0) {
+          throw new Error('No valid score IDs found to submit');
+        }
+        
+        // Submit all scores as final
+        const submitResult = await this.scoreService.submitScores(this.currentMatch.id, scoreIds);
+        console.log('Submit result:', submitResult);
+        
+        if (!submitResult?.success) {
+          throw new Error('Failed to submit scores: ' + (submitResult?.message || 'Unknown error'));
+        }
+        
+        // Mark as submitted locally
+        this.scoresSubmitted = true;
+
+        // Show success message
+        await this.ui.showSuccess('Success', 'Scores submitted successfully! Returning to match list...');
+        
+        // Wait a moment for the success message to be seen
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Navigate back
+        const appEl = document.getElementById('app');
+        if (window._appOriginalHTML && appEl) {
+          appEl.innerHTML = window._appOriginalHTML;
+
+          // Re-bootstrap the application (dashboard, workspace etc.)
+          if (window.app && this.currentMatch?.eventId) {
+            // Ensure workspace page is visible then show event workspace
+            window.app.ui.showPage('event-workspace');
+            await window.eventWorkspacePage.show(this.currentMatch.eventId);
+            window.eventWorkspacePage.switchTab('matches');
+          } else if (window.app) {
+            window.app.showDashboard();
+          }
+
+          // Rebuild UIManager element references after DOM replacement
+          if (window.app && window.app.ui && typeof window.app.ui.initializeElements === 'function') {
+            window.app.ui.initializeElements();
+          }
+        } else {
+          // Fallback: full reload
+          window.location.reload();
+        }
+      } catch (submitError) {
+        console.error('Error in score submission:', submitError);
+        throw submitError;
       }
+      
+    } catch (error) {
+      console.error('Failed to submit scores:', error);
+      await this.ui.showError('Error', 'Failed to submit scores: ' + error.message);
+      
+      // Re-enable submit button on error
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
     }
   }
 
@@ -212,11 +399,14 @@ class ScoreMatchPage {
   renderScorePage() {
     const currentUser = this.authManager.currentUser;
     const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+    const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
     const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
+    const commentInstructions = this.currentEvent.scoringCriteria?.commentInstructions || '';
     
     // Calculate total possible score
     const totalCriteriaScore = Object.values(criteria).reduce((sum, c) => sum + (c.maxScore || 0), 0);
-    const maxPossibleScore = totalCriteriaScore + commentMaxScore;
+    const totalJudgeQuestionsScore = commentQuestionsCount * commentMaxScore;
+    const maxPossibleScore = totalCriteriaScore + totalJudgeQuestionsScore;
 
     return `
       <div class="min-h-screen bg-gray-50">
@@ -257,14 +447,26 @@ class ScoreMatchPage {
               <div class="ml-3 flex-1">
                 <h3 class="text-sm font-medium text-blue-800">Scoring Guidelines</h3>
                 <div class="mt-2 text-sm text-blue-700">
-                  <p><strong>Criteria Scores:</strong> Max ${totalCriteriaScore} points</p>
-                  <p><strong>Judge Questions:</strong> Max ${commentMaxScore} points per question (average of 3 questions)</p>
-                  <p><strong>Total possible score:</strong> ${maxPossibleScore} points</p>
-                  <p class="mt-1 text-xs">Formula: Sum of Criteria Scores + Average of Judge Question Scores</p>
+                  <p><strong>Criteria Scores:</strong> ${totalCriteriaScore} points total</p>
+                  <p><strong>Judge Questions:</strong> ${commentQuestionsCount} questions × ${commentMaxScore} points each = ${totalJudgeQuestionsScore} points total</p>
+                  <p><strong>Maximum Total Score:</strong> ${maxPossibleScore} points</p>
+                  <p class="mt-1 text-xs">Formula: Sum of Criteria Scores + Sum of Judge Question Scores</p>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Judge Questions Instructions -->
+          ${commentInstructions ? `
+            <div class="bg-white border border-gray-200 rounded-lg mb-8">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Judge Questions Scoring Guide</h3>
+              </div>
+              <div class="p-6">
+                <div class="text-sm text-gray-700 whitespace-pre-line">${commentInstructions}</div>
+              </div>
+            </div>
+          ` : ''}
 
           <!-- Scoring Criteria Reference -->
           ${Object.keys(criteria).length > 0 ? `
@@ -288,14 +490,42 @@ class ScoreMatchPage {
             </div>
           ` : ''}
 
+          <!-- Scores Submitted Status -->
+          ${this.scoresSubmitted ? `
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-8">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <h3 class="text-sm font-medium text-green-800">Scores Submitted</h3>
+                  <div class="mt-2 text-sm text-green-700">
+                    <p>You have successfully submitted your scores for this match. No further changes can be made.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
           <!-- Scoring Form -->
           <form id="scoreForm" class="space-y-8">
             ${this.teams.map((team, index) => this.renderTeamScoreCard(team, index)).join('')}
             
             <div class="flex justify-end">
-              <button type="button" id="submitScoresBtn" class="bg-black text-white px-6 py-2 rounded-md hover:bg-gray-800 transition-colors">
-                Submit Scores
-              </button>
+              ${this.scoresSubmitted ? `
+                <button type="button" disabled class="bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed">
+                  <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  Scores Submitted
+                </button>
+              ` : `
+                <button type="button" id="submitScoresBtn" disabled class="bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed" title="Please fill in all required fields">
+                  Submit Scores
+                </button>
+              `}
             </div>
           </form>
         </div>
@@ -308,8 +538,16 @@ class ScoreMatchPage {
    */
   renderTeamScoreCard(team, index) {
     const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+    const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
     const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
     const existingScore = this.scores.find(s => s.teamId === team?.id);
+
+    // Generate question labels dynamically
+    const questionLabels = [];
+    for (let i = 0; i < commentQuestionsCount; i++) {
+      const ordinals = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
+      questionLabels.push(ordinals[i] || `Question ${i + 1}`);
+    }
 
     return `
       <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -328,42 +566,45 @@ class ScoreMatchPage {
         
         <div class="p-6 space-y-6">
           <!-- Criteria Scores -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-4">Criteria Scores</label>
-            <div class="space-y-4">
-              ${Object.entries(criteria).map(([key, data]) => `
-                <div>
-                  <label class="block text-sm text-gray-600 mb-2">
-                    ${key.charAt(0).toUpperCase() + key.slice(1)}
-                    <span class="text-xs text-gray-500">(Max: ${data.maxScore} points)</span>
-                  </label>
-                  <div class="relative">
-                    <input 
-                      type="number" 
-                      name="criteriaScore_${team?.id}_${key}"
-                      class="criteria-score-input block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium"
-                      min="0" 
-                      max="${data.maxScore}" 
-                      step="1"
-                      value="${existingScore?.criteriaScores?.[key] || ''}"
-                      placeholder="Enter score"
-                      required
-                      data-criteria-key="${key}"
-                      data-team-id="${team?.id}"
-                    >
+          ${Object.keys(criteria).length > 0 ? `
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-4">Criteria Scores</label>
+              <div class="space-y-4">
+                ${Object.entries(criteria).map(([key, data]) => `
+                  <div>
+                    <label class="block text-sm text-gray-600 mb-2">
+                      ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      <span class="text-xs text-gray-500">(Max: ${data.maxScore} points)</span>
+                    </label>
+                    <div class="relative">
+                      <input 
+                        type="number" 
+                        name="criteriaScore_${team?.id}_${key}"
+                        class="criteria-score-input block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium ${this.scoresSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}"
+                        min="0" 
+                        max="${data.maxScore}" 
+                        step="1"
+                        value="${existingScore?.criteriaScores?.[key] || ''}"
+                        placeholder="Enter score"
+                        required
+                        data-criteria-key="${key}"
+                        data-team-id="${team?.id}"
+                        ${this.scoresSubmitted ? 'disabled readonly' : ''}
+                      >
+                    </div>
                   </div>
-                </div>
-              `).join('')}
+                `).join('')}
+              </div>
             </div>
-          </div>
+          ` : ''}
 
-          <!-- Commentary Scores -->
+          <!-- Judge Questions Scores -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-4">
               Judge Questions (0 - ${commentMaxScore} points each)
             </label>
             <div class="space-y-4">
-              ${['First', 'Second', 'Third'].map((label, i) => `
+              ${questionLabels.map((label, i) => `
                 <div>
                   <label class="block text-sm text-gray-600 mb-2">
                     ${label} Question Score
@@ -372,7 +613,7 @@ class ScoreMatchPage {
                     <input 
                       type="number" 
                       name="commentScore_${team?.id}_${i}"
-                      class="block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium"
+                      class="comment-score-input block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium ${this.scoresSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}"
                       min="0" 
                       max="${commentMaxScore}" 
                       step="1"
@@ -381,6 +622,7 @@ class ScoreMatchPage {
                       required
                       data-comment-index="${i}"
                       data-team-id="${team?.id}"
+                      ${this.scoresSubmitted ? 'disabled readonly' : ''}
                     >
                   </div>
                 </div>
@@ -393,14 +635,37 @@ class ScoreMatchPage {
             <label class="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
             <textarea 
               name="notes_${team?.id}"
-              class="block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+              class="block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 ${this.scoresSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}"
               rows="3"
               placeholder="Add any notes about the team's performance..."
+              ${this.scoresSubmitted ? 'disabled readonly' : ''}
             >${existingScore?.notes || ''}</textarea>
           </div>
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Update submit button state based on form validation
+   */
+  updateSubmitButtonState() {
+    const submitButton = document.getElementById('submitScoresBtn');
+    if (!submitButton || this.scoresSubmitted) return;
+    
+    const validationErrors = this.validateForm();
+    const isFormValid = validationErrors.length === 0;
+    
+    submitButton.disabled = !isFormValid;
+    submitButton.className = isFormValid 
+      ? 'bg-black text-white px-6 py-2 rounded-md hover:bg-gray-800 transition-colors'
+      : 'bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed';
+    
+    if (!isFormValid) {
+      submitButton.title = 'Please fill in all required fields';
+    } else {
+      submitButton.title = '';
+    }
   }
 
   /**
@@ -419,23 +684,17 @@ class ScoreMatchPage {
         criteriaTotal += score;
       });
 
-      // Calculate average commentary score
+      // Calculate total judge questions scores (sum, not average)
       const commentInputs = document.querySelectorAll(`[name^="commentScore_${team.id}_"]`);
       let commentTotal = 0;
-      let validCommentCount = 0;
       
       commentInputs.forEach(input => {
         const score = parseFloat(input.value) || 0;
-        if (score > 0) {
-          commentTotal += score;
-          validCommentCount++;
-        }
+        commentTotal += score;
       });
-
-      const commentAverage = validCommentCount > 0 ? commentTotal / validCommentCount : 0;
       
       // Calculate and display total score
-      const totalScore = criteriaTotal + commentAverage;
+      const totalScore = criteriaTotal + commentTotal;
       const totalDisplay = document.getElementById(`totalScore_${team.id}`);
       
       if (totalDisplay) {

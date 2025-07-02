@@ -37,6 +37,7 @@ const ENDPOINTS = {
     myMatches: `${API_BASE_URL}/matches/my`,
     updateStep: (matchId) => `${API_BASE_URL}/matches/${matchId}/step`,
     updateStatus: (matchId) => `${API_BASE_URL}/matches/${matchId}/status`,
+    statusOptions: (matchId) => `${API_BASE_URL}/matches/${matchId}/status-options`,
     assignJudge: (matchId) => `${API_BASE_URL}/matches/${matchId}/assignments`,
     removeJudge: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/assignments/${judgeId}`
   },
@@ -533,6 +534,13 @@ class MatchService {
    */
   async updateMatchStatus(matchId, status) {
     return this.api.put(ENDPOINTS.matches.updateStatus(matchId), { status });
+  }
+
+  /**
+   * Get available status options for a match (for moderators)
+   */
+  async getStatusOptions(matchId) {
+    return this.api.get(ENDPOINTS.matches.statusOptions(matchId));
   }
 
   /**

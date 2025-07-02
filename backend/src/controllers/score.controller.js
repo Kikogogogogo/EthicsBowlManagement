@@ -64,8 +64,8 @@ class ScoreController {
       const { matchId } = req.params;
       const {
         teamId,
-        presentationScore,
-        commentaryScore,
+        criteriaScores,
+        commentScores,
         notes
       } = req.body;
       const judgeId = req.user.id;
@@ -78,21 +78,28 @@ class ScoreController {
         });
       }
 
-      if (!teamId || presentationScore === undefined || commentaryScore === undefined) {
+      if (!teamId) {
         return res.status(400).json({
           success: false,
-          message: 'Team ID, presentation score, and commentary score are required',
+          message: 'Team ID is required',
           error: 'MISSING_REQUIRED_FIELDS'
         });
       }
 
-      // Validate score ranges
-      if (presentationScore < 0 || presentationScore > 100 || 
-          commentaryScore < 0 || commentaryScore > 100) {
+      // Basic validation for scores
+      if (criteriaScores && typeof criteriaScores !== 'object') {
         return res.status(400).json({
           success: false,
-          message: 'Scores must be between 0 and 100',
-          error: 'INVALID_SCORE_RANGE'
+          message: 'Criteria scores must be an object',
+          error: 'INVALID_CRITERIA_SCORES'
+        });
+      }
+
+      if (commentScores && !Array.isArray(commentScores)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Comment scores must be an array',
+          error: 'INVALID_COMMENT_SCORES'
         });
       }
 
@@ -100,8 +107,8 @@ class ScoreController {
         matchId,
         judgeId,
         teamId,
-        presentationScore: parseInt(presentationScore),
-        commentaryScore: parseInt(commentaryScore),
+        criteriaScores,
+        commentScores,
         notes
       };
 
@@ -158,27 +165,21 @@ class ScoreController {
         });
       }
 
-      // Validate score ranges if provided
-      if (updateData.presentationScore !== undefined) {
-        updateData.presentationScore = parseInt(updateData.presentationScore);
-        if (updateData.presentationScore < 0 || updateData.presentationScore > 100) {
-          return res.status(400).json({
-            success: false,
-            message: 'Presentation score must be between 0 and 100',
-            error: 'INVALID_SCORE_RANGE'
-          });
-        }
+      // Validate score data if provided
+      if (updateData.criteriaScores && typeof updateData.criteriaScores !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Criteria scores must be an object',
+          error: 'INVALID_CRITERIA_SCORES'
+        });
       }
 
-      if (updateData.commentaryScore !== undefined) {
-        updateData.commentaryScore = parseInt(updateData.commentaryScore);
-        if (updateData.commentaryScore < 0 || updateData.commentaryScore > 100) {
-          return res.status(400).json({
-            success: false,
-            message: 'Commentary score must be between 0 and 100',
-            error: 'INVALID_SCORE_RANGE'
-          });
-        }
+      if (updateData.commentScores && !Array.isArray(updateData.commentScores)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Comment scores must be an array',
+          error: 'INVALID_COMMENT_SCORES'
+        });
       }
 
       const score = await this.scoreService.updateScore(scoreId, updateData, judgeId);

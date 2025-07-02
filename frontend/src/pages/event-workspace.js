@@ -13,6 +13,7 @@ class EventWorkspacePage {
     this.teams = [];
     this.users = [];
     this.currentTab = 'overview';
+    this.judgeScoresCache = new Map(); // Cache for judge scores status
     
     // Service references
     this.eventService = null;
@@ -114,24 +115,46 @@ class EventWorkspacePage {
     document.addEventListener('click', (e) => {
       if (e.target.closest('#addCriteriaBtn')) {
         e.preventDefault();
-        this.addCriteriaField();
+        // Check if event is in draft status before allowing action
+        if (this.currentEvent && this.currentEvent.status === 'draft') {
+          this.addCriteriaField();
+        }
       }
       
       if (e.target.closest('.remove-criteria-btn')) {
         e.preventDefault();
-        this.removeCriteriaField(e.target.closest('.remove-criteria-btn'));
+        // Check if event is in draft status before allowing action
+        if (this.currentEvent && this.currentEvent.status === 'draft') {
+          this.removeCriteriaField(e.target.closest('.remove-criteria-btn'));
+        }
       }
       
       if (e.target.closest('#resetCriteriaBtn')) {
         e.preventDefault();
-        this.resetCriteriaToDefault();
+        // Check if event is in draft status before allowing action
+        if (this.currentEvent && this.currentEvent.status === 'draft') {
+          this.resetCriteriaToDefault();
+        }
       }
     });
 
-    // Update weight total when input changes
+    // Update score calculation when input changes
     document.addEventListener('input', (e) => {
-      if (e.target.matches('[data-field="weight"]')) {
-        this.updateWeightTotal();
+      if (e.target.matches('[name="commentQuestionsCount"], [name="commentMaxScore"]')) {
+        // For judge questions settings, update immediately
+        setTimeout(() => this.updateScoreCalculation(), 50);
+      } else if (e.target.matches('[data-field="maxScore"]')) {
+        // For criteria max scores, update immediately
+        this.updateScoreCalculation();
+      }
+    });
+
+    // Initialize score calculation when settings tab is shown
+    document.addEventListener('click', (e) => {
+      if (e.target.matches('[data-tab="settings"]')) {
+        setTimeout(() => {
+          this.updateScoreCalculation();
+        }, 100);
       }
     });
 
@@ -147,7 +170,7 @@ class EventWorkspacePage {
   }
 
   /**
-   * Show event workspace for specific event
+   * Show the event workspace for a specific event
    */
   async show(eventId) {
     try {
@@ -158,6 +181,7 @@ class EventWorkspacePage {
       this.teamService = window.teamService;
       this.matchService = window.matchService;
       this.userService = window.userService;
+      this.scoreService = window.scoreService;
       this.authManager = window.authManager;
       
       // Check authentication first
@@ -172,10 +196,15 @@ class EventWorkspacePage {
       }
       
       this.currentEventId = eventId;
-      this.ui.showPage('event-workspace');
+      
+      // Get the workspace page element
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage) {
+        throw new Error('Event workspace page element not found');
+      }
       
       // Show loading state
-      document.getElementById('event-workspace-page').innerHTML = `
+      workspacePage.innerHTML = `
         <div class="min-h-screen bg-gray-50 flex items-center justify-center">
           <div class="text-center">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -184,6 +213,7 @@ class EventWorkspacePage {
         </div>
       `;
       
+      // Load event data
       await this.loadEventData();
       
       // Set default tab based on user role
@@ -194,10 +224,24 @@ class EventWorkspacePage {
         this.currentTab = 'overview'; // Show overview tab for admin
       }
       
+      // Render the workspace
       this.renderWorkspace();
       
+      // Initialize event listeners after rendering
+      if (!this.eventListenersInitialized) {
+        this.initializeEventListeners();
+      }
+      
+      return true;
     } catch (error) {
       console.error('Failed to load event workspace:', error);
+      
+      // Get the workspace page element again in case it was removed
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage) {
+        console.error('Event workspace page element not found during error handling');
+        return false;
+      }
       
       // Show error with suggestion to re-login if it's an auth error
       const isAuthError = error.message.includes('token') || error.message.includes('authenticated') || 
@@ -224,15 +268,16 @@ class EventWorkspacePage {
                 Logout & Reload
               </button>
             ` : ''}
-            <button onclick="window.eventsPage.show()" 
+            <button onclick="window.app.showDashboard()" 
                     class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">
-              Back to Events
+              Back to Dashboard
             </button>
           </div>
         </div>
       `;
       
-      document.getElementById('event-workspace-page').innerHTML = errorHTML;
+      workspacePage.innerHTML = errorHTML;
+      return false;
     }
   }
 
@@ -293,9 +338,42 @@ class EventWorkspacePage {
       } else {
         this.users = [];
       }
+
+      // Preload judge scores status if current user is a judge
+      if (this.authManager.currentUser.role === 'judge') {
+        await this.preloadJudgeScoresStatus();
+      }
     } catch (error) {
       console.error('Error loading event data:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Preload judge scores status for all matches
+   */
+  async preloadJudgeScoresStatus() {
+    try {
+      const judgeId = this.authManager.currentUser.id;
+      
+      for (const match of this.matches) {
+        try {
+          const response = await this.scoreService.getMatchScores(match.id);
+          const scores = response.data?.scores || response.scores || response.data || response || [];
+          
+          // Check if current judge has submitted scores
+          const hasSubmitted = scores.some(
+            score => score.judgeId === judgeId && score.isSubmitted
+          );
+          
+          this.judgeScoresCache.set(match.id, hasSubmitted);
+        } catch (error) {
+          console.error(`Error loading scores for match ${match.id}:`, error);
+          this.judgeScoresCache.set(match.id, false);
+        }
+      }
+    } catch (error) {
+      console.error('Error preloading judge scores status:', error);
     }
   }
 
@@ -380,7 +458,12 @@ class EventWorkspacePage {
       ${this.renderModals()}
     `;
 
-    document.getElementById('event-workspace-page').innerHTML = workspaceHTML;
+    const eventWorkspaceElement = document.getElementById('event-workspace-page');
+    if (!eventWorkspaceElement) {
+      console.error('Event workspace page element not found');
+      return;
+    }
+    eventWorkspaceElement.innerHTML = workspaceHTML;
     
     // Add event listener for back button after rendering - with timeout to ensure DOM is ready
     setTimeout(() => {
@@ -420,23 +503,48 @@ class EventWorkspacePage {
   }
 
   /**
-   * Switch between tabs
+   * Switch to a different tab in the workspace
    */
   switchTab(tabName) {
-    this.currentTab = tabName;
-    
-    // Update tab appearance
-    document.querySelectorAll('.tab-button').forEach(btn => {
-      const isActive = btn.getAttribute('data-tab') === tabName;
-      btn.className = `tab-button ${isActive ? 'active-tab' : 'inactive-tab'}`;
-    });
+    try {
+      console.log('Switching to tab:', tabName);
+      
+      // Get the workspace content element
+      const workspaceContent = document.getElementById('workspace-content');
+      if (!workspaceContent) {
+        console.error('Workspace content element not found');
+        return false;
+      }
 
-    // Update content
-    document.getElementById('workspace-content').innerHTML = this.renderTabContent();
-    
-    // Update weight total if on settings tab
-    if (tabName === 'settings') {
-      setTimeout(() => this.updateWeightTotal(), 100);
+      // Update active tab
+      this.currentTab = tabName;
+
+      // Update tab buttons
+      document.querySelectorAll('[data-tab]').forEach(tab => {
+        const isActive = tab.dataset.tab === tabName;
+        tab.classList.toggle('bg-gray-100', isActive);
+        tab.classList.toggle('text-gray-900', isActive);
+        tab.classList.toggle('text-gray-600', !isActive);
+        tab.classList.toggle('hover:bg-gray-50', !isActive);
+      });
+
+      // Render the new tab content
+      workspaceContent.innerHTML = this.renderTabContent();
+
+      // Re-initialize event listeners for the new tab content
+      if (!this.eventListenersInitialized) {
+        this.initializeEventListeners();
+      }
+
+      // Special handling for settings tab
+      if (tabName === 'settings') {
+        setTimeout(() => this.updateScoreCalculation(), 100);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error switching tab:', error);
+      return false;
     }
   }
 
@@ -470,12 +578,38 @@ class EventWorkspacePage {
     const matchesByRound = this.groupMatchesByRound();
     const totalMatches = this.matches.length;
     const completedMatches = this.matches.filter(m => m.status === 'completed').length;
-    const inProgressMatches = this.matches.filter(m => m.status === 'in_progress').length;
-    const scheduledMatches = this.matches.filter(m => m.status === 'scheduled').length;
+    const inProgressMatches = this.matches.filter(m => 
+      m.status !== 'draft' && m.status !== 'completed'
+    ).length;
+    const draftMatches = this.matches.filter(m => m.status === 'draft').length;
+
+    // Check if admin is assigned as judge to any matches
+    const adminAssignedMatches = isAdmin ? this.matches.filter(match => 
+      match.assignments && match.assignments.some(a => a.judge?.id === currentUser.id)
+    ) : [];
 
     // Role-specific welcome message and stats
     let roleInfo = '';
-    if (isJudge) {
+    if (isAdmin && adminAssignedMatches.length > 0) {
+      roleInfo = `
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-orange-800">Dual Role Notice</h3>
+              <div class="mt-2 text-sm text-orange-700">
+                <p>You are assigned as judge for ${adminAssignedMatches.length} match${adminAssignedMatches.length !== 1 ? 'es' : ''} in this event.</p>
+                <p class="mt-1 font-medium">Switch to Judge role to score these matches.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (isJudge) {
       roleInfo = `
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div class="flex items-center">
@@ -527,12 +661,12 @@ class EventWorkspacePage {
               </div>
             ` : ''}
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
-              <div class="text-2xl font-bold text-gray-900">${scheduledMatches}</div>
-              <div class="text-gray-600">${isAdmin ? 'Scheduled Matches' : 'Your Scheduled'}</div>
+                          <div class="text-2xl font-bold text-gray-900">${draftMatches}</div>
+            <div class="text-gray-600">${isAdmin ? 'Draft Matches' : 'Your Draft'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${inProgressMatches}</div>
-              <div class="text-gray-600">${isAdmin ? 'In Progress' : 'In Progress'}</div>
+              <div class="text-gray-600">${isAdmin ? 'Active Matches' : 'Your Active'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${completedMatches}</div>
@@ -637,8 +771,12 @@ class EventWorkspacePage {
             </select>
             <select id="statusFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
               <option value="">All Status</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="in_progress">In Progress</option>
+                              <option value="draft">Draft</option>
+                              <option value="moderator_period_1">Moderator Period 1</option>
+                <option value="team_a_presentation">Team A Presentation</option>
+                <option value="team_b_commentary">Team B Commentary</option>
+                <option value="judge_1_1">Judge 1.1</option>
+                <option value="final_scoring">Final Scoring</option>
               <option value="completed">Completed</option>
             </select>
           </div>
@@ -681,9 +819,15 @@ class EventWorkspacePage {
     const isModerator = currentUser.role === 'moderator' && match.moderatorId === currentUser.id;
     const isAssignedJudge = match.assignments && 
                            match.assignments.some(a => a.judge?.id === currentUser.id);
+    
+    // Check if admin is also assigned as judge to this match
+    const isAdminAssignedAsJudge = isAdmin && isAssignedJudge;
 
     const scheduledTime = match.scheduledTime ? 
       new Date(match.scheduledTime).toLocaleString() : 'Not scheduled';
+
+    // Check if judge has submitted scores
+    const hasSubmittedScores = this.judgeScoresCache.get(match.id);
 
     return `
       <div class="p-6">
@@ -701,38 +845,73 @@ class EventWorkspacePage {
               <div>Room: ${match.room || 'Not assigned'}</div>
               <div>Scheduled: ${scheduledTime}</div>
               <div>Moderator: ${match.moderator ? `${match.moderator.firstName} ${match.moderator.lastName}` : 'Not assigned'}</div>
-              <div>Judges: ${match.assignments && match.assignments.length > 0 ? 
-                match.assignments.map(a => `${a.judge.firstName} ${a.judge.lastName}`).join(', ') : 
+              <div>Judges: ${match.assignments ? 
+                match.assignments.map(a => {
+                  const judgeName = `${a.judge.firstName} ${a.judge.lastName}`;
+                  const isCurrentUser = a.judge.id === currentUser.id;
+                  return isCurrentUser && isAdmin ? `${judgeName} <span class="text-blue-600 font-medium">(You)</span>` : judgeName;
+                }).join(', ') : 
                 'Not assigned'}</div>
+              ${isAdminAssignedAsJudge ? `
+                <div class="text-blue-600 text-xs font-medium">
+                  ⚡ You are assigned as a judge for this match
+                </div>
+              ` : ''}
             </div>
           </div>
           
           <div class="flex space-x-2">
-            ${isModerator && match.status === 'scheduled' ? `
+            ${isModerator && match.status === 'draft' ? `
               <button data-action="start-match" data-match-id="${match.id}" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors font-medium">
                 Start Match
               </button>
             ` : ''}
             
-            ${isModerator && match.status === 'in_progress' ? `
-              <button data-action="complete-match" data-match-id="${match.id}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium">
-                Complete Match
+            ${isModerator && match.status !== 'draft' && match.status !== 'completed' ? `
+              <button data-action="manage-match-status" data-match-id="${match.id}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium">
+                Manage Status
               </button>
             ` : ''}
-            
 
-            
-            ${isAssignedJudge && (match.status === 'in_progress' || match.status === 'completed') ? `
-              <button data-action="score-match" data-match-id="${match.id}" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition-colors font-medium">
-                Score
-              </button>
+            ${isAssignedJudge && !isAdmin ? `
+              ${hasSubmittedScores ? `
+                <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
+                  <div class="flex items-center space-x-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="font-medium">Scored</span>
+                  </div>
+                </div>
+              ` : `
+                <button data-action="score-match" data-match-id="${match.id}" 
+                  class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition-colors font-medium"
+                  ${!this.canJudgesScore(match.status) ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                  Score
+                </button>
+              `}
             ` : ''}
             
             ${isAdmin ? `
+              ${isAdminAssignedAsJudge && this.canJudgesScore(match.status) ? `
+                <div class="bg-blue-50 border border-blue-200 rounded px-3 py-1 text-xs text-blue-800">
+                  <div class="flex items-center space-x-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Switch to Judge role to score</span>
+                  </div>
+                </div>
+              ` : ''}
+              ${isAdmin || isModerator ? `
+                <button data-action="view-scores" data-match-id="${match.id}" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors font-medium">
+                  View Scores
+                </button>
+              ` : ''}
               <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors font-medium">
                 Edit
               </button>
-              ${match.status === 'scheduled' ? `
+              ${match.status === 'draft' ? `
                 <button data-action="delete-match" data-match-id="${match.id}" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors font-medium">
                   Delete
                 </button>
@@ -809,30 +988,72 @@ class EventWorkspacePage {
    * Render settings tab
    */
   renderSettingsTab() {
+    const isEventDraft = this.currentEvent.status === 'draft';
+    const disabledClass = isEventDraft ? '' : 'bg-gray-100 cursor-not-allowed';
+    const disabledAttr = isEventDraft ? '' : 'disabled';
+    
     return `
       <div class="space-y-6">
         <!-- Scoring Criteria Settings -->
         <div class="bg-white border border-gray-300 rounded-lg">
           <div class="px-6 py-4 border-b border-gray-300">
-            <h3 class="text-lg font-medium text-gray-900">Scoring Criteria Settings</h3>
+            <div class="flex justify-between items-center">
+              <h3 class="text-lg font-medium text-gray-900">Scoring Criteria Settings</h3>
+              ${!isEventDraft ? `
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                  </svg>
+                  <span class="text-sm text-yellow-600 font-medium">Read Only - Event is ${this.currentEvent.status}</span>
+                </div>
+              ` : ''}
+            </div>
+            ${!isEventDraft ? `
+              <p class="text-sm text-gray-600 mt-2">Scoring criteria can only be modified when the event is in draft status.</p>
+            ` : ''}
           </div>
           <div class="p-6">
             <form id="scoringCriteriaForm" class="space-y-6">
-              <!-- Judge Questions Instructions -->
+              <!-- Judge Questions Configuration -->
               <div class="bg-gray-50 p-4 rounded-lg mb-6">
-                <h4 class="text-sm font-medium text-gray-900 mb-2">Judge Questions Scoring Guide</h4>
-                <div class="text-sm text-gray-600 whitespace-pre-line">
-                  ${this.currentEvent.scoringCriteria?.commentInstructions || ''}
+                <h4 class="text-sm font-medium text-gray-900 mb-2">Judge Questions Configuration</h4>
+                <p class="text-xs text-gray-600 mb-4">Configure how many questions judges will ask and the scoring system</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Number of Judge Questions</label>
+                    <input type="number" name="commentQuestionsCount" 
+                           value="${this.currentEvent.scoringCriteria?.commentQuestionsCount || 3}" 
+                           min="1" max="10" ${disabledAttr}
+                           class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
+                    <p class="mt-1 text-xs text-gray-500">How many questions will judges ask each team</p>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Max Score per Judge Question</label>
+                    <input type="number" name="commentMaxScore" 
+                           value="${this.currentEvent.scoringCriteria?.commentMaxScore || 20}" 
+                           min="1" max="100" ${disabledAttr}
+                           class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
+                    <p class="mt-1 text-xs text-gray-500">Maximum points for each judge question</p>
+                  </div>
                 </div>
-              </div>
 
-              <div class="grid grid-cols-1 gap-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700">Max Score per Judge Question</label>
-                  <input type="number" name="commentMaxScore" 
-                         value="${this.currentEvent.scoringCriteria?.commentMaxScore || 20}" 
-                         min="1" max="100"
-                         class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Judge Questions Scoring Guide</label>
+                  <textarea name="commentInstructions" 
+                            rows="6" ${disabledAttr}
+                            placeholder="Enter scoring instructions for judge questions..."
+                            class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm ${disabledClass}">${this.currentEvent.scoringCriteria?.commentInstructions || 'Judge Questions Scoring Guide (20 points per question):\n\n1-5 points: The team answered the question but did not explain how it impacts their position\n6-10 points: The team answered the question clearly and explained its relevance to their stance\n11-15 points: The team made their position clearer in light of the question\n16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement\n\nNote: Judges typically score each question individually (First, Second, Third Question)'}</textarea>
+                </div>
+
+                <!-- Total Score Calculation Display -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h5 class="text-sm font-medium text-blue-800 mb-2">Total Score Calculation</h5>
+                  <div class="text-sm text-blue-700">
+                    <div id="scoreCalculationDisplay">
+                      ${this.renderScoreCalculationDisplay()}
+                    </div>
+                  </div>
                 </div>
               </div>
               
@@ -843,7 +1064,8 @@ class EventWorkspacePage {
                 <div id="criteriaContainer" class="space-y-4">
                   ${this.renderCriteriaFields()}
                 </div>
-                <button type="button" id="addCriteriaBtn" class="mt-3 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+                <button type="button" id="addCriteriaBtn" ${disabledAttr}
+                        class="mt-3 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md ${isEventDraft ? 'text-gray-700 bg-white hover:bg-gray-50' : 'text-gray-400 bg-gray-100 cursor-not-allowed'} focus:outline-none">
                   <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                   </svg>
@@ -852,13 +1074,18 @@ class EventWorkspacePage {
               </div>
               
               <div class="flex justify-between items-center">
-                <button type="button" id="resetCriteriaBtn" class="text-sm text-gray-600 hover:text-gray-800">
+                <button type="button" id="resetCriteriaBtn" ${disabledAttr}
+                        class="text-sm ${isEventDraft ? 'text-gray-600 hover:text-gray-800' : 'text-gray-400 cursor-not-allowed'}">
                   Reset to Default
                 </button>
-                <button type="submit" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
-                  Save Criteria
+                <button type="submit" ${disabledAttr}
+                        class="px-4 py-2 rounded-md transition-colors font-medium ${isEventDraft ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}">
+                  Save All Settings
                 </button>
               </div>
+              <p class="text-xs text-gray-500 mt-2 text-center">
+                ${isEventDraft ? 'This will save judge questions configuration and scoring criteria' : 'Settings can only be saved when the event is in draft status'}
+              </p>
             </form>
           </div>
         </div>
@@ -885,14 +1112,55 @@ class EventWorkspacePage {
   }
 
   /**
+   * Render score calculation display
+   */
+  renderScoreCalculationDisplay() {
+    const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+    const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
+    const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
+    
+    // Calculate criteria total from saved criteria data
+    const criteriaTotal = Object.values(criteria).reduce((sum, criterion) => {
+      return sum + (criterion.maxScore || 0);
+    }, 0);
+    
+    // Calculate judge questions total
+    const judgeQuestionsTotal = commentQuestionsCount * commentMaxScore;
+    
+    // Calculate overall total
+    const overallTotal = criteriaTotal + judgeQuestionsTotal;
+    
+    return `
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span>Criteria Total:</span>
+          <span class="font-medium">${criteriaTotal} points</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Judge Questions Total:</span>
+          <span class="font-medium">${judgeQuestionsTotal} points (${commentQuestionsCount} × ${commentMaxScore})</span>
+        </div>
+        <div class="border-t border-blue-300 pt-2 flex justify-between font-bold">
+          <span>Maximum Total Score:</span>
+          <span>${overallTotal} points</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
    * Render criteria fields for scoring criteria form
    */
   renderCriteriaFields() {
     const criteria = this.currentEvent.scoringCriteria?.criteria || {
-      clarity: { weight: 0.3, description: 'Clarity of argument and presentation' },
-      analysis: { weight: 0.4, description: 'Depth of ethical analysis' },
-      engagement: { weight: 0.3, description: 'Engagement with opposing arguments' }
+      clarity: { maxScore: 20, description: 'Clarity of argument and presentation' },
+      analysis: { maxScore: 25, description: 'Depth of ethical analysis' },
+      engagement: { maxScore: 15, description: 'Engagement with opposing arguments' }
     };
+
+    const isEventDraft = this.currentEvent.status === 'draft';
+    const disabledClass = isEventDraft ? '' : 'bg-gray-100 cursor-not-allowed';
+    const disabledAttr = isEventDraft ? '' : 'disabled';
 
     return Object.entries(criteria).map(([key, value], index) => `
       <div class="criteria-item border border-gray-200 rounded-lg p-4 bg-gray-50" data-criteria-key="${key}">
@@ -902,21 +1170,22 @@ class EventWorkspacePage {
               <label class="block text-xs font-medium text-gray-700">Criteria Name</label>
               <input type="text" 
                      value="${key}" 
-                     data-field="name"
-                     class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                     data-field="name" ${disabledAttr}
+                     class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-700">Weight (0-1)</label>
+              <label class="block text-xs font-medium text-gray-700">Max Score</label>
               <input type="number" 
-                     value="${value.weight}" 
-                     data-field="weight"
-                     min="0" max="1" step="0.1"
-                     class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                     value="${value.maxScore || 0}" 
+                     data-field="maxScore" ${disabledAttr}
+                     min="0" max="100" step="1"
+                     class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
             </div>
             <div class="md:col-span-1">
               <div class="flex items-end h-full">
-                <button type="button" class="remove-criteria-btn text-red-600 hover:text-red-800 text-sm font-medium" 
-                        ${Object.keys(criteria).length <= 1 ? 'disabled' : ''}>
+                <button type="button" 
+                        ${!isEventDraft || Object.keys(criteria).length <= 1 ? 'disabled' : ''}
+                        class="remove-criteria-btn text-sm font-medium ${isEventDraft && Object.keys(criteria).length > 1 ? 'text-red-600 hover:text-red-800' : 'text-gray-400 cursor-not-allowed'}">
                   Remove
                 </button>
               </div>
@@ -927,9 +1196,9 @@ class EventWorkspacePage {
           <label class="block text-xs font-medium text-gray-700">Description</label>
           <input type="text" 
                  value="${value.description || ''}" 
-                 data-field="description"
+                 data-field="description" ${disabledAttr}
                  placeholder="Describe what this criteria evaluates"
-                 class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                 class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
         </div>
       </div>
     `).join('');
@@ -1239,6 +1508,14 @@ class EventWorkspacePage {
           
         case 'score-match':
           await this.scoreMatch(element.getAttribute('data-match-id'));
+          break;
+
+        case 'manage-match-status':
+          await this.manageMatchStatus(element.getAttribute('data-match-id'));
+          break;
+
+        case 'view-scores':
+          await this.viewMatchScores(element.getAttribute('data-match-id'));
           break;
           
         default:
@@ -1681,12 +1958,12 @@ class EventWorkspacePage {
       
       const confirmed = confirm(
         `Confirm start match?\n\n${teamAName} vs ${teamBName}\n\n` +
-        'Match will be marked as in progress.'
+        'Match will be started and available for scoring.'
       );
       
       if (!confirmed) return;
       
-      await this.matchService.updateMatchStatus(matchId, 'in_progress');
+      await this.matchService.updateMatchStatus(matchId, 'moderator_period_1');
       this.ui.showSuccess('Success', 'Match started successfully!');
       
       // Reload matches
@@ -1700,19 +1977,119 @@ class EventWorkspacePage {
   }
 
   /**
-   * Delete a match (only scheduled matches)
+   * Manage match status (moderator controls)
+   */
+  async manageMatchStatus(matchId) {
+    try {
+      // Get available status options from the server
+      const response = await this.matchService.getStatusOptions(matchId);
+      const statusOptions = response.data?.statusOptions || response.statusOptions || [];
+
+      if (!statusOptions || statusOptions.length === 0) {
+        this.ui.showError('Error', 'No status options available for this match');
+        return;
+      }
+
+      // Create a modal for status selection
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+      modal.innerHTML = `
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Manage Match Status</h3>
+            <div class="space-y-3">
+              <label class="block text-sm font-medium text-gray-700">Select New Status:</label>
+              <select id="statusSelect" class="block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                ${statusOptions.map(option => `
+                  <option value="${option.value}" ${!option.canSelect ? 'disabled' : ''}>
+                    ${option.label}
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+              <button id="cancelStatusChange" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200">
+                Cancel
+              </button>
+              <button id="confirmStatusChange" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700">
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Handle modal interactions
+      const statusSelect = document.getElementById('statusSelect');
+      const cancelBtn = document.getElementById('cancelStatusChange');
+      const confirmBtn = document.getElementById('confirmStatusChange');
+
+      const closeModal = () => {
+        document.body.removeChild(modal);
+      };
+
+      cancelBtn.addEventListener('click', closeModal);
+
+      confirmBtn.addEventListener('click', async () => {
+        const selectedStatus = statusSelect.value;
+        if (!selectedStatus) {
+          this.ui.showError('Error', 'Please select a status');
+          return;
+        }
+
+        try {
+          await this.matchService.updateMatchStatus(matchId, selectedStatus);
+
+          closeModal();
+          this.ui.showSuccess('Success', 'Match status updated successfully');
+          
+          // Reload matches data
+          await this.loadEventData();
+          document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+          
+        } catch (error) {
+          console.error('Failed to update match status:', error);
+          this.ui.showError('Error', 'Failed to update match status: ' + error.message);
+        }
+      });
+
+      // Close modal when clicking outside
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+    } catch (error) {
+      console.error('Failed to manage match status:', error);
+      let errorMessage = 'Failed to manage match status: ' + error.message;
+      
+      if (error.message.includes('not assigned') || error.message.includes('permission')) {
+        errorMessage = 'You are not assigned as moderator for this match or do not have permission to manage its status.';
+      } else if (error.message.includes('not found')) {
+        errorMessage = 'Match not found.';
+      }
+      
+      this.ui.showError('Error', errorMessage);
+    }
+  }
+
+  /**
+   * Delete a match (only draft matches)
    */
   async deleteMatch(matchId) {
     try {
-      // Find the match to confirm it's scheduled
+      // Find the match to confirm it's draft
       const match = this.matches.find(m => m.id === matchId);
       if (!match) {
         this.ui.showError('Error', 'Match not found');
         return;
       }
 
-      if (match.status !== 'scheduled') {
-        this.ui.showError('Error', 'Only scheduled matches can be deleted');
+      if (match.status !== 'draft') {
+        this.ui.showError('Error', 'Only draft matches can be deleted');
         return;
       }
 
@@ -1809,9 +2186,9 @@ class EventWorkspacePage {
         return;
       }
 
-      // Check if event is active
-      if (this.currentEvent.status === 'active') {
-        this.ui.showError('Cannot Delete Team', 'Cannot delete teams from active events');
+      // Check if event is not in draft status
+      if (this.currentEvent.status !== 'draft') {
+        this.ui.showError('Cannot Delete Team', `Cannot delete teams from ${this.currentEvent.status} events`);
         return;
       }
 
@@ -1837,8 +2214,8 @@ class EventWorkspacePage {
       
       if (error.message.includes('matches')) {
         errorMessage = 'Cannot delete team that has participated in matches';
-      } else if (error.message.includes('active')) {
-        errorMessage = 'Cannot delete teams from active events';
+      } else if (error.message.includes('active') || error.message.includes('completed')) {
+        errorMessage = error.message;
       } else if (error.message.includes('permission')) {
         errorMessage = 'You do not have permission to delete teams';
       }
@@ -1863,24 +2240,27 @@ class EventWorkspacePage {
       const teamBName = this.teams.find(t => t.id === match.teamBId)?.name || `Team ${match.teamBId}`;
       
       // Show match management options based on current status
-      if (match.status === 'scheduled') {
+      if (match.status === 'draft') {
         const action = confirm(
           `Match: ${teamAName} vs ${teamBName}\n\n` +
-          'Start this match? (This will mark it as in progress)'
+          'Start this match? (This will make it available for scoring)'
         );
         
         if (action) {
           await this.startMatch(matchId);
         }
-      } else if (match.status === 'in_progress') {
-        const action = confirm(
+      } else if (match.status !== 'draft' && match.status !== 'completed') {
+        // Match is in progress with new status system
+        this.ui.showInfo('Match In Progress', 
           `Match: ${teamAName} vs ${teamBName}\n\n` +
-          'Complete this match? (This will mark it as completed)'
+          `Current status: ${this.getMatchStatusText(match.status)}\n\n` +
+          'Use the "Manage Status" button to advance the match.'
         );
-        
-        if (action) {
-          await this.completeMatch(matchId);
-        }
+      } else if (match.status === 'completed') {
+        this.ui.showInfo('Match Completed', 
+          `Match: ${teamAName} vs ${teamBName}\n\n` +
+          'This match has been completed.'
+        );
       } else {
         this.ui.showError('Match Management', 'This match cannot be managed in its current state');
       }
@@ -1902,7 +2282,7 @@ class EventWorkspacePage {
         return;
       }
 
-      if (match.status !== 'in_progress' && match.status !== 'completed') {
+      if (!this.canJudgesScore(match.status)) {
         this.ui.showError('Scoring Error', 'This match is not available for scoring');
         return;
       }
@@ -1918,6 +2298,229 @@ class EventWorkspacePage {
     } catch (error) {
       console.error('Failed to open scoring interface:', error);
       this.ui.showError('Error', 'Failed to open scoring interface: ' + error.message);
+    }
+  }
+
+  /**
+   * View match scores (admin functionality)
+   */
+  async viewMatchScores(matchId) {
+    try {
+      const match = this.matches.find(m => m.id === matchId);
+      if (!match) {
+        this.ui.showError('Error', 'Match not found');
+        return;
+      }
+
+      // Function to fetch and display scores
+      const fetchAndDisplayScores = async () => {
+        try {
+          // Get scores for the match
+          const scoresResponse = await this.scoreService.getMatchScores(matchId);
+          const scores = scoresResponse.data?.scores || scoresResponse.scores || scoresResponse.data || scoresResponse || [];
+          
+          console.log('Scores response:', scoresResponse);
+          console.log('Parsed scores:', scores);
+
+          // Ensure scores is an array
+          const scoresArray = Array.isArray(scores) ? scores : [];
+
+          // Update the modal content if it exists
+          const modal = document.getElementById('viewScoresModal');
+          if (modal && modal.style.display === 'flex') {
+            this.updateScoresModalContent(match, scoresArray);
+          }
+
+          return scoresArray;
+        } catch (error) {
+          console.error('Error fetching scores:', error);
+          return [];
+        }
+      };
+
+      // Initial fetch
+      const scoresArray = await fetchAndDisplayScores();
+
+      // Set up auto-refresh
+      const autoRefreshInterval = setInterval(async () => {
+        const modal = document.getElementById('viewScoresModal');
+        if (modal && modal.style.display === 'flex') {
+          await fetchAndDisplayScores();
+        } else {
+          // Stop refreshing if modal is closed
+          clearInterval(autoRefreshInterval);
+        }
+      }, 5000); // Refresh every 5 seconds
+      
+      // Group scores by judge
+      const scoresByJudge = {};
+      scoresArray.forEach(score => {
+        const judgeId = score.judge.id;
+        if (!scoresByJudge[judgeId]) {
+          scoresByJudge[judgeId] = {
+            judge: score.judge,
+            scores: []
+          };
+        }
+        scoresByJudge[judgeId].scores.push(score);
+      });
+
+      // Get team names
+      const teamA = this.teams.find(t => t.id === match.teamAId);
+      const teamB = this.teams.find(t => t.id === match.teamBId);
+
+      // Create modal content
+      const modalContent = `
+        <div class="max-w-6xl w-full mx-auto">
+          <div class="bg-white rounded-lg shadow-lg max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
+                <button onclick="document.getElementById('viewScoresModal').style.display='none'" class="text-gray-400 hover:text-gray-600">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-2 text-sm text-gray-600">
+                ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'} • Round ${match.roundNumber} • ${match.room || 'No room assigned'}
+              </div>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow">
+              ${Object.keys(scoresByJudge).length === 0 ? `
+                <div class="text-center py-8 text-gray-500">
+                  <p>No scores submitted yet.</p>
+                </div>
+              ` : `
+                <div class="space-y-4">
+                  ${Object.values(scoresByJudge).map(judgeData => `
+                    <div class="border border-gray-200 rounded-lg p-4">
+                      <h3 class="text-base font-medium text-gray-900 mb-3">
+                        Judge: ${judgeData.judge.firstName} ${judgeData.judge.lastName}
+                      </h3>
+                      
+                      <div class="grid grid-cols-2 gap-4">
+                        ${judgeData.scores.map(score => {
+                          const team = this.teams.find(t => t.id === score.teamId);
+                          
+                          // Parse scores if they are strings (from database JSON)
+                          let criteriaScores = score.criteriaScores || {};
+                          let commentScores = score.commentScores || [];
+                          
+                          if (typeof criteriaScores === 'string') {
+                            try {
+                              criteriaScores = JSON.parse(criteriaScores);
+                            } catch (e) {
+                              console.error('Error parsing criteriaScores:', e);
+                              criteriaScores = {};
+                            }
+                          }
+                          
+                          if (typeof commentScores === 'string') {
+                            try {
+                              commentScores = JSON.parse(commentScores);
+                            } catch (e) {
+                              console.error('Error parsing commentScores:', e);
+                              commentScores = [];
+                            }
+                          }
+                          
+                          // Ensure commentScores is an array
+                          if (!Array.isArray(commentScores)) {
+                            commentScores = [];
+                          }
+                          
+                          // Calculate totals
+                          const criteriaTotal = Object.values(criteriaScores).reduce((sum, val) => sum + (val || 0), 0);
+                          const commentTotal = commentScores.reduce((sum, val) => sum + (val || 0), 0);
+                          const grandTotal = criteriaTotal + commentTotal;
+                          
+                          return `
+                            <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                              <h4 class="font-medium text-gray-900 mb-2">${team?.name || 'Unknown Team'}</h4>
+                              
+                              <div class="space-y-3 text-sm">
+                                <div>
+                                  <h5 class="font-medium text-gray-700 mb-1">Criteria Scores:</h5>
+                                  <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                    ${Object.entries(criteriaScores).map(([key, value]) => `
+                                      <div class="flex justify-between">
+                                        <span class="capitalize">${key.replace(/_/g, ' ')}:</span>
+                                        <span class="font-medium">${value || 0}</span>
+                                      </div>
+                                    `).join('')}
+                                  </div>
+                                  <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                                    <span>Criteria Total:</span>
+                                    <span>${criteriaTotal}</span>
+                                  </div>
+                                </div>
+                              
+                                <div>
+                                  <h5 class="font-medium text-gray-700 mb-1">Judge Questions:</h5>
+                                  <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                    ${commentScores.map((score, idx) => `
+                                      <div class="flex justify-between">
+                                        <span>Q${idx + 1}:</span>
+                                        <span class="font-medium">${score || 0}</span>
+                                      </div>
+                                    `).join('')}
+                                  </div>
+                                  <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                                    <span>Questions Total:</span>
+                                    <span>${commentTotal}</span>
+                                  </div>
+                                </div>
+                              
+                                <div class="flex justify-between text-base font-bold text-gray-900 pt-1 mt-1 border-t">
+                                  <span>Total Score:</span>
+                                  <span>${grandTotal}</span>
+                                </div>
+                                
+                                ${score.notes ? `
+                                  <div class="mt-2 pt-1 border-t">
+                                    <h5 class="font-medium text-gray-700 mb-1">Notes:</h5>
+                                    <p class="text-gray-600 italic text-xs">${score.notes}</p>
+                                  </div>
+                                ` : ''}
+                              </div>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Create and show modal
+      let modal = document.getElementById('viewScoresModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'viewScoresModal';
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+        modal.style.display = 'none';
+        document.body.appendChild(modal);
+
+        // Add close event listener to stop auto-refresh
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.style.display = 'none';
+          }
+        });
+      }
+      
+      modal.innerHTML = modalContent;
+      modal.style.display = 'flex';
+
+    } catch (error) {
+      console.error('Error viewing match scores:', error);
+      this.ui.showError('Error', 'Failed to load match scores: ' + error.message);
     }
   }
 
@@ -2094,19 +2697,164 @@ class EventWorkspacePage {
   }
 
   getMatchStatusClasses(status) {
-    switch (status) {
-      case 'scheduled': return 'bg-gray-100 text-gray-800 border border-gray-300';
-      case 'in_progress': return 'bg-gray-700 text-white';
-      case 'completed': return 'bg-black text-white';
-      case 'cancelled': return 'bg-gray-200 text-gray-600 border border-gray-300';
-      default: return 'bg-gray-100 text-gray-800 border border-gray-300';
+    // Handle new detailed status system
+    if (status === 'draft') {
+      return 'bg-gray-100 text-gray-800 border border-gray-300';
+    } else if (status === 'completed') {
+      return 'bg-black text-white';
+    } else if (status.startsWith('moderator_period')) {
+      return 'bg-blue-600 text-white';
+    } else if (status.startsWith('team_a_') || status.startsWith('team_b_')) {
+      return 'bg-green-600 text-white';
+    } else if (status.startsWith('judge_')) {
+      return 'bg-purple-600 text-white';
+    } else if (status === 'final_scoring') {
+      return 'bg-orange-600 text-white';
+    } else {
+      // Legacy status handling
+      switch (status) {
+        case 'scheduled': return 'bg-gray-100 text-gray-800 border border-gray-300'; // legacy support
+        case 'in_progress': return 'bg-gray-700 text-white'; // legacy support
+        case 'cancelled': return 'bg-gray-200 text-gray-600 border border-gray-300';
+        default: return 'bg-gray-100 text-gray-800 border border-gray-300';
+      }
     }
   }
 
   getMatchStatusText(status) {
+    // Handle new detailed status system
+    const statusDisplayMap = {
+      'draft': 'Draft',
+      'moderator_period_1': 'Moderator Period 1',
+      'team_a_conferral_1_1': 'Team A Conferral 1.1',
+      'team_a_presentation': 'Team A Presentation',
+      'team_b_conferral_1_1': 'Team B Conferral 1.1',
+      'team_b_commentary': 'Team B Commentary',
+      'team_a_conferral_1_2': 'Team A Conferral 1.2',
+      'team_a_response': 'Team A Response',
+      'moderator_period_2': 'Moderator Period 2',
+      'team_b_conferral_2_1': 'Team B Conferral 2.1',
+      'team_b_presentation': 'Team B Presentation',
+      'team_a_conferral_2_1': 'Team A Conferral 2.1',
+      'team_a_commentary': 'Team A Commentary',
+      'team_b_conferral_2_2': 'Team B Conferral 2.2',
+      'team_b_response': 'Team B Response',
+      'final_scoring': 'Final Scoring',
+      'completed': 'Completed'
+    };
+
+    // Handle dynamic judge statuses
+    const judgeMatch = status.match(/^judge_(\d+)_(\d+)$/);
+    if (judgeMatch) {
+      const period = judgeMatch[1];
+      const questionNum = judgeMatch[2];
+      return `Judge ${period}.${questionNum}`;
+    }
+
+    // Check predefined status map
+    if (statusDisplayMap[status]) {
+      return statusDisplayMap[status];
+    }
+
+    // Legacy status handling
     switch (status) {
-      case 'in_progress': return 'In Progress';
+      case 'in_progress': return 'In Progress'; // legacy support
+      case 'scheduled': return 'Scheduled'; // legacy support
       default: return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+  }
+
+  /**
+   * Check if judges can score at current match status
+   */
+  canJudgesScore(status) {
+    // Judges can score from moderator_period_1 onwards until final_scoring
+    const scoringStatuses = [
+      'moderator_period_1',
+      'team_a_conferral_1_1',
+      'team_a_presentation',
+      'team_b_conferral_1_1',
+      'team_b_commentary',
+      'team_a_conferral_1_2',
+      'team_a_response',
+      'moderator_period_2',
+      'team_b_conferral_2_1',
+      'team_b_presentation',
+      'team_a_conferral_2_1',
+      'team_a_commentary',
+      'team_b_conferral_2_2',
+      'team_b_response',
+      'final_scoring'
+    ];
+
+    // Check if it's a judge question status
+    if (status.match(/^judge_\d+_\d+$/)) {
+      return true;
+    }
+
+    return scoringStatuses.includes(status) || status === 'in_progress'; // legacy support
+  }
+
+  /**
+   * Check if current judge has submitted scores for a match
+   */
+  async hasJudgeSubmittedScores(matchId) {
+    try {
+      if (!this.authManager.currentUser || this.authManager.currentUser.role !== 'judge') {
+        return false;
+      }
+      
+      const response = await this.scoreService.getMatchScores(matchId);
+      const scores = response.data?.scores || response.scores || response.data || response || [];
+      
+      // Check if current judge has submitted scores
+      const currentJudgeScores = scores.filter(
+        score => score.judgeId === this.authManager.currentUser.id && score.isSubmitted
+      );
+      
+      return currentJudgeScores.length > 0;
+    } catch (error) {
+      console.error('Error checking judge scores:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Refresh judge scores status for a specific match
+   */
+  async refreshMatchScoreStatus(matchId) {
+    try {
+      if (this.authManager.currentUser.role === 'judge') {
+        const hasSubmitted = await this.hasJudgeSubmittedScores(matchId);
+        this.judgeScoresCache.set(matchId, hasSubmitted);
+        
+        // Re-render the matches tab if it's currently active
+        if (this.currentTab === 'matches') {
+          const workspaceContent = document.getElementById('workspace-content');
+          if (workspaceContent) {
+            workspaceContent.innerHTML = this.renderTabContent();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing match score status:', error);
+    }
+  }
+
+  /**
+   * Refresh all judge scores status
+   */
+  async refreshAllScoreStatuses() {
+    if (this.authManager.currentUser.role === 'judge') {
+      await this.preloadJudgeScoresStatus();
+      
+      // Re-render current tab if it shows matches
+      if (this.currentTab === 'matches' || this.currentTab === 'overview') {
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
     }
   }
 
@@ -2123,6 +2871,12 @@ class EventWorkspacePage {
    */
   async handleScoringCriteria(event) {
     try {
+      // Check if event is in draft status
+      if (!this.currentEvent || this.currentEvent.status !== 'draft') {
+        this.ui.showError('Error', 'Scoring criteria can only be modified when the event is in draft status.');
+        return;
+      }
+
       const formData = new FormData(event.target);
       const submitButton = event.target.querySelector('button[type="submit"]');
       
@@ -2148,9 +2902,10 @@ class EventWorkspacePage {
       }
       
       const scoringCriteria = {
-        commentMaxScore: parseInt(formData.get('commentMaxScore')),
-        criteria: criteriaData.criteria,
-        commentInstructions: this.currentEvent.scoringCriteria?.commentInstructions || ''
+        commentQuestionsCount: parseInt(formData.get('commentQuestionsCount')) || 3,
+        commentMaxScore: parseInt(formData.get('commentMaxScore')) || 20,
+        commentInstructions: formData.get('commentInstructions') || '',
+        criteria: criteriaData.criteria
       };
 
       // Update event with new scoring criteria
@@ -2159,20 +2914,20 @@ class EventWorkspacePage {
       });
       
       this.currentEvent = response.data || response;
-      this.ui.showSuccess('Success', 'Scoring criteria updated successfully');
+      this.ui.showSuccess('Success', 'Scoring settings updated successfully');
       
       // Re-render settings tab to show updated data
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
       
     } catch (error) {
-      console.error('Failed to update scoring criteria:', error);
-      this.ui.showError('Error', 'Failed to update scoring criteria: ' + error.message);
+      console.error('Failed to update scoring settings:', error);
+      this.ui.showError('Error', 'Failed to update scoring settings: ' + error.message);
     } finally {
       // Re-enable submit button
       const submitButton = event.target.querySelector('button[type="submit"]');
       if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = 'Save Criteria';
+        submitButton.textContent = 'Save All Settings';
       }
     }
   }
@@ -2183,34 +2938,32 @@ class EventWorkspacePage {
   collectCriteriaData() {
     const criteriaItems = document.querySelectorAll('.criteria-item');
     const criteria = {};
-    let totalWeight = 0;
 
     criteriaItems.forEach(item => {
       const nameInput = item.querySelector('[data-field="name"]');
-      const weightInput = item.querySelector('[data-field="weight"]');
+      const maxScoreInput = item.querySelector('[data-field="maxScore"]');
       const descInput = item.querySelector('[data-field="description"]');
       
       const name = nameInput.value.trim();
-      const weight = parseFloat(weightInput.value);
+      const maxScore = parseInt(maxScoreInput.value) || 0;
       const description = descInput.value.trim();
       
-      if (name && !isNaN(weight)) {
+      if (name && maxScore > 0) {
         criteria[name] = {
-          weight: weight,
+          maxScore: maxScore,
           description: description
         };
-        totalWeight += weight;
       }
     });
 
-    return { criteria, totalWeight };
+    return { criteria };
   }
 
   /**
    * Validate criteria data
    */
   validateCriteria(criteriaData) {
-    const { criteria, totalWeight } = criteriaData;
+    const { criteria } = criteriaData;
     
     if (Object.keys(criteria).length === 0) {
       return { isValid: false, message: 'At least one criteria is required' };
@@ -2223,20 +2976,19 @@ class EventWorkspacePage {
       return { isValid: false, message: 'Criteria names must be unique' };
     }
     
-    // Check weight total (should be <= 1.0)
-    if (totalWeight > 1.0) {
-      return { 
-        isValid: false, 
-        message: `Total weight cannot exceed 1.0, current total: ${totalWeight.toFixed(2)}` 
-      };
-    }
-    
-    // Check individual weights
+    // Check individual max scores
     for (const [name, data] of Object.entries(criteria)) {
-      if (data.weight <= 0 || data.weight > 1) {
+      if (!name || name.length < 2) {
         return { 
           isValid: false, 
-          message: `Weight for "${name}" must be between 0 and 1` 
+          message: 'Each criteria must have a valid name (at least 2 characters)' 
+        };
+      }
+      
+      if (data.maxScore <= 0 || data.maxScore > 100) {
+        return { 
+          isValid: false, 
+          message: `Max score for "${name}" must be between 1 and 100` 
         };
       }
     }
@@ -2252,6 +3004,11 @@ class EventWorkspacePage {
     const criteriaCount = container.children.length;
     const newKey = `criteria_${criteriaCount + 1}`;
     
+    // Check if event is in draft status to determine if fields should be disabled
+    const isEventDraft = this.currentEvent && this.currentEvent.status === 'draft';
+    const disabledClass = isEventDraft ? '' : 'bg-gray-100 cursor-not-allowed';
+    const disabledAttr = isEventDraft ? '' : 'disabled';
+    
     const newFieldHTML = `
       <div class="criteria-item border border-gray-200 rounded-lg p-4 bg-gray-50" data-criteria-key="${newKey}">
         <div class="flex justify-between items-start mb-3">
@@ -2260,20 +3017,22 @@ class EventWorkspacePage {
               <label class="block text-xs font-medium text-gray-700">Criteria Name</label>
               <input type="text" 
                      value="${newKey}" 
-                     data-field="name"
-                     class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                     data-field="name" ${disabledAttr}
+                     class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-700">Weight (0-1)</label>
+              <label class="block text-xs font-medium text-gray-700">Max Score</label>
               <input type="number" 
-                     value="0.1" 
-                     data-field="weight"
-                     min="0" max="1" step="0.1"
-                     class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                     value="10" 
+                     data-field="maxScore" ${disabledAttr}
+                     min="0" max="100" step="1"
+                     class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
             </div>
             <div class="md:col-span-1">
               <div class="flex items-end h-full">
-                <button type="button" class="remove-criteria-btn text-red-600 hover:text-red-800 text-sm font-medium">
+                <button type="button" 
+                        ${!isEventDraft ? 'disabled' : ''}
+                        class="remove-criteria-btn text-sm font-medium ${isEventDraft ? 'text-red-600 hover:text-red-800' : 'text-gray-400 cursor-not-allowed'}">
                   Remove
                 </button>
               </div>
@@ -2284,22 +3043,23 @@ class EventWorkspacePage {
           <label class="block text-xs font-medium text-gray-700">Description</label>
           <input type="text" 
                  value="" 
-                 data-field="description"
+                 data-field="description" ${disabledAttr}
                  placeholder="Describe what this criteria evaluates"
-                 class="mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                 class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
         </div>
       </div>
     `;
     
     container.insertAdjacentHTML('beforeend', newFieldHTML);
+    this.updateScoreCalculation();
   }
 
   /**
    * Remove criteria field
    */
   removeCriteriaField(button) {
-    const criteriaField = button.closest('.criteria-field');
-    if (!criteriaField) return;
+    const criteriaItem = button.closest('.criteria-item');
+    if (!criteriaItem) return;
     
     const container = document.getElementById('criteriaContainer');
     if (!container) return;
@@ -2310,284 +3070,80 @@ class EventWorkspacePage {
       return;
     }
     
-    criteriaField.remove();
+    criteriaItem.remove();
+    this.updateScoreCalculation();
   }
 
   /**
-   * Update weight total display
+   * Update score calculation display
    */
-  updateWeightTotal() {
-    const weightInputs = document.querySelectorAll('[data-field="weight"]');
-    let total = 0;
-    
-    weightInputs.forEach(input => {
-      const value = parseFloat(input.value) || 0;
-      total += value;
-    });
-    
-    const weightSumElement = document.getElementById('weightSum');
-    const weightTotalElement = document.getElementById('weightTotal');
-    
-    if (weightSumElement) {
-      weightSumElement.textContent = total.toFixed(1);
-      
-      // Color coding based on total
-      if (total > 1.0) {
-        weightTotalElement.className = 'text-sm text-red-600';
-      } else if (total === 1.0) {
-        weightTotalElement.className = 'text-sm text-green-600';
-      } else {
-        weightTotalElement.className = 'text-sm text-gray-600';
-      }
-    }
-  }
-
-  /**
-   * Reset criteria to default values
-   */
-  resetCriteriaToDefault() {
-    if (!confirm('Reset criteria to default values? This will overwrite current settings.')) {
+  updateScoreCalculation() {
+    const scoreDisplay = document.getElementById('scoreCalculationDisplay');
+    if (!scoreDisplay) {
+      console.log('Score display element not found');
       return;
     }
     
-    // Update the current event data with default criteria
-    this.currentEvent.scoringCriteria = {
-      commentMaxScore: 20, // Max score for each judge question
-      criteria: {
-        clarity_systematicity: { 
-          description: `Clarity & Systematicity
-0-1: The team did not present a clear and identifiable position in response to the moderator's question
-2-3: The team presented a clear position and supported it with identifiable reasons
-4-5: The team presented a clear, well-articulated, and jointly coherent position with strong reasoning`,
-          maxScore: 5
-        },
-        moral_dimension: { 
-          description: `Moral Dimension
-1: The team did not unequivocally identify the moral problem(s) at the heart of the case
-2-3: The team identified the moral issue(s) and applied moral concepts (e.g., duties, values, rights, responsibilities) to relevant aspects of the case
-4-5: The team effectively tackled the underlying moral tensions, thoughtfully applying relevant moral concepts`,
-          maxScore: 5
-        },
-        opposing_viewpoints: { 
-          description: `Opposing Viewpoints
-1: The team did not acknowledge any strong, conflicting viewpoints that would lead to reasonable disagreement
-2-3: The team acknowledged conflicting viewpoints and explained why these viewpoints pose a serious challenge to their position
-4-5: The team charitably and thoroughly explained opposing viewpoints and argued why their position better defuses the moral tension in the case`,
-          maxScore: 5
-        },
-        commentary: { 
-          description: `Commentary
-1-2: The team did not provide a manageable number of suggestions, questions, or critiques
-3-5: The team provided a focused set of constructive critiques and questions, addressing key moral considerations
-6-8: The commentary was thoughtful, relevant, and constructively critical, focusing on salient moral issues
-9-10: The commentary offered novel suggestions and options to help the presenting team refine or modify their position`,
-          maxScore: 10
-        },
-        response: { 
-          description: `Response
-1-2: The team minimally engaged with the commentary, ignoring key points
-3-5: The team prioritized and addressed main suggestions, questions, and critiques
-6-8: The team charitably explained why the commentary challenges their position, making their stance clearer
-9-10: The team refined their position or clearly explained why refinement was unnecessary, demonstrating careful engagement with the feedback`,
-          maxScore: 10
-        },
-        respectful_dialogue: { 
-          description: `Respectful Dialogue
-1: The team rarely acknowledged differing viewpoints
-2-3: The team sometimes acknowledged other perspectives and showed some reflection
-4-5: The team repeatedly acknowledged opposing viewpoints, demonstrated genuine reflection, and improved their position in light of the other team's contributions, regardless of final agreement`,
-          maxScore: 5
-        }
-      },
-      commentInstructions: `Judge Questions Scoring Guide (20 points per question):
-
-1-5 points: The team answered the question but did not explain how it impacts their position
-6-10 points: The team answered the question clearly and explained its relevance to their stance
-11-15 points: The team made their position clearer in light of the question
-16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement
-
-Note: Judges typically score each question individually (First, Second, Third Question)`
-    };
+    // Get current values from form
+    const commentQuestionsCount = parseInt(document.querySelector('[name="commentQuestionsCount"]')?.value) || 3;
+    const commentMaxScore = parseInt(document.querySelector('[name="commentMaxScore"]')?.value) || 20;
     
-    // Re-render the settings tab
-    document.getElementById('workspace-content').innerHTML = this.renderTabContent();
-  }
-
-  /**
-   * Render criteria fields
-   */
-  renderCriteriaFields() {
-    const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+    // Calculate criteria total from current form values
+    const criteriaInputs = document.querySelectorAll('[data-field="maxScore"]');
+    let criteriaTotal = 0;
     
-    return Object.entries(criteria).map(([key, data]) => `
-      <div class="criteria-field bg-gray-50 p-4 rounded-lg">
-        <div class="flex items-start space-x-4">
-          <div class="flex-grow">
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-gray-700">Criteria Name</label>
-              <input type="text" 
-                     name="criteriaName" 
-                     value="${key}"
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-gray-700">Description</label>
-              <input type="text" 
-                     name="criteriaDescription" 
-                     value="${data.description || ''}"
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Max Score</label>
-              <input type="number" 
-                     name="criteriaMaxScore" 
-                     value="${data.maxScore || 100}"
-                     min="1" 
-                     max="100"
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-          </div>
-          <button type="button" 
-                  class="remove-criteria-btn text-red-600 hover:text-red-800"
-                  data-criteria-key="${key}">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
+    console.log('Criteria inputs found:', criteriaInputs.length);
+    
+    if (criteriaInputs.length > 0) {
+      // If we have form inputs, use those values
+      criteriaInputs.forEach(input => {
+        const value = parseInt(input.value) || 0;
+        console.log('Criteria input value:', value);
+        criteriaTotal += value;
+      });
+      console.log('Using form inputs - Criteria total:', criteriaTotal);
+    } else {
+      // Fallback: use saved criteria data if form inputs are not available
+      const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+      criteriaTotal = Object.values(criteria).reduce((sum, criterion) => {
+        return sum + (criterion.maxScore || 0);
+      }, 0);
+      console.log('Using saved data - Criteria total:', criteriaTotal);
+    }
+    
+    // Calculate judge questions total
+    const judgeQuestionsTotal = commentQuestionsCount * commentMaxScore;
+    
+    // Calculate overall total
+    const overallTotal = criteriaTotal + judgeQuestionsTotal;
+    
+    console.log('Final calculation:', {
+      criteriaTotal,
+      judgeQuestionsTotal,
+      overallTotal,
+      commentQuestionsCount,
+      commentMaxScore
+    });
+    
+    scoreDisplay.innerHTML = `
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span>Criteria Total:</span>
+          <span class="font-medium">${criteriaTotal} points</span>
         </div>
-      </div>
-    `).join('') || this.renderDefaultCriteriaField();
-  }
-
-  /**
-   * Render default criteria field
-   */
-  renderDefaultCriteriaField() {
-    return `
-      <div class="criteria-field bg-gray-50 p-4 rounded-lg">
-        <div class="flex items-start space-x-4">
-          <div class="flex-grow">
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-gray-700">Criteria Name</label>
-              <input type="text" 
-                     name="criteriaName" 
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-gray-700">Description</label>
-              <input type="text" 
-                     name="criteriaDescription" 
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Max Score</label>
-              <input type="number" 
-                     name="criteriaMaxScore" 
-                     value="100"
-                     min="1" 
-                     max="100"
-                     class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
-                     required>
-            </div>
-          </div>
+        <div class="flex justify-between">
+          <span>Judge Questions Total:</span>
+          <span class="font-medium">${judgeQuestionsTotal} points (${commentQuestionsCount} × ${commentMaxScore})</span>
+        </div>
+        <div class="border-t border-blue-300 pt-2 flex justify-between font-bold">
+          <span>Maximum Total Score:</span>
+          <span>${overallTotal} points</span>
         </div>
       </div>
     `;
   }
 
   /**
-   * Add new criteria field
-   */
-  addCriteriaField() {
-    const container = document.getElementById('criteriaContainer');
-    if (container) {
-      const newField = document.createElement('div');
-      newField.innerHTML = this.renderDefaultCriteriaField();
-      container.appendChild(newField.firstElementChild);
-    }
-  }
-
-  /**
-   * Collect criteria data from form
-   */
-  collectCriteriaData() {
-    const criteriaFields = document.querySelectorAll('.criteria-field');
-    const criteria = {};
-    
-    criteriaFields.forEach(field => {
-      const nameInput = field.querySelector('[name="criteriaName"]');
-      const descriptionInput = field.querySelector('[name="criteriaDescription"]');
-      const maxScoreInput = field.querySelector('[name="criteriaMaxScore"]');
-      
-      if (nameInput && descriptionInput && maxScoreInput) {
-        const name = nameInput.value.trim().toLowerCase();
-        if (name) {
-          criteria[name] = {
-            description: descriptionInput.value.trim(),
-            maxScore: parseInt(maxScoreInput.value) || 100
-          };
-        }
-      }
-    });
-    
-    return { criteria };
-  }
-
-  /**
-   * Validate criteria data
-   */
-  validateCriteria(data) {
-    if (!data.criteria || Object.keys(data.criteria).length === 0) {
-      return {
-        isValid: false,
-        message: 'At least one scoring criteria is required'
-      };
-    }
-
-    // Check for duplicate names
-    const names = Object.keys(data.criteria);
-    const uniqueNames = new Set(names);
-    if (uniqueNames.size !== names.length) {
-      return {
-        isValid: false,
-        message: 'Each criteria must have a unique name'
-      };
-    }
-
-    // Validate each criteria
-    for (const [name, criteriaData] of Object.entries(data.criteria)) {
-      if (!name || name.length < 2) {
-        return {
-          isValid: false,
-          message: 'Each criteria must have a valid name (at least 2 characters)'
-        };
-      }
-
-      if (!criteriaData.description) {
-        return {
-          isValid: false,
-          message: `Description is required for criteria "${name}"`
-        };
-      }
-
-      const maxScore = parseInt(criteriaData.maxScore);
-      if (isNaN(maxScore) || maxScore < 1 || maxScore > 100) {
-        return {
-          isValid: false,
-          message: `Max score for criteria "${name}" must be between 1 and 100`
-        };
-      }
-    }
-
-    return { isValid: true };
-  }
-
-  /**
    * Reset criteria to default values
    */
   resetCriteriaToDefault() {
@@ -2597,7 +3153,16 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     
     // Update the current event data with default criteria
     this.currentEvent.scoringCriteria = {
-      commentMaxScore: 20, // Max score for each judge question
+      commentQuestionsCount: 3,
+      commentMaxScore: 20,
+      commentInstructions: `Judge Questions Scoring Guide (20 points per question):
+
+1-5 points: The team answered the question but did not explain how it impacts their position
+6-10 points: The team answered the question clearly and explained its relevance to their stance
+11-15 points: The team made their position clearer in light of the question
+16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement
+
+Note: Judges typically score each question individually (First, Second, Third Question)`,
       criteria: {
         clarity_systematicity: { 
           description: `Clarity & Systematicity
@@ -2643,21 +3208,163 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 4-5: The team repeatedly acknowledged opposing viewpoints, demonstrated genuine reflection, and improved their position in light of the other team's contributions, regardless of final agreement`,
           maxScore: 5
         }
-      },
-      commentInstructions: `Judge Questions Scoring Guide (20 points per question):
-
-1-5 points: The team answered the question but did not explain how it impacts their position
-6-10 points: The team answered the question clearly and explained its relevance to their stance
-11-15 points: The team made their position clearer in light of the question
-16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement
-
-Note: Judges typically score each question individually (First, Second, Third Question)`
+      }
     };
     
     // Re-render the settings tab
     document.getElementById('workspace-content').innerHTML = this.renderTabContent();
   }
 
+  /**
+   * Update scores modal content
+   */
+  updateScoresModalContent(match, scoresArray) {
+    // Get team names
+    const teamA = this.teams.find(t => t.id === match.teamAId);
+    const teamB = this.teams.find(t => t.id === match.teamBId);
+
+    // Group scores by judge
+    const scoresByJudge = {};
+    scoresArray.forEach(score => {
+      const judgeId = score.judge.id;
+      if (!scoresByJudge[judgeId]) {
+        scoresByJudge[judgeId] = {
+          judge: score.judge,
+          scores: []
+        };
+      }
+      scoresByJudge[judgeId].scores.push(score);
+    });
+
+    // Create modal content
+    const modalContent = `
+      <div class="max-w-6xl w-full mx-auto">
+        <div class="bg-white rounded-lg shadow-lg max-h-[90vh] flex flex-col">
+          <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+            <div class="flex justify-between items-center">
+              <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
+              <button onclick="document.getElementById('viewScoresModal').style.display='none'" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+            <div class="mt-2 text-sm text-gray-600">
+              ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'} • Round ${match.roundNumber} • ${match.room || 'No room assigned'}
+            </div>
+          </div>
+          
+          <div class="p-6 overflow-y-auto flex-grow">
+            ${Object.values(scoresByJudge).map(judgeData => {
+              const { judge, scores } = judgeData;
+              
+              return `
+                <div class="mb-8 last:mb-0">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">
+                      ${judge.firstName} ${judge.lastName}
+                      <span class="text-sm text-gray-500">(${judge.email})</span>
+                    </h3>
+                    ${scores.every(s => s.isSubmitted) ? `
+                      <div class="bg-green-100 text-green-800 text-sm px-2 py-1 rounded-full flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        Submitted
+                      </div>
+                    ` : `
+                      <div class="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                        </svg>
+                        Pending
+                      </div>
+                    `}
+                  </div>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    ${scores.map(score => {
+                      const team = score.team;
+                      const criteriaScores = score.criteriaScores || {};
+                      let commentScores = score.commentScores || [];
+                      
+                      // Ensure commentScores is an array
+                      if (!Array.isArray(commentScores)) {
+                        commentScores = [];
+                      }
+                      
+                      // Calculate totals
+                      const criteriaTotal = Object.values(criteriaScores).reduce((sum, val) => sum + (val || 0), 0);
+                      const commentTotal = commentScores.reduce((sum, val) => sum + (val || 0), 0);
+                      const grandTotal = criteriaTotal + commentTotal;
+                      
+                      return `
+                        <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                          <h4 class="font-medium text-gray-900 mb-2">${team?.name || 'Unknown Team'}</h4>
+                          
+                          <div class="space-y-3 text-sm">
+                            <div>
+                              <h5 class="font-medium text-gray-700 mb-1">Criteria Scores:</h5>
+                              <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                ${Object.entries(criteriaScores).map(([key, value]) => `
+                                  <div class="flex justify-between">
+                                    <span class="capitalize">${key.replace(/_/g, ' ')}:</span>
+                                    <span class="font-medium">${value || 0}</span>
+                                  </div>
+                                `).join('')}
+                              </div>
+                              <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                                <span>Criteria Total:</span>
+                                <span>${criteriaTotal}</span>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h5 class="font-medium text-gray-700 mb-1">Judge Questions:</h5>
+                              <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                                ${commentScores.map((score, index) => `
+                                  <div class="flex justify-between">
+                                    <span>Question ${index + 1}:</span>
+                                    <span class="font-medium">${score || 0}</span>
+                                  </div>
+                                `).join('')}
+                              </div>
+                              <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                                <span>Questions Total:</span>
+                                <span>${commentTotal}</span>
+                              </div>
+                            </div>
+                            
+                            <div class="flex justify-between text-base font-bold pt-2 mt-2 border-t border-gray-200">
+                              <span>Grand Total:</span>
+                              <span>${grandTotal}</span>
+                            </div>
+                            
+                            ${score.notes ? `
+                              <div class="mt-3 pt-3 border-t border-gray-200">
+                                <h5 class="font-medium text-gray-700 mb-1">Notes:</h5>
+                                <p class="text-gray-600 whitespace-pre-line">${score.notes}</p>
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Update modal content
+    const modal = document.getElementById('viewScoresModal');
+    if (modal) {
+      modal.innerHTML = modalContent;
+    }
+  }
 }
 
 // Make available globally

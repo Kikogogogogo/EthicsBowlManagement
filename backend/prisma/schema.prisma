@@ -79,7 +79,7 @@ model Match {
   moderatorId   String?           @map("moderator_id")
   room          String?
   scheduledTime DateTime?         @map("scheduled_time")
-  status        String            @default("scheduled")
+  status        String            @default("draft")
   currentStep   String            @default("intro") @map("current_step")
   winnerId      String?           @map("winner_id")
   createdAt     DateTime          @default(now()) @map("created_at")

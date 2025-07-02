@@ -209,8 +209,11 @@ class DashboardPage {
         }
       }
       
+      // Show workspace page via UI manager
+      this.uiManager.showPage('event-workspace');
+      
       // Navigate to event workspace
-      window.eventWorkspacePage.show(eventId);
+      await window.eventWorkspacePage.show(eventId);
     } catch (error) {
       console.error('Error opening event workspace:', error);
       this.showError('Failed to open event workspace: ' + error.message);

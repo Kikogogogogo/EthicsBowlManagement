@@ -309,6 +309,10 @@ class EventsPage {
     this.ui.elements.eventModalTitle.textContent = 'Create Event';
     this.ui.elements.saveEventBtn.textContent = 'Create Event';
     this.resetEventForm();
+    
+    // For new events, set up the status selector with all options available
+    this.updateStatusOptions('draft');
+    
     this.showEventModal();
   }
 
@@ -404,6 +408,29 @@ class EventsPage {
     if (this.ui.elements.eventForm) {
       this.ui.elements.eventForm.reset();
     }
+    
+    // Reset status selector to default (all options available for new events)
+    if (!this.currentEventId) {
+      this.updateStatusOptions('draft');
+    }
+    
+    // Set default total rounds to 3 for new events
+    if (!this.currentEventId && this.ui.elements.eventTotalRounds) {
+      this.ui.elements.eventTotalRounds.value = '3';
+    }
+    
+    // Set default current round to 1 for new events
+    if (!this.currentEventId && this.ui.elements.eventCurrentRound) {
+      this.ui.elements.eventCurrentRound.value = '1';
+    }
+    
+    // Clean up status help text if it exists
+    const statusHelp = document.getElementById('event-status-help');
+    if (statusHelp && !this.currentEventId) {
+      statusHelp.className = 'mt-2 text-sm text-gray-500';
+      statusHelp.textContent = 'Draft events can be changed to any status.';
+    }
+    
     this.hideEventModalError();
   }
 
@@ -422,6 +449,9 @@ class EventsPage {
     }
     if (this.ui.elements.eventStatus) {
       this.ui.elements.eventStatus.value = event.status || 'draft';
+      
+      // Restrict status options based on current status
+      this.updateStatusOptions(event.status);
     }
     if (this.ui.elements.eventLocation) {
       this.ui.elements.eventLocation.value = event.location || '';
@@ -429,6 +459,66 @@ class EventsPage {
     if (this.ui.elements.eventMaxTeams) {
       this.ui.elements.eventMaxTeams.value = event.maxTeams || '';
     }
+    if (this.ui.elements.eventTotalRounds) {
+      this.ui.elements.eventTotalRounds.value = event.totalRounds || '3';
+    }
+    if (this.ui.elements.eventCurrentRound) {
+      this.ui.elements.eventCurrentRound.value = event.currentRound || '1';
+    }
+  }
+
+  /**
+   * Update status options based on current event status
+   */
+  updateStatusOptions(currentStatus) {
+    const statusSelect = this.ui.elements.eventStatus;
+    if (!statusSelect) return;
+
+    // Clear existing options
+    statusSelect.innerHTML = '';
+
+    // Find or create status help text element
+    let statusHelp = document.getElementById('event-status-help');
+    if (!statusHelp) {
+      statusHelp = document.createElement('p');
+      statusHelp.id = 'event-status-help';
+      statusHelp.className = 'mt-2 text-sm';
+      statusSelect.parentNode.appendChild(statusHelp);
+    }
+
+    if (currentStatus === 'draft') {
+      // Draft events can be changed to any status
+      statusSelect.innerHTML = `
+        <option value="draft">Draft</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+      `;
+      statusSelect.disabled = false;
+      statusSelect.className = 'mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm';
+      statusHelp.className = 'mt-2 text-sm text-gray-500';
+      statusHelp.textContent = 'Draft events can be changed to any status.';
+    } else if (currentStatus === 'active') {
+      // Active events can only stay active (cannot be changed back to draft or forward to completed)
+      statusSelect.innerHTML = `
+        <option value="active">Active</option>
+      `;
+      statusSelect.disabled = true;
+      statusSelect.className = 'mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-400 focus:border-gray-400 sm:text-sm bg-gray-100 cursor-not-allowed';
+      statusHelp.className = 'mt-2 text-sm text-yellow-600';
+      statusHelp.innerHTML = '<strong>Status Locked:</strong> Active events cannot be changed back to draft or forward to completed.';
+    } else if (currentStatus === 'completed') {
+      // Completed events cannot be changed
+      statusSelect.innerHTML = `
+        <option value="completed">Completed</option>
+      `;
+      statusSelect.disabled = true;
+      statusSelect.className = 'mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-400 focus:border-gray-400 sm:text-sm bg-gray-100 cursor-not-allowed';
+      statusHelp.className = 'mt-2 text-sm text-red-600';
+      statusHelp.innerHTML = '<strong>Status Locked:</strong> Completed events cannot be changed.';
+    }
+
+    // Set the current value
+    statusSelect.value = currentStatus;
   }
 
   /**
@@ -453,8 +543,21 @@ class EventsPage {
         eventDate: formData.get('eventDate'),
         location: formData.get('location').trim(),
         maxTeams: parseInt(formData.get('maxTeams')),
-        status: formData.get('status')
+        status: formData.get('status'),
+        totalRounds: parseInt(formData.get('totalRounds')) || 3,
+        currentRound: parseInt(formData.get('currentRound')) || 1
       };
+
+      // Validate status transition for existing events
+      if (this.currentEventId) {
+        const currentEvent = this.events.find(event => event.id === this.currentEventId);
+        if (currentEvent) {
+          const isValidTransition = this.validateStatusTransition(currentEvent.status, eventData.status);
+          if (!isValidTransition) {
+            throw new Error(`Invalid status transition: ${currentEvent.status} events cannot be changed to ${eventData.status}`);
+          }
+        }
+      }
 
       let response;
       if (this.currentEventId) {
@@ -481,6 +584,28 @@ class EventsPage {
       submitButton.disabled = false;
       submitButton.textContent = this.currentEventId ? 'Update Event' : 'Create Event';
     }
+  }
+
+  /**
+   * Validate status transition
+   */
+  validateStatusTransition(currentStatus, newStatus) {
+    // Draft events can be changed to any status
+    if (currentStatus === 'draft') {
+      return true;
+    }
+    
+    // Active events can only stay active
+    if (currentStatus === 'active') {
+      return newStatus === 'active';
+    }
+    
+    // Completed events cannot be changed
+    if (currentStatus === 'completed') {
+      return newStatus === 'completed';
+    }
+    
+    return false;
   }
 
   /**

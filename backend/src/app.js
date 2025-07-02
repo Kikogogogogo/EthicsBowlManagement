@@ -14,6 +14,7 @@ const preApprovedEmailRoutes = require('./routes/pre-approved-email.routes');
 const teamRoutes = require('./routes/team.routes');
 const userRoutes = require('./routes/user.routes');
 const matchRoutes = require('./routes/match.routes');
+const scoreRoutes = require('./routes/score.routes');
 
 // Validate environment variables
 validateEnv();
@@ -92,6 +93,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use(`${config.api.prefix}/auth`, authRoutes);
 app.use(`${config.api.prefix}`, matchRoutes);
+app.use(`${config.api.prefix}`, scoreRoutes);
 app.use(`${config.api.prefix}/events`, eventRoutes);
 app.use(`${config.api.prefix}/pre-approved-emails`, preApprovedEmailRoutes);
 app.use(`${config.api.prefix}`, teamRoutes);
