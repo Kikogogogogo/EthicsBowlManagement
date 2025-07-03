@@ -33,6 +33,16 @@ class EventWorkspacePage {
     // Flag to prevent duplicate event listener initialization
     this.eventListenersInitialized = false;
     
+    // Store event listener references for cleanup
+    this.eventListeners = [];
+    
+    // Page visibility monitoring
+    this.pageObserver = null;
+    this.unloadHandlers = null;
+    
+    // Cleanup state flag
+    this.isCleaningUp = false;
+    
     this.initializeEventListeners();
   }
 
@@ -45,15 +55,38 @@ class EventWorkspacePage {
       return;
     }
     this.eventListenersInitialized = true;
-    // Tab navigation
-    document.addEventListener('click', (e) => {
+    
+    // Tab navigation - only for workspace elements
+    const tabClickHandler = (e) => {
+      // Skip if cleaning up
+      if (this.isCleaningUp) return;
+      
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle clicks within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.matches('[data-tab]')) {
         this.switchTab(e.target.getAttribute('data-tab'));
       }
-    });
+    };
+    document.addEventListener('click', tabClickHandler);
+    this.eventListeners.push({ type: 'click', handler: tabClickHandler });
 
-    // Modal controls
-    document.addEventListener('click', (e) => {
+    // Modal controls - only for workspace elements
+    const modalClickHandler = (e) => {
+      // Skip if cleaning up
+      if (this.isCleaningUp) return;
+      
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle clicks within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.matches('[data-modal-close]')) {
         this.closeModal(e.target.getAttribute('data-modal-close'));
       }
@@ -61,38 +94,38 @@ class EventWorkspacePage {
       if (e.target.matches('[data-action]')) {
         this.handleAction(e.target.getAttribute('data-action'), e.target);
       }
-    });
+    };
+    document.addEventListener('click', modalClickHandler);
+    this.eventListeners.push({ type: 'click', handler: modalClickHandler });
 
-    // Back to Events button - global event delegation
-    document.addEventListener('click', (e) => {
+    // Back to Events button - specific to workspace
+    const backToEventsHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
       if (e.target.matches('#back-to-events-btn') || e.target.closest('#back-to-events-btn')) {
         e.preventDefault();
-        console.log('Back to Events button clicked (global delegation)');
+        e.stopPropagation(); // Prevent event bubbling
+        e.stopImmediatePropagation(); // Prevent other listeners
+        console.log('🔙 [EventWorkspace] Back to Events button clicked - refreshing page');
         
-        try {
-          // Navigate back to dashboard which contains the events list
-          if (window.app && typeof window.app.showDashboard === 'function') {
-            console.log('Calling app.showDashboard()');
-            window.app.showDashboard();
-          } else if (window.dashboardPage && typeof window.dashboardPage.init === 'function') {
-            console.log('Calling dashboardPage.init()');
-            this.ui.showPage('dashboard');
-            window.dashboardPage.init();
-          } else {
-            // Fallback: navigate to dashboard page
-            console.log('Using fallback navigation to dashboard');
-            this.ui.showPage('dashboard');
-          }
-        } catch (error) {
-          console.error('Error navigating back to dashboard:', error);
-          // Ultimate fallback
-          this.ui.showPage('dashboard');
-        }
+        // Simple solution: refresh the page to reset everything
+        window.location.reload();
       }
-    });
+    };
+    document.addEventListener('click', backToEventsHandler);
+    this.eventListeners.push({ type: 'click', handler: backToEventsHandler });
 
-    // Form submissions
-    document.addEventListener('submit', (e) => {
+    // Form submissions - only for workspace forms
+    const formSubmitHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle forms within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.matches('#createMatchForm')) {
         e.preventDefault();
         this.handleCreateMatch(e);
@@ -117,10 +150,22 @@ class EventWorkspacePage {
         e.preventDefault();
         this.handleScoringCriteria(e);
       }
-    });
+    };
+    document.addEventListener('submit', formSubmitHandler);
+    this.eventListeners.push({ type: 'submit', handler: formSubmitHandler });
 
-    // Scoring criteria specific event listeners
-    document.addEventListener('click', (e) => {
+    // Scoring criteria specific event listeners - only for workspace elements
+    const criteriaClickHandler = (e) => {
+      // Skip if cleaning up
+      if (this.isCleaningUp) return;
+      
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle clicks within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.closest('#addCriteriaBtn')) {
         e.preventDefault();
         // Check if event is in draft status before allowing action
@@ -144,10 +189,26 @@ class EventWorkspacePage {
           this.resetCriteriaToDefault();
         }
       }
-    });
+      
+      // Settings tab click for score calculation
+      if (e.target.matches('[data-tab="settings"]')) {
+        setTimeout(() => {
+          this.updateScoreCalculation();
+        }, 100);
+      }
+    };
+    document.addEventListener('click', criteriaClickHandler);
+    this.eventListeners.push({ type: 'click', handler: criteriaClickHandler });
 
-    // Update score calculation when input changes
-    document.addEventListener('input', (e) => {
+    // Update score calculation when input changes - only for workspace inputs
+    const inputChangeHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle inputs within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.matches('[name="commentQuestionsCount"], [name="commentMaxScore"]')) {
         // For judge questions settings, update immediately
         setTimeout(() => this.updateScoreCalculation(), 50);
@@ -155,19 +216,19 @@ class EventWorkspacePage {
         // For criteria max scores, update immediately
         this.updateScoreCalculation();
       }
-    });
+    };
+    document.addEventListener('input', inputChangeHandler);
+    this.eventListeners.push({ type: 'input', handler: inputChangeHandler });
 
-    // Initialize score calculation when settings tab is shown
-    document.addEventListener('click', (e) => {
-      if (e.target.matches('[data-tab="settings"]')) {
-        setTimeout(() => {
-          this.updateScoreCalculation();
-        }, 100);
-      }
-    });
-
-    // Judge selection counter update
-    document.addEventListener('change', (e) => {
+    // Judge selection counter update - only for workspace selects
+    const changeHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle changes within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
       if (e.target.matches('select[name="judgeIds"]')) {
         this.updateJudgeSelectionCounter(e.target);
       }
@@ -179,7 +240,107 @@ class EventWorkspacePage {
       if (e.target.matches('#role-switcher')) {
         this.handleRoleSwitch(e.target.value);
       }
+    };
+    document.addEventListener('change', changeHandler);
+    this.eventListeners.push({ type: 'change', handler: changeHandler });
+  }
+
+  /**
+   * Clean up event listeners to prevent conflicts
+   */
+  cleanup() {
+    console.log('🧹 [EventWorkspace] Cleaning up event listeners...');
+    console.trace('🧹 [EventWorkspace] cleanup call stack');
+    
+    // Set a flag to prevent any navigation during cleanup
+    this.isCleaningUp = true;
+    
+    // Remove all stored event listeners
+    this.eventListeners.forEach(({ type, handler }) => {
+      document.removeEventListener(type, handler);
     });
+    
+    // Clear the listeners array
+    this.eventListeners = [];
+    
+    // Reset initialization flag
+    this.eventListenersInitialized = false;
+    
+    // Clear any ongoing intervals
+    if (this.currentScoresInterval) {
+      clearInterval(this.currentScoresInterval);
+      this.currentScoresInterval = null;
+    }
+    
+    // Clean up page visibility observer
+    if (this.pageObserver) {
+      this.pageObserver.disconnect();
+      this.pageObserver = null;
+    }
+    
+    // Clean up unload handlers
+    if (this.unloadHandlers) {
+      this.unloadHandlers.forEach(({ event, handler }) => {
+        window.removeEventListener(event, handler);
+      });
+      this.unloadHandlers = null;
+    }
+    
+    // Clear cleanup flag
+    this.isCleaningUp = false;
+    
+    console.log('✅ [EventWorkspace] Event listeners cleaned up');
+  }
+
+  /**
+   * Add page visibility listener to clean up when leaving workspace
+   */
+  addPageVisibilityListener() {
+    // Monitor when the workspace page becomes hidden
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const workspacePage = document.getElementById('event-workspace-page');
+          if (workspacePage && workspacePage.classList.contains('hidden')) {
+            console.log('📴 [EventWorkspace] Page hidden, immediately setting cleanup flag...');
+            // Immediately prevent further event processing
+            this.isCleaningUp = true;
+            
+            console.log('📴 [EventWorkspace] Page hidden, cleaning up...');
+            this.cleanup();
+            // Disconnect observer after cleanup
+            observer.disconnect();
+          }
+        }
+      });
+    });
+
+    // Start observing the workspace page for class changes
+    const workspacePage = document.getElementById('event-workspace-page');
+    if (workspacePage) {
+      observer.observe(workspacePage, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+      
+      // Store observer reference for cleanup
+      this.pageObserver = observer;
+    }
+
+    // Also listen for page unload events as fallback
+    const unloadHandler = () => {
+      console.log('📴 [EventWorkspace] Page unload, cleaning up...');
+      this.cleanup();
+    };
+    
+    window.addEventListener('beforeunload', unloadHandler);
+    window.addEventListener('pagehide', unloadHandler);
+    
+    // Store unload handlers for cleanup
+    this.unloadHandlers = [
+      { event: 'beforeunload', handler: unloadHandler },
+      { event: 'pagehide', handler: unloadHandler }
+    ];
   }
 
   /**
@@ -352,6 +513,9 @@ class EventWorkspacePage {
           console.error('❌ [EventWorkspace] Final page element not found!');
         }
       }, 500);
+      
+      // Add page visibility listener to clean up when leaving
+      this.addPageVisibilityListener();
       
       return true;
     } catch (error) {
@@ -638,41 +802,7 @@ class EventWorkspacePage {
     eventWorkspaceElement.style.display = 'block';
     console.log('✅ [EventWorkspace] Immediate visibility set');
     
-    // Add event listener for back button after rendering - with timeout to ensure DOM is ready
-    setTimeout(() => {
-      const backButton = document.getElementById('back-to-events-btn');
-      console.log('Looking for back button:', backButton);
-      
-      if (backButton) {
-        console.log('Back button found, adding event listener');
-        backButton.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Back to Events button clicked');
-          
-          try {
-            // Navigate back to dashboard which contains the events list
-            if (window.app && typeof window.app.showDashboard === 'function') {
-              console.log('Calling app.showDashboard()');
-              window.app.showDashboard();
-            } else if (window.dashboardPage && typeof window.dashboardPage.init === 'function') {
-              console.log('Calling dashboardPage.init()');
-              this.ui.showPage('dashboard');
-              window.dashboardPage.init();
-            } else {
-              // Fallback: navigate to dashboard page
-              console.log('Using fallback navigation to dashboard');
-              this.ui.showPage('dashboard');
-            }
-          } catch (error) {
-            console.error('Error navigating back to dashboard:', error);
-            // Ultimate fallback
-            this.ui.showPage('dashboard');
-          }
-        });
-      } else {
-        console.error('Back button not found in DOM!');
-      }
-    }, 100);
+    // Note: Back to Events button event listener is handled by initializeEventListeners() method
   }
 
   /**
@@ -695,10 +825,13 @@ class EventWorkspacePage {
       // Update tab buttons
       document.querySelectorAll('[data-tab]').forEach(tab => {
         const isActive = tab.dataset.tab === tabName;
-        tab.classList.toggle('bg-gray-100', isActive);
-        tab.classList.toggle('text-gray-900', isActive);
-        tab.classList.toggle('text-gray-600', !isActive);
-        tab.classList.toggle('hover:bg-gray-50', !isActive);
+        if (isActive) {
+          tab.classList.remove('inactive-tab');
+          tab.classList.add('active-tab');
+        } else {
+          tab.classList.remove('active-tab');
+          tab.classList.add('inactive-tab');
+        }
       });
 
       // Render the new tab content
@@ -757,14 +890,32 @@ class EventWorkspacePage {
     ).length;
     const draftMatches = this.matches.filter(m => m.status === 'draft').length;
 
-    // Check if admin is assigned as judge to any matches
-    const adminAssignedMatches = isAdmin ? this.matches.filter(match => 
+    // Check if admin is assigned as judge or moderator to any matches
+    const adminAssignedAsJudge = isAdmin ? this.matches.filter(match => 
       match.assignments && match.assignments.some(a => a.judge?.id === currentUser.id)
+    ) : [];
+    
+    const adminAssignedAsModerator = isAdmin ? this.matches.filter(match => 
+      match.moderator?.id === currentUser.id
     ) : [];
 
     // Role-specific welcome message and stats
     let roleInfo = '';
-    if (isAdmin && adminAssignedMatches.length > 0) {
+    if (isAdmin && (adminAssignedAsJudge.length > 0 || adminAssignedAsModerator.length > 0)) {
+      const judgeNotice = adminAssignedAsJudge.length > 0 ? 
+        `<p>You are assigned as judge for ${adminAssignedAsJudge.length} match${adminAssignedAsJudge.length !== 1 ? 'es' : ''} in this event.</p>` : '';
+      
+      const moderatorNotice = adminAssignedAsModerator.length > 0 ? 
+        `<p>You are assigned as moderator for ${adminAssignedAsModerator.length} match${adminAssignedAsModerator.length !== 1 ? 'es' : ''} in this event.</p>` : '';
+      
+      const actionNotices = [];
+      if (adminAssignedAsJudge.length > 0) {
+        actionNotices.push('<span class="font-medium">Switch to Judge role to score these matches.</span>');
+      }
+      if (adminAssignedAsModerator.length > 0) {
+        actionNotices.push('<span class="font-medium">Switch to Moderator role to manage these matches.</span>');
+      }
+      
       roleInfo = `
         <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
           <div class="flex items-center">
@@ -776,8 +927,9 @@ class EventWorkspacePage {
             <div class="ml-3">
               <h3 class="text-sm font-medium text-orange-800">Dual Role Notice</h3>
               <div class="mt-2 text-sm text-orange-700">
-                <p>You are assigned as judge for ${adminAssignedMatches.length} match${adminAssignedMatches.length !== 1 ? 'es' : ''} in this event.</p>
-                <p class="mt-1 font-medium">Switch to Judge role to score these matches.</p>
+                ${judgeNotice}
+                ${moderatorNotice}
+                ${actionNotices.length > 0 ? `<p class="mt-1">${actionNotices.join(' ')}</p>` : ''}
               </div>
             </div>
           </div>
@@ -1025,6 +1177,9 @@ class EventWorkspacePage {
     
     // Check if admin is also assigned as judge to this match
     const isAdminAssignedAsJudge = currentUser.role === 'admin' && isAssignedJudge;
+    
+    // Check if admin is also assigned as moderator to this match
+    const isAdminAssignedAsModerator = currentUser.role === 'admin' && match.moderator?.id === currentUser.id;
 
     const scheduledTime = match.scheduledTime ? 
       new Date(match.scheduledTime).toLocaleString() : 'Not scheduled';
@@ -1047,7 +1202,7 @@ class EventWorkspacePage {
             <div class="mt-2 text-sm text-gray-600 space-y-1">
               <div>Room: ${match.room || 'Not assigned'}</div>
               <div>Scheduled: ${scheduledTime}</div>
-              <div>Moderator: ${match.moderator ? `${match.moderator.firstName} ${match.moderator.lastName}` : 'Not assigned'}</div>
+              <div>Moderator: ${match.moderator ? `${match.moderator.firstName} ${match.moderator.lastName}${isAdminAssignedAsModerator ? ' <span class="text-blue-600 font-medium">(You)</span>' : ''}` : 'Not assigned'}</div>
               <div>Judges: ${match.assignments ? 
                 match.assignments.map(a => {
                   const judgeName = `${a.judge.firstName} ${a.judge.lastName}`;
@@ -1058,6 +1213,11 @@ class EventWorkspacePage {
               ${isAdminAssignedAsJudge ? `
                 <div class="text-blue-600 text-xs font-medium">
                   ⚡ You are assigned as a judge for this match
+                </div>
+              ` : ''}
+              ${isAdminAssignedAsModerator ? `
+                <div class="text-green-600 text-xs font-medium">
+                  🎯 You are assigned as moderator for this match
                 </div>
               ` : ''}
             </div>
@@ -1103,6 +1263,16 @@ class EventWorkspacePage {
                       <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                     </svg>
                     <span>Switch to Judge role to score</span>
+                  </div>
+                </div>
+              ` : ''}
+              ${isAdminAssignedAsModerator && match.status !== 'completed' && effectiveRole === 'admin' ? `
+                <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
+                  <div class="flex items-center space-x-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Switch to Moderator role to ${match.status === 'draft' ? 'start' : 'manage'}</span>
                   </div>
                 </div>
               ` : ''}
@@ -3577,9 +3747,9 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       <div class="relative inline-block text-left mr-4">
         <div>
           <select id="role-switcher" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            <option value="admin" ${effectiveRole === 'admin' ? 'selected' : ''}>👑 Admin View</option>
-            <option value="judge" ${effectiveRole === 'judge' ? 'selected' : ''}>⚖️ Judge View</option>
-            <option value="moderator" ${effectiveRole === 'moderator' ? 'selected' : ''}>🎯 Moderator View</option>
+            <option value="admin" ${effectiveRole === 'admin' ? 'selected' : ''}>Admin View</option>
+            <option value="judge" ${effectiveRole === 'judge' ? 'selected' : ''}>Judge View</option>
+            <option value="moderator" ${effectiveRole === 'moderator' ? 'selected' : ''}>Moderator View</option>
           </select>
         </div>
         ${effectiveRole !== 'admin' ? `

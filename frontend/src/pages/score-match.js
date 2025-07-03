@@ -670,7 +670,8 @@ class ScoreMatchPage {
     const criteria = this.currentEvent.scoringCriteria?.criteria || {};
     const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
     const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
-    const existingScore = this.scores.find(s => s.teamId === team?.id);
+    // Only get existing scores from the current judge to ensure clean form for each judge
+    const existingScore = this.scores.find(s => s.teamId === team?.id && s.judgeId === this.authManager.currentUser.id);
 
     // Generate question labels dynamically
     const questionLabels = [];

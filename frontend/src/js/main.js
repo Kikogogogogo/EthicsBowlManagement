@@ -459,6 +459,10 @@ class App {
     window.dashboardPage = this.dashboardPage;
     window.eventWorkspacePage = this.eventWorkspacePage;
     
+    // Track whether event listeners have been initialized
+    this.eventListenersInitialized = false;
+    this.navigationListeners = [];
+    
     this.initializeEventListeners();
     this.initialize();
   }
@@ -467,11 +471,21 @@ class App {
    * Initialize event listeners
    */
   initializeEventListeners() {
+    // Prevent duplicate initialization 
+    if (this.eventListenersInitialized) {
+      console.log('⚠️ [MainApp] Event listeners already initialized, skipping...');
+      return;
+    }
+    
+    console.log('🔧 [MainApp] Initializing event listeners...');
+    this.eventListenersInitialized = true;
+    this.navigationListeners = [];
+    
     // Google Sign In button
     if (this.ui.elements.googleSigninBtn) {
-      this.ui.elements.googleSigninBtn.addEventListener('click', () => {
-        this.handleGoogleSignin();
-      });
+      const handler = () => this.handleGoogleSignin();
+      this.ui.elements.googleSigninBtn.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.googleSigninBtn, event: 'click', handler });
     }
 
     // Logout buttons
@@ -501,27 +515,27 @@ class App {
 
     // Navigation buttons
     if (this.ui.elements.navDashboard) {
-      this.ui.elements.navDashboard.addEventListener('click', () => {
-        this.showDashboard();
-      });
+      const handler = () => this.showDashboard();
+      this.ui.elements.navDashboard.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navDashboard, event: 'click', handler });
     }
     
     if (this.ui.elements.navEvents) {
-      this.ui.elements.navEvents.addEventListener('click', () => {
-        this.showEventsPage();
-      });
+      const handler = () => this.showEventsPage();
+      this.ui.elements.navEvents.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navEvents, event: 'click', handler });
     }
     
     if (this.ui.elements.navTeams) {
-      this.ui.elements.navTeams.addEventListener('click', () => {
-        this.showTeamsPage();
-      });
+      const handler = () => this.showTeamsPage();
+      this.ui.elements.navTeams.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navTeams, event: 'click', handler });
     }
     
     if (this.ui.elements.navUsers) {
-      this.ui.elements.navUsers.addEventListener('click', () => {
-        this.showUsersPage();
-      });
+      const handler = () => this.showUsersPage();
+      this.ui.elements.navUsers.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navUsers, event: 'click', handler });
     }
     
     if (this.ui.elements.navDashboardEvents) {
@@ -531,47 +545,47 @@ class App {
     }
     
     if (this.ui.elements.navEventsEvents) {
-      this.ui.elements.navEventsEvents.addEventListener('click', () => {
-        this.showEventsPage();
-      });
+      const handler = () => this.showEventsPage();
+      this.ui.elements.navEventsEvents.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navEventsEvents, event: 'click', handler });
     }
     
     // Teams navigation
     if (this.ui.elements.navTeamsEvents) {
-      this.ui.elements.navTeamsEvents.addEventListener('click', () => {
-        this.showTeamsPage();
-      });
+      const handler = () => this.showTeamsPage();
+      this.ui.elements.navTeamsEvents.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navTeamsEvents, event: 'click', handler });
     }
     
     if (this.ui.elements.navTeamsTeams) {
-      this.ui.elements.navTeamsTeams.addEventListener('click', () => {
-        this.showTeamsPage();
-      });
+      const handler = () => this.showTeamsPage();
+      this.ui.elements.navTeamsTeams.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navTeamsTeams, event: 'click', handler });
     }
     
     if (this.ui.elements.navTeamsUsers) {
-      this.ui.elements.navTeamsUsers.addEventListener('click', () => {
-        this.showTeamsPage();
-      });
+      const handler = () => this.showTeamsPage();
+      this.ui.elements.navTeamsUsers.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navTeamsUsers, event: 'click', handler });
     }
     
     // Users navigation
     if (this.ui.elements.navUsersEvents) {
-      this.ui.elements.navUsersEvents.addEventListener('click', () => {
-        this.showUsersPage();
-      });
+      const handler = () => this.showUsersPage();
+      this.ui.elements.navUsersEvents.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navUsersEvents, event: 'click', handler });
     }
     
     if (this.ui.elements.navUsersTeams) {
-      this.ui.elements.navUsersTeams.addEventListener('click', () => {
-        this.showUsersPage();
-      });
+      const handler = () => this.showUsersPage();
+      this.ui.elements.navUsersTeams.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navUsersTeams, event: 'click', handler });
     }
     
     if (this.ui.elements.navUsersUsers) {
-      this.ui.elements.navUsersUsers.addEventListener('click', () => {
-        this.showUsersPage();
-      });
+      const handler = () => this.showUsersPage();
+      this.ui.elements.navUsersUsers.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navUsersUsers, event: 'click', handler });
     }
     
     // Dashboard navigation from all pages
@@ -588,15 +602,15 @@ class App {
     }
     
     if (this.ui.elements.navEventsTeams) {
-      this.ui.elements.navEventsTeams.addEventListener('click', () => {
-        this.showEventsPage();
-      });
+      const handler = () => this.showEventsPage();
+      this.ui.elements.navEventsTeams.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navEventsTeams, event: 'click', handler });
     }
     
     if (this.ui.elements.navEventsUsers) {
-      this.ui.elements.navEventsUsers.addEventListener('click', () => {
-        this.showEventsPage();
-      });
+      const handler = () => this.showEventsPage();
+      this.ui.elements.navEventsUsers.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navEventsUsers, event: 'click', handler });
     }
 
     // Back to login button
@@ -611,6 +625,18 @@ class App {
     authManager.addListener((authState) => {
       this.handleAuthStateChange(authState);
     });
+  }
+
+  /**
+   * Clean up existing navigation event listeners
+   */
+  cleanupNavigationListeners() {
+    this.navigationListeners.forEach(({ element, event, handler }) => {
+      if (element && handler) {
+        element.removeEventListener(event, handler);
+      }
+    });
+    this.navigationListeners = [];
   }
 
   /**
@@ -899,6 +925,14 @@ class App {
    * Show events page
    */
   async showEventsPage() {
+    console.log('🔍 [MainApp] showEventsPage called');
+    
+    // Check if workspace is cleaning up
+    if (window.eventWorkspacePage && window.eventWorkspacePage.isCleaningUp) {
+      console.log('⚠️ [MainApp] Workspace is cleaning up, ignoring showEventsPage call');
+      return;
+    }
+    
     if (authManager.currentUser && authManager.currentUser.role === 'admin') {
       await this.eventsPage.show();
       this.updateNavigation('events');
@@ -909,6 +943,15 @@ class App {
    * Show teams page
    */
   async showTeamsPage() {
+    console.log('🔍 [MainApp] showTeamsPage called');
+    console.trace('🔍 [MainApp] showTeamsPage call stack');
+    
+    // Check if workspace is cleaning up
+    if (window.eventWorkspacePage && window.eventWorkspacePage.isCleaningUp) {
+      console.log('⚠️ [MainApp] Workspace is cleaning up, ignoring showTeamsPage call');
+      return;
+    }
+    
     if (authManager.currentUser && authManager.currentUser.role === 'admin') {
       this.ui.updateTeamsPage(authManager.currentUser);
       this.ui.showPage('teams');
@@ -921,6 +964,14 @@ class App {
    * Show users page
    */
   async showUsersPage() {
+    console.log('🔍 [MainApp] showUsersPage called');
+    
+    // Check if workspace is cleaning up
+    if (window.eventWorkspacePage && window.eventWorkspacePage.isCleaningUp) {
+      console.log('⚠️ [MainApp] Workspace is cleaning up, ignoring showUsersPage call');
+      return;
+    }
+    
     if (authManager.currentUser && authManager.currentUser.role === 'admin') {
       this.ui.updateUsersPage(authManager.currentUser);
       this.ui.showPage('users');
