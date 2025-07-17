@@ -451,6 +451,11 @@ class EventWorkspacePage {
       this.renderWorkspace();
       console.log('✅ [EventWorkspace] Workspace rendered successfully');
       
+      // Load standings data asynchronously if overview tab is default
+      if (this.currentTab === 'overview') {
+        setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+      }
+      
       // Ensure the page is visible after rendering
       console.log('👁️ [EventWorkspace] Ensuring page visibility...');
       const workspacePageAfterRender = document.getElementById('event-workspace-page');
@@ -842,9 +847,12 @@ class EventWorkspacePage {
         this.initializeEventListeners();
       }
 
-      // Special handling for settings tab
+      // Special handling for different tabs
       if (tabName === 'settings') {
         setTimeout(() => this.updateScoreCalculation(), 100);
+      } else if (tabName === 'overview') {
+              // Load standings data asynchronously when switching to overview tab
+      setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
       }
 
       return true;
@@ -1055,6 +1063,21 @@ class EventWorkspacePage {
             </div>
           ` : ''}
 
+          <!-- Current Standings -->
+          <div class="bg-white border border-gray-300 rounded-lg">
+            <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
+              <h3 class="text-lg font-medium text-gray-900">Current Standings</h3>
+              <button onclick="window.eventWorkspacePage.refreshStandings()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                Refresh
+              </button>
+            </div>
+            <div class="p-6">
+              <div id="standingsContainer" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="text-gray-500 text-center py-4">Loading standings...</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Recent Activity -->
           <div class="bg-white border border-gray-300 rounded-lg">
             <div class="px-6 py-4 border-b border-gray-300">
@@ -1103,6 +1126,27 @@ class EventWorkspacePage {
 
     return `
       <div class="space-y-6">
+        <!-- Admin Actions -->
+        ${isAdmin ? `
+          <div class="bg-white border border-gray-300 p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium text-gray-900">Admin Actions</h3>
+              <div class="flex space-x-3">
+                <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+                  Create Match
+                </button>
+                <button data-action="generate-round-robin" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                  Generate Round Robin
+                </button>
+                <button data-action="generate-swiss" 
+                        class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
+                  Generate Swiss
+                </button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Filters -->
         <div class="bg-white border border-gray-300 p-4 rounded-lg">
           <div class="flex space-x-4">
@@ -1281,9 +1325,15 @@ class EventWorkspacePage {
                   View Scores
                 </button>
               ` : ''}
-              <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors font-medium">
-                Edit
-              </button>
+              ${match.status === 'draft' ? `
+                <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors font-medium">
+                  Edit
+                </button>
+              ` : `
+                <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-300 text-gray-500 px-3 py-1 rounded text-sm cursor-not-allowed" disabled>
+                  Edit
+                </button>
+              `}
               ${match.status === 'draft' ? `
                 <button data-action="delete-match" data-match-id="${match.id}" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors font-medium">
                   Delete
@@ -1806,6 +1856,237 @@ class EventWorkspacePage {
           </form>
         </div>
       </div>
+
+      <!-- Export Results Modal -->
+      <div id="exportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-lg w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-300">
+            <h3 class="text-lg font-medium text-gray-900">Export Results</h3>
+            <p class="text-sm text-gray-600 mt-1">Choose what you would like to export</p>
+          </div>
+          <div class="p-6 space-y-6">
+            <!-- Round Results Export -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-900 mb-3">Export Round Results</h4>
+              <p class="text-sm text-gray-600 mb-4">Export scores and results for a specific round, showing judge scores and final outcomes clearly, including whether 2 or 3 judges were used.</p>
+              
+              <div class="space-y-3">
+                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => {
+                  const roundMatches = this.matches.filter(m => m.roundNumber === round);
+                  const completedMatches = roundMatches.filter(m => m.status === 'completed').length;
+                  const isComplete = completedMatches === roundMatches.length && roundMatches.length > 0;
+                  
+                  return `
+                    <div class="flex items-center justify-between p-3 border border-gray-200 rounded-md ${isComplete ? 'bg-green-50 border-green-200' : 'bg-gray-50'}">
+                      <div>
+                        <div class="font-medium text-gray-900">Round ${round}</div>
+                        <div class="text-sm text-gray-600">
+                          ${completedMatches}/${roundMatches.length} matches completed
+                          ${isComplete ? ' ✓' : ''}
+                        </div>
+                      </div>
+                      <button data-action="export-round" data-round="${round}" 
+                              class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 transition-colors font-medium ${!isComplete ? 'opacity-50 cursor-not-allowed' : ''}"
+                              ${!isComplete ? 'disabled' : ''}>
+                        Export Round ${round}
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- Full Event Export -->
+            <div class="border border-gray-200 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-900 mb-3">Export Full Event Results</h4>
+              <p class="text-sm text-gray-600 mb-4">Export all match results from the entire event in one go. Includes final standings, complete match results, and detailed statistics. Ideal for sharing or archiving purposes.</p>
+              
+              <div class="flex items-center justify-between p-3 border border-gray-200 rounded-md ${this.currentEvent.status === 'completed' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}">
+                <div>
+                  <div class="font-medium text-gray-900">Complete Event Results</div>
+                  <div class="text-sm text-gray-600">
+                    ${this.currentEvent.status === 'completed' ? 'Event completed - Ready for export ✓' : 'Export available (event in progress)'}
+                  </div>
+                </div>
+                <button data-action="export-full-event" 
+                        class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 transition-colors font-medium">
+                  Export Full Results
+                </button>
+              </div>
+            </div>
+
+            <!-- Export Format Info -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div class="flex items-start">
+                <svg class="w-5 h-5 text-blue-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <h5 class="text-sm font-medium text-blue-900">Export Format</h5>
+                  <p class="text-sm text-blue-700 mt-1">
+                    Results will be exported as CSV files for easy viewing in spreadsheet applications.
+                    Files include judge scores, vote counts, score differentials, and two-judge protocol indicators.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="px-6 py-4 border-t border-gray-300 flex justify-end">
+            <button type="button" data-modal-close="exportModal" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Round Robin Modal -->
+      <div id="roundRobinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-300">
+            <h3 class="text-lg font-medium text-gray-900">Generate Round Robin Matches</h3>
+          </div>
+          <form id="roundRobinForm" class="p-6 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Round <span class="text-red-500">*</span></label>
+              <select name="roundNumber" required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
+                  `<option value="${round}" ${round === 1 ? 'selected' : ''}>Round ${round}</option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Select Teams <span class="text-red-500">*</span></label>
+              <div class="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50">
+                <div class="space-y-2">
+                  ${this.teams.map(team => `
+                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                      <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                      <div>
+                        <div class="text-sm font-medium text-gray-900">${team.name}</div>
+                        <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between items-center">
+                <p class="text-xs text-gray-500">
+                  <span class="text-red-600 font-medium">Required:</span> Select at least 2 teams for Round Robin
+                </p>
+                <span id="teamSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
+              </div>
+              <div id="teamValidationError" class="mt-1 text-xs text-red-600 hidden">
+                Please select at least 2 teams for Round Robin
+              </div>
+            </div>
+            
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div class="flex items-start">
+                <svg class="w-5 h-5 text-blue-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <h5 class="text-sm font-medium text-blue-900">Round Robin Information</h5>
+                  <p class="text-sm text-blue-700 mt-1">
+                    Round Robin ensures each selected team plays against every other selected team exactly once.
+                    <span class="font-medium text-red-600">Cannot generate matches for rounds with completed matches.</span>
+                    If the selected round has draft/pending matches, they will be replaced with new Round Robin matches.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3 pt-4">
+              <button type="button" data-modal-close="roundRobinModal" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+                Cancel
+              </button>
+              <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                Generate Matches
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Swiss Tournament Modal -->
+      <div id="swissModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-300">
+            <h3 class="text-lg font-medium text-gray-900">Generate Swiss Tournament Matches</h3>
+          </div>
+          <form id="swissForm" class="p-6 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Round <span class="text-red-500">*</span></label>
+              <select name="roundNumber" required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
+                  `<option value="${round}" ${round === 1 ? 'selected' : ''}>Round ${round}</option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Select Teams <span class="text-red-500">*</span></label>
+              <div class="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50">
+                <div class="space-y-2">
+                  ${this.teams.map(team => `
+                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                      <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                      <div>
+                        <div class="text-sm font-medium text-gray-900">${team.name}</div>
+                        <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between items-center">
+                <p class="text-xs text-gray-500">
+                  <span class="text-red-600 font-medium">Required:</span> Select at least 2 teams for Swiss Tournament
+                </p>
+                <span id="swissTeamSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
+              </div>
+              <div id="swissTeamValidationError" class="mt-1 text-xs text-red-600 hidden">
+                Please select at least 2 teams for Swiss Tournament
+              </div>
+            </div>
+            
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div class="flex items-start">
+                <svg class="w-5 h-5 text-green-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <h5 class="text-sm font-medium text-green-900">Swiss Tournament Information</h5>
+                  <p class="text-sm text-green-700 mt-1">
+                    Swiss Tournament pairs teams with similar scores. Round 1 uses random pairing, 
+                    subsequent rounds pair teams with similar win records. Avoids repeat matchups.
+                    <span class="font-medium text-red-600">Cannot generate matches for rounds with completed matches.</span>
+                    If the selected round has draft/pending matches, they will be replaced with new Swiss matches.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3 pt-4">
+              <button type="button" data-modal-close="swissModal" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+                Cancel
+              </button>
+              <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
+                Generate Matches
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- View Scores Modal -->
+      <div id="viewScoresModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <!-- Content will be dynamically inserted by renderViewScoresModal -->
+        </div>
+      </div>
     `;
   }
 
@@ -1839,6 +2120,16 @@ class EventWorkspacePage {
           
         case 'edit-match':
           const matchId = element.getAttribute('data-match-id');
+          // Check if match status allows editing
+          const match = this.matches.find(m => m.id === matchId);
+          if (!match) {
+            alert('Match not found');
+            return;
+          }
+          if (match.status !== 'draft') {
+            alert(`Cannot edit match: Match status is "${match.status}". Only draft matches can be edited.`);
+            return;
+          }
           await this.openEditMatchModal(matchId);
           break;
           
@@ -1889,6 +2180,26 @@ class EventWorkspacePage {
 
         case 'view-scores':
           await this.viewMatchScores(element.getAttribute('data-match-id'));
+          break;
+          
+        case 'export-results':
+          this.showExportModal();
+          break;
+          
+        case 'export-round':
+          await this.exportRoundResults(element.getAttribute('data-round'));
+          break;
+          
+        case 'export-full-event':
+          await this.exportFullEventResults();
+          break;
+          
+        case 'generate-round-robin':
+          this.showRoundRobinModal();
+          break;
+          
+        case 'generate-swiss':
+          this.showSwissModal();
           break;
           
         default:
@@ -2828,6 +3139,9 @@ class EventWorkspacePage {
       await this.loadEventData();
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
       
+      // Auto-refresh standings after match completion
+      await this.autoRefreshStandings();
+      
     } catch (error) {
       console.error('Failed to complete match:', error);
       this.ui.showError('Error', 'Failed to complete match: ' + error.message);
@@ -2851,6 +3165,9 @@ class EventWorkspacePage {
       // Reload matches data
       await this.loadEventData();
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      
+      // Auto-refresh standings after score submission
+      await this.autoRefreshStandings();
       
     } catch (error) {
       console.error('Failed to submit score:', error);
@@ -3589,7 +3906,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                       // Calculate totals
                       const criteriaTotal = Object.values(criteriaScores).reduce((sum, val) => sum + (val || 0), 0);
                       const commentTotal = commentScores.reduce((sum, val) => sum + (val || 0), 0);
-                      const grandTotal = criteriaTotal + commentTotal;
+                      const commentAverage = commentScores.length > 0 ? commentTotal / commentScores.length : 0;
+                      const grandTotal = criteriaTotal + commentAverage;
                       
                       return `
                         <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
@@ -3623,6 +3941,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                                 `).join('')}
                               </div>
                               <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                                <span>Questions Average:</span>
+                                <span>${commentAverage.toFixed(2)}</span>
+                              </div>
+                              <div class="flex justify-between text-xs text-gray-500 mt-1">
                                 <span>Questions Total:</span>
                                 <span>${commentTotal}</span>
                               </div>
@@ -3630,7 +3952,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                             
                             <div class="flex justify-between text-base font-bold pt-2 mt-2 border-t border-gray-200">
                               <span>Grand Total:</span>
-                              <span>${grandTotal}</span>
+                              <span>${(criteriaTotal + commentAverage).toFixed(2)}</span>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1 text-center">
+                              (Criteria Total + Questions Average)
                             </div>
                             
                             ${score.notes ? `
@@ -3664,6 +3989,400 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    */
   getEffectiveRole() {
     return this.effectiveRole || this.authManager.currentUser.role;
+  }
+
+  /**
+   * 显示导出模态框
+   */
+  showExportModal() {
+    this.showModal('exportModal');
+  }
+
+  /**
+   * 导出轮次结果
+   * @param {string} roundNumber - 轮次号
+   */
+  async exportRoundResults(roundNumber) {
+    try {
+      console.log('Exporting round results for round:', roundNumber);
+      
+      if (!roundNumber) {
+        this.ui.showError('Error', 'Round number is required');
+        return;
+      }
+
+      // 先获取JSON数据
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/export/round/${roundNumber}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to export round results');
+      }
+
+      const data = await response.json();
+      
+      // 下载CSV格式
+      const csvResponse = await fetch(`/api/v1/events/${this.currentEventId}/export/round/${roundNumber}?format=csv`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+
+      if (csvResponse.ok) {
+        const blob = await csvResponse.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `round_${roundNumber}_results_${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        this.ui.showSuccess('Success', `Round ${roundNumber} results exported successfully`);
+      } else {
+        throw new Error('Failed to download CSV file');
+      }
+
+      // 关闭模态框
+      this.closeModal('exportModal');
+
+    } catch (error) {
+      console.error('Export round results error:', error);
+      this.ui.showError('Export Error', error.message);
+    }
+  }
+
+  /**
+   * 导出完整事件结果
+   */
+  async exportFullEventResults() {
+    try {
+      console.log('Exporting full event results');
+
+      // 先获取JSON数据
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/export/full`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to export event results');
+      }
+
+      const data = await response.json();
+      
+      // 下载CSV格式
+      const csvResponse = await fetch(`/api/v1/events/${this.currentEventId}/export/full?format=csv`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
+
+      if (csvResponse.ok) {
+        const blob = await csvResponse.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        const eventName = this.currentEvent.name.replace(/[^a-zA-Z0-9]/g, '_');
+        a.download = `event_${eventName}_results_${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        this.ui.showSuccess('Success', 'Full event results exported successfully');
+      } else {
+        throw new Error('Failed to download CSV file');
+      }
+
+      // 关闭模态框
+      this.closeModal('exportModal');
+
+    } catch (error) {
+      console.error('Export full event results error:', error);
+      this.ui.showError('Export Error', error.message);
+    }
+  }
+
+  /**
+   * Render current standings
+   */
+  async renderCurrentStandings() {
+    try {
+      // Use backend's complete statistics API instead of simple client-side calculation
+      const standingsData = await this.getEventStandings();
+      
+      if (!standingsData?.standings || standingsData.standings.length === 0) {
+        return '<div class="text-gray-500 text-center py-4">No standings data available</div>';
+      }
+
+      // Display all teams that have participated in matches with detailed ranking information
+      return standingsData.standings.map((standing, index) => `
+        <div class="flex items-center justify-between py-1.5 px-2 rounded-md ${index < 3 ? 'bg-gray-50' : ''} hover:bg-gray-50 transition-colors">
+          <div class="flex items-center space-x-2">
+            <div class="flex items-center justify-center w-5 h-5 rounded-full ${
+              index === 0 ? 'bg-yellow-500 text-white' :
+              index === 1 ? 'bg-gray-400 text-white' :
+              index === 2 ? 'bg-amber-600 text-white' :
+              'bg-gray-200 text-gray-600'
+            } text-xs font-bold">
+              ${standing.rank}
+            </div>
+            <div>
+              <div class="font-medium text-gray-900 text-sm">${standing.team.name}</div>
+              <div class="text-xs text-gray-500">${standing.team.school || 'No school'}</div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-900 text-sm">${standing.wins}-${standing.totalMatches - standing.wins}</div>
+            <div class="text-xs text-gray-500">
+              ${standing.votes} votes • ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential} diff
+            </div>
+          </div>
+        </div>
+      `).join('');
+      
+    } catch (error) {
+      console.error('Error rendering current standings:', error);
+      // Fallback to simple client-side calculation if API call fails
+      return this.renderFallbackStandings();
+    }
+  }
+
+  /**
+   * Fallback standings display (used when API fails)
+   */
+  renderFallbackStandings() {
+    const teamStandings = this.teams.map(team => {
+      const teamMatches = this.matches.filter(m => 
+        (m.teamAId === team.id || m.teamBId === team.id) && m.status === 'completed'
+      );
+      
+      const wins = this.matches.filter(m => m.winnerId === team.id).length;
+      const totalMatches = teamMatches.length;
+      
+      return {
+        team,
+        wins,
+        totalMatches,
+        winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0
+      };
+    }).sort((a, b) => {
+      if (a.wins !== b.wins) return b.wins - a.wins;
+      return b.winPercentage - a.winPercentage;
+    });
+
+    if (teamStandings.length === 0) {
+      return '<div class="text-gray-500 text-center py-4">No teams available</div>';
+    }
+
+        return teamStandings.map((standing, index) => `
+      <div class="flex items-center justify-between py-1.5 px-2 rounded-md ${index < 3 ? 'bg-gray-50' : ''} hover:bg-gray-50 transition-colors">
+        <div class="flex items-center space-x-2">
+          <div class="flex items-center justify-center w-5 h-5 rounded-full ${
+            index === 0 ? 'bg-yellow-500 text-white' :
+            index === 1 ? 'bg-gray-400 text-white' :
+            index === 2 ? 'bg-amber-600 text-white' :
+            'bg-gray-200 text-gray-600'
+          } text-xs font-bold">
+            ${index + 1}
+          </div>
+          <div>
+            <div class="font-medium text-gray-900 text-sm">${standing.team.name}</div>
+            <div class="text-xs text-gray-500">${standing.team.school || 'No school'}</div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="font-medium text-gray-900 text-sm">${standing.wins}-${standing.totalMatches - standing.wins}</div>
+          <div class="text-xs text-gray-500">${standing.winPercentage}%</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Asynchronously load and display current standings
+   */
+  async loadAndDisplayCurrentStandings() {
+    try {
+      const container = document.getElementById('standingsContainer');
+      if (!container) return;
+      
+      // Show loading state
+      container.innerHTML = '<div class="text-gray-500 text-center py-4">Loading standings...</div>';
+      
+      // Get standings data
+      const standingsHTML = await this.renderCurrentStandings();
+      
+      // Update display
+      container.innerHTML = standingsHTML;
+      
+    } catch (error) {
+      console.error('Error loading current standings:', error);
+      const container = document.getElementById('standingsContainer');
+      if (container) {
+        container.innerHTML = '<div class="text-red-500 text-center py-4">Failed to load standings</div>';
+      }
+    }
+  }
+
+  /**
+   * Refresh standings
+   */
+  async refreshStandings() {
+    try {
+      // Use the same method as normal display to maintain consistent format
+      await this.loadAndDisplayCurrentStandings();
+      
+      this.ui.showSuccess('Success', 'Standings refreshed successfully');
+    } catch (error) {
+      console.error('Refresh standings error:', error);
+      this.ui.showError('Error', 'Failed to refresh standings');
+    }
+  }
+
+  /**
+   * Auto-refresh standings (called after match completion)
+   */
+  async autoRefreshStandings() {
+    try {
+      console.log('Auto-refreshing standings after match completion...');
+      
+      // Refresh current standings display if on overview tab
+      if (this.currentTab === 'overview') {
+        await this.loadAndDisplayCurrentStandings();
+      }
+      
+      // Update detailed standings cache (for refresh button)
+      await this.getEventStandings();
+      
+    } catch (error) {
+      console.error('Error auto-refreshing standings:', error);
+    }
+  }
+
+  /**
+   * Render detailed standings
+   */
+  renderDetailedStandings(standings) {
+    if (!standings || standings.length === 0) {
+      return '<div class="text-gray-500 text-center py-4">No standings data available</div>';
+    }
+
+    return standings.slice(0, 8).map((standing, index) => `
+      <div class="flex items-center justify-between py-3 px-3 rounded-md border border-gray-200">
+        <div class="flex items-center space-x-3">
+          <div class="flex items-center justify-center w-8 h-8 rounded-full ${
+            index === 0 ? 'bg-yellow-500 text-white' :
+            index === 1 ? 'bg-gray-400 text-white' :
+            index === 2 ? 'bg-amber-600 text-white' :
+            'bg-gray-200 text-gray-600'
+          } text-sm font-bold">
+            ${standing.rank}
+          </div>
+          <div>
+            <div class="font-medium text-gray-900">${standing.team.name}</div>
+            <div class="text-sm text-gray-500">${standing.team.school || 'No school'}</div>
+          </div>
+        </div>
+        <div class="text-right space-x-4">
+          <div class="inline-block">
+            <div class="text-sm text-gray-500">Record</div>
+            <div class="font-medium text-gray-900">${standing.wins}-${standing.totalMatches - standing.wins}</div>
+          </div>
+          <div class="inline-block">
+            <div class="text-sm text-gray-500">Votes</div>
+            <div class="font-medium text-gray-900">${standing.votes}</div>
+          </div>
+          <div class="inline-block">
+            <div class="text-sm text-gray-500">Score Diff</div>
+            <div class="font-medium text-gray-900">${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Show full standings
+   */
+  async showFullStandings() {
+    try {
+      const standingsData = await this.getEventStandings();
+      
+      // Create standings modal
+      const modalContent = `
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">Complete Standings - ${standingsData.event.name}</h3>
+        </div>
+        <div class="p-6 max-h-96 overflow-y-auto">
+          ${this.renderDetailedStandings(standingsData.standings)}
+        </div>
+        <div class="px-6 py-4 border-t border-gray-300 flex justify-end">
+          <button onclick="this.closeModal('standingsModal')" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+            Close
+          </button>
+        </div>
+      `;
+      
+      // Create temporary modal
+      const modal = document.createElement('div');
+      modal.id = 'standingsModal';
+      modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      modal.innerHTML = `
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-4">
+          ${modalContent}
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+    } catch (error) {
+      console.error('Show full standings error:', error);
+      this.ui.showError('Error', 'Failed to load full standings');
+    }
+  }
+
+  /**
+   * Get event standings
+   */
+  async getEventStandings() {
+    try {
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/standings`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to get event standings');
+      }
+
+      const data = await response.json();
+      return data.data;
+
+    } catch (error) {
+      console.error('Get event standings error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -3730,6 +4449,846 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         }
       }, 3000);
     }
+  }
+
+  /**
+   * Show Round Robin modal
+   */
+  showRoundRobinModal() {
+    this.showModal('roundRobinModal');
+    
+    // Reset form when opening
+    const form = document.getElementById('roundRobinForm');
+    if (form) {
+      form.reset();
+      // Set default round to 1
+      const roundSelect = form.querySelector('select[name="roundNumber"]');
+      if (roundSelect) {
+        roundSelect.value = '1';
+      }
+      // Clear team selection counter
+      const counter = document.getElementById('teamSelectionCounter');
+      if (counter) {
+        counter.textContent = '0 selected';
+      }
+      // Hide validation errors
+      const errorDiv = document.getElementById('teamValidationError');
+      if (errorDiv) {
+        errorDiv.classList.add('hidden');
+      }
+    }
+    
+    // Add event listeners for team selection
+    this.addRoundRobinEventListeners();
+  }
+
+  /**
+   * Add event listeners for Round Robin modal
+   */
+  addRoundRobinEventListeners() {
+    const form = document.getElementById('roundRobinForm');
+    if (!form) return;
+    
+    // Handle form submission
+    const submitHandler = async (event) => {
+      event.preventDefault();
+      await this.handleRoundRobinForm(event);
+    };
+    
+    // Remove existing listener if any
+    form.removeEventListener('submit', submitHandler);
+    form.addEventListener('submit', submitHandler);
+    
+    // Handle team selection counter
+    const teamCheckboxes = form.querySelectorAll('input[name="selectedTeams"]');
+    const counter = document.getElementById('teamSelectionCounter');
+    
+    teamCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const selectedCount = form.querySelectorAll('input[name="selectedTeams"]:checked').length;
+        if (counter) {
+          counter.textContent = `${selectedCount} selected`;
+        }
+      });
+    });
+  }
+
+  /**
+   * Handle Round Robin form submission
+   */
+  async handleRoundRobinForm(event) {
+    try {
+      const formData = new FormData(event.target);
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      
+      // Prevent multiple submissions
+      if (submitButton && submitButton.disabled) {
+        return;
+      }
+      
+      // Disable submit button
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Generating...';
+      }
+      
+      const roundNumber = parseInt(formData.get('roundNumber'));
+      const selectedTeamIds = formData.getAll('selectedTeams');
+      
+      // Validate input
+      if (!roundNumber || roundNumber < 1 || roundNumber > this.currentEvent.totalRounds) {
+        this.ui.showError('Validation Error', 'Please select a valid round');
+        return;
+      }
+      
+      if (selectedTeamIds.length < 2) {
+        this.ui.showError('Validation Error', 'Please select at least 2 teams for Round Robin');
+        return;
+      }
+      
+      // Get selected teams
+      const selectedTeams = this.teams.filter(team => selectedTeamIds.includes(team.id));
+      
+      // Generate Round Robin matches
+      await this.generateRoundRobinForRound(roundNumber, selectedTeams);
+      
+      // Close modal
+      this.closeModal('roundRobinModal');
+      
+    } catch (error) {
+      console.error('Error handling Round Robin form:', error);
+      this.ui.showError('Error', 'Failed to generate Round Robin matches: ' + error.message);
+    } finally {
+      // Re-enable submit button
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Generate Matches';
+      }
+    }
+  }
+
+  /**
+   * Generate Round Robin matches for specific round and teams
+   */
+  async generateRoundRobinForRound(roundNumber, selectedTeams) {
+    let alerted = false;
+    try {
+      // Check if the round already has matches
+      const existingMatches = this.matches.filter(m => m.roundNumber === roundNumber);
+      // Check if there are any completed matches in this round
+      const completedMatches = existingMatches.filter(m => m.status === 'completed');
+      if (completedMatches.length > 0 && !alerted) {
+        alerted = true;
+        alert(`Cannot Generate Matches: Round ${roundNumber} has ${completedMatches.length} completed matches. Cannot generate new matches for rounds with completed matches.`);
+        return;
+      }
+      
+      if (existingMatches.length > 0) {
+        const confirmed = confirm(
+          `Round ${roundNumber} already has ${existingMatches.length} matches (all in draft/pending status). Generating new Round Robin matches will delete existing Round ${roundNumber} matches. Continue?`
+        );
+        if (!confirmed) return;
+      }
+
+      // Generate Round Robin pairings
+      const pairings = this.generateRoundRobinPairings(selectedTeams);
+      
+      // Delete existing matches for the round if any
+      if (existingMatches.length > 0) {
+        for (const match of existingMatches) {
+          try {
+            await this.matchService.deleteEventMatch(this.currentEventId, match.id);
+          } catch (error) {
+            console.error('Error deleting match:', error);
+          }
+        }
+      }
+
+      // Create new matches
+      let createdCount = 0;
+      for (const pairing of pairings) {
+        try {
+          const matchData = {
+            roundNumber: roundNumber,
+            teamAId: pairing.teamA.id,
+            teamBId: pairing.teamB.id,
+            status: 'draft',
+            scheduledTime: null,
+            room: null
+          };
+
+          await this.matchService.createEventMatch(this.currentEventId, matchData);
+          createdCount++;
+        } catch (error) {
+          console.error('Error creating match:', error);
+        }
+      }
+
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render the workspace
+      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      
+      this.ui.showSuccess('Success', `Generated ${createdCount} Round Robin matches for Round ${roundNumber}`);
+      
+    } catch (error) {
+      console.error('Error generating Round Robin for round:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate Round Robin matches for Round 1 (legacy method)
+   */
+  async generateRoundRobin() {
+    // Check if there are enough teams
+    if (this.teams.length < 2) {
+      this.ui.showError('Error', 'Need at least 2 teams to generate Round Robin matches');
+      return;
+    }
+    
+    // Use the new method with all teams for Round 1
+    await this.generateRoundRobinForRound(1, this.teams);
+  }
+
+  /**
+   * Show Swiss Tournament modal
+   */
+  showSwissModal() {
+    this.showModal('swissModal');
+    
+    // Reset form when opening
+    const form = document.getElementById('swissForm');
+    if (form) {
+      form.reset();
+      // Set default round to 1
+      const roundSelect = form.querySelector('select[name="roundNumber"]');
+      if (roundSelect) {
+        roundSelect.value = '1';
+      }
+      // Clear team selection counter
+      const counter = document.getElementById('swissTeamSelectionCounter');
+      if (counter) {
+        counter.textContent = '0 selected';
+      }
+      // Hide validation errors
+      const errorDiv = document.getElementById('swissTeamValidationError');
+      if (errorDiv) {
+        errorDiv.classList.add('hidden');
+      }
+    }
+    
+    // Add event listeners for team selection
+    this.addSwissEventListeners();
+  }
+
+  /**
+   * Add event listeners for Swiss Tournament modal
+   */
+  addSwissEventListeners() {
+    const form = document.getElementById('swissForm');
+    if (!form) return;
+    
+    // Handle form submission
+    const submitHandler = async (event) => {
+      event.preventDefault();
+      await this.handleSwissForm(event);
+    };
+    
+    // Remove existing listener if any
+    form.removeEventListener('submit', submitHandler);
+    form.addEventListener('submit', submitHandler);
+    
+    // Handle team selection counter
+    const teamCheckboxes = form.querySelectorAll('input[name="selectedTeams"]');
+    const counter = document.getElementById('swissTeamSelectionCounter');
+    
+    teamCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const selectedCount = form.querySelectorAll('input[name="selectedTeams"]:checked').length;
+        if (counter) {
+          counter.textContent = `${selectedCount} selected`;
+        }
+      });
+    });
+  }
+
+  /**
+   * Handle Swiss Tournament form submission
+   */
+  async handleSwissForm(event) {
+    try {
+      const formData = new FormData(event.target);
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      
+      // Prevent multiple submissions
+      if (submitButton && submitButton.disabled) {
+        return;
+      }
+      
+      // Disable submit button
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Generating...';
+      }
+      
+      const roundNumber = parseInt(formData.get('roundNumber'));
+      const selectedTeamIds = formData.getAll('selectedTeams');
+      
+      // Validate input
+      if (!roundNumber || roundNumber < 1 || roundNumber > this.currentEvent.totalRounds) {
+        this.ui.showError('Validation Error', 'Please select a valid round');
+        return;
+      }
+      
+      if (selectedTeamIds.length < 2) {
+        this.ui.showError('Validation Error', 'Please select at least 2 teams for Swiss Tournament');
+        return;
+      }
+      
+      // Get selected teams
+      const selectedTeams = this.teams.filter(team => selectedTeamIds.includes(team.id));
+      
+      // Generate Swiss Tournament matches
+      await this.generateSwissForRound(roundNumber, selectedTeams);
+      
+      // Close modal
+      this.closeModal('swissModal');
+      
+    } catch (error) {
+      console.error('Error handling Swiss Tournament form:', error);
+      this.ui.showError('Error', 'Failed to generate Swiss Tournament matches: ' + error.message);
+    } finally {
+      // Re-enable submit button
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Generate Matches';
+      }
+    }
+  }
+
+  /**
+   * Generate Swiss Tournament matches for specific round and teams
+   */
+  async generateSwissForRound(roundNumber, selectedTeams) {
+    let alerted = false;
+    try {
+      // Check if the round already has matches
+      const existingMatches = this.matches.filter(m => m.roundNumber === roundNumber);
+      // Check if there are any completed matches in this round
+      const completedMatches = existingMatches.filter(m => m.status === 'completed');
+      if (completedMatches.length > 0 && !alerted) {
+        alerted = true;
+        alert(`Cannot Generate Matches: Round ${roundNumber} has ${completedMatches.length} completed matches. Cannot generate new matches for rounds with completed matches.`);
+        return;
+      }
+      
+      if (existingMatches.length > 0) {
+        const confirmed = confirm(
+          `Round ${roundNumber} has ${existingMatches.length} matches (all in draft/pending status). Generating new Swiss Tournament matches will delete existing Round ${roundNumber} matches. Continue?`
+        );
+        if (!confirmed) return;
+      }
+
+      // Generate Swiss pairings based on current standings
+      const pairings = this.generateSwissPairings(selectedTeams, this.matches, roundNumber);
+      
+      console.log('Generated Swiss pairings:', pairings);
+      console.log('Number of pairings:', pairings.length);
+      
+      // Delete existing matches for the round if any (only if user confirmed)
+      if (existingMatches.length > 0) {
+        for (const match of existingMatches) {
+          try {
+            await this.matchService.deleteEventMatch(this.currentEventId, match.id);
+          } catch (error) {
+            console.error('Error deleting match:', error);
+          }
+        }
+      }
+
+      // Create new matches
+      let createdCount = 0;
+      let byeCount = 0;
+      for (const pairing of pairings) {
+        try {
+          // Skip bye matches (teamB is null)
+          if (pairing.teamB === null) {
+            console.log(`Skipping bye for team: ${pairing.teamA.name}`);
+            byeCount++;
+            continue;
+          }
+
+          const matchData = {
+            roundNumber: roundNumber,
+            teamAId: pairing.teamA.id,
+            teamBId: pairing.teamB.id,
+            status: 'draft',
+            scheduledTime: null,
+            room: null
+          };
+
+          await this.matchService.createEventMatch(this.currentEventId, matchData);
+          createdCount++;
+        } catch (error) {
+          console.error('Error creating match:', error);
+        }
+      }
+      
+      console.log(`Created ${createdCount} matches, ${byeCount} byes`);
+
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render the workspace
+      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      
+      this.ui.showSuccess('Success', `Generated ${createdCount} Swiss Tournament matches for Round ${roundNumber}`);
+      
+    } catch (error) {
+      console.error('Error generating Swiss Tournament for round:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate Round Robin pairings using circle method
+   * @param {Array} teams - Array of team objects
+   * @returns {Array} Array of pairing objects {teamA, teamB}
+   */
+  generateRoundRobinPairings(teams) {
+    const pairings = [];
+    const teamIds = teams.map(team => team.id);
+    
+    // If odd number of teams, add a "bye" team
+    const isOdd = teamIds.length % 2 === 1;
+    if (isOdd) {
+      teamIds.push(null); // null represents a bye
+    }
+    
+    const n = teamIds.length;
+    const rounds = n - 1;
+    
+    // Generate pairings for each round
+    for (let round = 0; round < rounds; round++) {
+      for (let i = 0; i < n / 2; i++) {
+        const teamAIndex = i;
+        const teamBIndex = n - 1 - i;
+        
+        // Skip if either team is a bye
+        if (teamIds[teamAIndex] !== null && teamIds[teamBIndex] !== null) {
+          const teamA = teams.find(t => t.id === teamIds[teamAIndex]);
+          const teamB = teams.find(t => t.id === teamIds[teamBIndex]);
+          
+          pairings.push({ teamA, teamB });
+        }
+      }
+      
+      // Rotate teams (keep first team fixed, rotate the rest)
+      const temp = teamIds[1];
+      for (let i = 1; i < n - 1; i++) {
+        teamIds[i] = teamIds[i + 1];
+      }
+      teamIds[n - 1] = temp;
+    }
+    
+    return pairings;
+  }
+
+  /**
+   * Generate Swiss tournament pairings for a specific round
+   * @param {Array} teams - Array of team objects with current standings
+   * @param {Array} matches - Array of completed matches to calculate standings
+   * @param {number} roundNumber - Current round number
+   * @returns {Array} Array of pairing objects {teamA, teamB}
+   */
+  generateSwissPairings(teams, matches, roundNumber) {
+    // Ensure teams and matches are arrays
+    if (!teams || !Array.isArray(teams)) {
+      teams = [];
+    }
+    if (!matches || !Array.isArray(matches)) {
+      matches = [];
+    }
+    
+    // Calculate current standings for all teams
+    const teamStandings = this.calculateTeamStandings(teams, matches);
+    
+    // Create a map of team standings for easy lookup
+    const standingsMap = new Map();
+    teamStandings.forEach(standing => {
+      standingsMap.set(standing.team.id, {
+        team: standing.team,
+        wins: standing.wins,
+        votes: standing.votes,
+        scoreDifferential: standing.scoreDifferential,
+        totalMatches: standing.totalMatches
+      });
+    });
+    
+    // Add teams that haven't played yet (0 points)
+    teams.forEach(team => {
+      if (!standingsMap.has(team.id)) {
+        standingsMap.set(team.id, {
+          team: team,
+          wins: 0,
+          votes: 0,
+          scoreDifferential: 0,
+          totalMatches: 0
+        });
+      }
+    });
+    
+    // Convert to array and sort by standings (wins, votes, scoreDifferential)
+    const sortedTeams = Array.from(standingsMap.values()).sort((a, b) => {
+      if (a.wins !== b.wins) return b.wins - a.wins;
+      if (a.votes !== b.votes) return b.votes - a.votes;
+      return b.scoreDifferential - a.scoreDifferential;
+    });
+    
+    // For round 1, use random pairing
+    if (roundNumber === 1) {
+      return this.generateRandomPairings(sortedTeams.map(s => s.team));
+    }
+    
+    // For subsequent rounds, use Swiss pairing
+    return this.generateSwissPairingsForRound(sortedTeams, roundNumber);
+  }
+
+  /**
+   * Generate random pairings for round 1
+   * @param {Array} teams - Array of team objects
+   * @returns {Array} Array of pairing objects {teamA, teamB}
+   */
+  generateRandomPairings(teams) {
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    const pairings = [];
+    
+    for (let i = 0; i < shuffledTeams.length; i += 2) {
+      if (i + 1 < shuffledTeams.length) {
+        pairings.push({
+          teamA: shuffledTeams[i],
+          teamB: shuffledTeams[i + 1]
+        });
+      } else {
+        // Handle odd number of teams with bye
+        pairings.push({
+          teamA: shuffledTeams[i],
+          teamB: null // Bye
+        });
+      }
+    }
+    
+    return pairings;
+  }
+
+  /**
+   * Generate Swiss pairings for rounds 2+
+   * @param {Array} sortedTeams - Array of team standings sorted by performance
+   * @param {number} roundNumber - Current round number
+   * @returns {Array} Array of pairing objects {teamA, teamB}
+   */
+  generateSwissPairingsForRound(sortedTeams, roundNumber) {
+    const pairings = [];
+    const usedTeams = new Set();
+    const teams = sortedTeams.map(s => s.team);
+    
+    // Get all previous matches to avoid repeat pairings
+    const previousMatches = this.matches ? this.matches.filter(m => m.roundNumber < roundNumber) : [];
+    const previousPairings = new Set();
+    
+    previousMatches.forEach(match => {
+      if (match.teamAId && match.teamBId) {
+        const pair = [match.teamAId, match.teamBId].sort().join('-');
+        previousPairings.add(pair);
+      }
+    });
+    
+    console.log('Previous pairings:', Array.from(previousPairings));
+    console.log('Available teams:', teams.map(t => t.name));
+    
+    // Try to pair teams with similar scores
+    for (let i = 0; i < teams.length; i++) {
+      if (usedTeams.has(teams[i].id)) continue;
+      
+      // Find the best available opponent
+      let bestOpponent = null;
+      let bestScoreDiff = Infinity;
+      
+      for (let j = i + 1; j < teams.length; j++) {
+        if (usedTeams.has(teams[j].id)) continue;
+        
+        // Check if this pairing has already occurred
+        const pair = [teams[i].id, teams[j].id].sort().join('-');
+        if (previousPairings.has(pair)) {
+          console.log(`Skipping existing pairing: ${teams[i].name} vs ${teams[j].name}`);
+          continue;
+        }
+        
+        // Calculate score difference between teams
+        const teamIStanding = sortedTeams.find(s => s.team.id === teams[i].id);
+        const teamJStanding = sortedTeams.find(s => s.team.id === teams[j].id);
+        
+        if (teamIStanding && teamJStanding) {
+          const scoreDiff = Math.abs(teamIStanding.wins - teamJStanding.wins);
+          
+          if (scoreDiff < bestScoreDiff) {
+            bestScoreDiff = scoreDiff;
+            bestOpponent = teams[j];
+          }
+        }
+      }
+      
+      if (bestOpponent) {
+        pairings.push({
+          teamA: teams[i],
+          teamB: bestOpponent
+        });
+        usedTeams.add(teams[i].id);
+        usedTeams.add(bestOpponent.id);
+        console.log(`Paired: ${teams[i].name} vs ${bestOpponent.name}`);
+      } else {
+        // If no suitable opponent found, try to pair with any available team (even if they've played before)
+        let fallbackOpponent = null;
+        for (let j = i + 1; j < teams.length; j++) {
+          if (usedTeams.has(teams[j].id)) continue;
+          fallbackOpponent = teams[j];
+          break;
+        }
+        
+        if (fallbackOpponent) {
+          pairings.push({
+            teamA: teams[i],
+            teamB: fallbackOpponent
+          });
+          usedTeams.add(teams[i].id);
+          usedTeams.add(fallbackOpponent.id);
+          console.log(`Fallback paired: ${teams[i].name} vs ${fallbackOpponent.name} (repeat matchup)`);
+        } else {
+          // No suitable opponent found, assign bye
+          pairings.push({
+            teamA: teams[i],
+            teamB: null // Bye
+          });
+          usedTeams.add(teams[i].id);
+          console.log(`Bye assigned to: ${teams[i].name}`);
+        }
+      }
+    }
+    
+    return pairings;
+  }
+
+  /**
+   * Calculate team standings for Swiss pairing
+   * @param {Array} teams - Array of team objects
+   * @param {Array} matches - Array of completed matches
+   * @returns {Array} Array of team standings
+   */
+  calculateTeamStandings(teams, matches) {
+    // Ensure matches is an array
+    if (!matches || !Array.isArray(matches)) {
+      matches = [];
+    }
+    
+    const completedMatches = matches.filter(m => m && m.status === 'completed');
+    
+    const teamStats = teams.map(team => {
+      const teamMatches = completedMatches.filter(m => 
+        m.teamAId === team.id || m.teamBId === team.id
+      );
+
+      let wins = 0;
+      let votes = 0;
+      let scoreDifferential = 0;
+      let totalMatches = teamMatches.length;
+
+      teamMatches.forEach(match => {
+        const matchResult = this.calculateMatchResult(match, team.id);
+        wins += matchResult.wins;
+        votes += matchResult.votes;
+        scoreDifferential += matchResult.scoreDifferential;
+      });
+
+      return {
+        team: {
+          id: team.id,
+          name: team.name,
+          school: team.school
+        },
+        wins,
+        votes,
+        scoreDifferential,
+        totalMatches,
+        winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0
+      };
+    });
+
+    // Sort by wins, then votes, then score differential
+    teamStats.sort((a, b) => {
+      if (a.wins !== b.wins) return b.wins - a.wins;
+      if (a.votes !== b.votes) return b.votes - a.votes;
+      return b.scoreDifferential - a.scoreDifferential;
+    });
+
+    return teamStats;
+  }
+
+  /**
+   * Calculate match result for a team
+   * @param {Object} match - Match object
+   * @param {string} teamId - Team ID
+   * @returns {Object} Match result
+   */
+  calculateMatchResult(match, teamId) {
+    const isTeamA = match.teamAId === teamId;
+    const opponentId = isTeamA ? match.teamBId : match.teamAId;
+    
+    // Check if match has scores and assignments
+    if (!match.scores || !match.assignments) {
+      return { wins: 0, votes: 0, scoreDifferential: 0 };
+    }
+    
+    // Get all scores for this team
+    const teamScores = match.scores.filter(score => score.teamId === teamId);
+    const opponentScores = match.scores.filter(score => score.teamId === opponentId);
+    
+    // Calculate judge votes
+    const judgeVotes = this.calculateJudgeVotes(teamScores, opponentScores, match.assignments);
+    
+    let wins = 0;
+    let votes = judgeVotes.teamVotes;
+    let scoreDifferential = judgeVotes.teamTotal - judgeVotes.opponentTotal;
+
+    // Determine winner: team with more votes wins, tie results in draw (0.5 win each)
+    if (judgeVotes.teamVotes > judgeVotes.opponentVotes) {
+      wins = 1;
+    } else if (judgeVotes.teamVotes === judgeVotes.opponentVotes) {
+      wins = 0.5; // Draw
+    }
+
+    return { wins, votes, scoreDifferential };
+  }
+
+  /**
+   * Calculate judge votes for Swiss pairing
+   * @param {Array} teamScores - Team scores
+   * @param {Array} opponentScores - Opponent scores
+   * @param {Array} assignments - Judge assignments
+   * @returns {Object} Voting results
+   */
+  calculateJudgeVotes(teamScores, opponentScores, assignments) {
+    let teamVotes = 0;
+    let opponentVotes = 0;
+    let teamTotal = 0;
+    let opponentTotal = 0;
+
+    // Check if assignments exist
+    if (!assignments || assignments.length === 0) {
+      return { teamVotes, opponentVotes, teamTotal, opponentTotal };
+    }
+
+    // Check if using two-judge protocol
+    const actualJudges = assignments.length;
+    const useThreeJudgeProtocol = actualJudges === 2;
+
+    assignments.forEach(assignment => {
+      const judgeId = assignment.judgeId;
+      
+      // Get this judge's scores for both teams
+      const teamScore = teamScores.find(s => s.judgeId === judgeId);
+      const opponentScore = opponentScores.find(s => s.judgeId === judgeId);
+      
+      if (teamScore && opponentScore) {
+        const teamTotalScore = this.calculateTotalScore(teamScore);
+        const opponentTotalScore = this.calculateTotalScore(opponentScore);
+        
+        teamTotal += teamTotalScore;
+        opponentTotal += opponentTotalScore;
+        
+        // Judge vote: team with higher score gets this judge's vote
+        if (teamTotalScore > opponentTotalScore) {
+          teamVotes += 1;
+        } else if (opponentTotalScore > teamTotalScore) {
+          opponentVotes += 1;
+        } else {
+          // Equal scores, each gets 0.5 votes
+          teamVotes += 0.5;
+          opponentVotes += 0.5;
+        }
+      }
+    });
+
+    // If using two-judge protocol, simulate third judge
+    if (useThreeJudgeProtocol && assignments.length === 2) {
+      const avgTeamScore = teamTotal / 2;
+      const avgOpponentScore = opponentTotal / 2;
+      
+      // Simulate third judge's score (average of two real judges)
+      teamTotal += avgTeamScore;
+      opponentTotal += avgOpponentScore;
+      
+      // Third judge's vote
+      if (avgTeamScore > avgOpponentScore) {
+        teamVotes += 1;
+      } else if (avgOpponentScore > avgTeamScore) {
+        opponentVotes += 1;
+      } else {
+        teamVotes += 0.5;
+        opponentVotes += 0.5;
+      }
+    }
+
+    return { teamVotes, opponentVotes, teamTotal, opponentTotal };
+  }
+
+  /**
+   * Calculate total score for Swiss pairing
+   * @param {Object} score - Score object
+   * @returns {number} Total score
+   */
+  calculateTotalScore(score) {
+    let total = 0;
+    
+    // Check if score object exists
+    if (!score) {
+      return total;
+    }
+    
+    // Parse criteria scores
+    if (score.criteriaScores) {
+      try {
+        const criteriaScores = typeof score.criteriaScores === 'string' 
+          ? JSON.parse(score.criteriaScores) 
+          : score.criteriaScores;
+        
+        total += Object.values(criteriaScores).reduce((sum, value) => sum + (value || 0), 0);
+      } catch (error) {
+        console.warn('Error parsing criteria scores:', error);
+      }
+    }
+    
+    // Parse comment scores (Judge Questions) - use average
+    if (score.commentScores) {
+      try {
+        const commentScores = typeof score.commentScores === 'string' 
+          ? JSON.parse(score.commentScores) 
+          : score.commentScores;
+        
+        if (Array.isArray(commentScores) && commentScores.length > 0) {
+          // Calculate average of Judge Questions
+          const commentAverage = commentScores.reduce((sum, value) => sum + (value || 0), 0) / commentScores.length;
+          total += commentAverage;
+        }
+      } catch (error) {
+        console.warn('Error parsing comment scores:', error);
+      }
+    }
+    
+    return total;
   }
 
   /**
