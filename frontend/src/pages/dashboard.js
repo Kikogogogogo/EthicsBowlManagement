@@ -253,6 +253,25 @@ class DashboardPage {
   async refresh() {
     await this.loadEvents();
   }
+
+  /**
+   * Handle event card click - navigate to event workspace
+   */
+  handleEventClick(eventId) {
+    console.log('Event card clicked:', eventId);
+    
+    // Join WebSocket event room if available
+    if (window.wsClient) {
+      window.wsClient.joinEvent(eventId);
+    }
+    
+    // Navigate to event workspace
+    if (window.eventWorkspacePage) {
+      window.eventWorkspacePage.show(eventId);
+    } else {
+      console.error('Event workspace page not available');
+    }
+  }
 }
 
 // DashboardPage is now a global class 

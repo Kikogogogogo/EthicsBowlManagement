@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
+ const { PrismaClient } = require('@prisma/client');
 const { USER_ROLES, MATCH_STATUSES, canJudgesScore } = require('../constants/enums');
 
 const prisma = new PrismaClient();
@@ -230,6 +230,16 @@ class ScoreService {
         score.commentScores = JSON.parse(score.commentScores);
       }
 
+      // Broadcast score update via WebSocket
+      if (global.websocketService) {
+        global.websocketService.broadcastScoreUpdate(matchId, {
+          score,
+          action: existingScore ? 'updated' : 'created',
+          judgeId,
+          teamId
+        });
+      }
+
       return score;
     } catch (error) {
       console.error('Error creating/updating score:', error);
@@ -305,6 +315,16 @@ class ScoreService {
       }
       if (updatedScore.commentScores) {
         updatedScore.commentScores = JSON.parse(updatedScore.commentScores);
+      }
+
+      // Broadcast score update via WebSocket
+      if (global.websocketService) {
+        global.websocketService.broadcastScoreUpdate(updatedScore.matchId, {
+          score: updatedScore,
+          action: 'updated',
+          judgeId: updatedScore.judgeId,
+          teamId: updatedScore.teamId
+        });
       }
 
       return updatedScore;
@@ -500,7 +520,7 @@ class ScoreService {
         return parsedScore;
       });
 
-      return {
+      const result = {
         scores: parsedSubmittedScores,
         submittedCount: submittedScores.length,
         isMatchComplete,
@@ -516,6 +536,28 @@ class ScoreService {
           return parsedScore;
         })
       };
+
+      // Broadcast score submission via WebSocket
+      if (global.websocketService) {
+        global.websocketService.broadcastScoreUpdate(matchId, {
+          scores: parsedSubmittedScores,
+          action: 'submitted',
+          judgeId,
+          isMatchComplete,
+          allSubmittedScores: result.allSubmittedScores
+        });
+
+        // If match is complete, broadcast match status update
+        if (isMatchComplete && matchUpdate) {
+          global.websocketService.broadcastMatchStatusUpdate(
+            matchId, 
+            matchUpdate.status, 
+            match.eventId
+          );
+        }
+      }
+
+      return result;
     } catch (error) {
       console.error('Error submitting match scores:', error);
       throw error;

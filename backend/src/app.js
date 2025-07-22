@@ -3,6 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const { config, validateEnv } = require('./config/env');
 const { connectToDatabase, disconnectFromDatabase } = require('./config/database');
@@ -21,6 +23,24 @@ validateEnv();
 
 // Create Express app
 const app = express();
+
+// Create HTTP server and Socket.IO server
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: config.cors.origin,
+    credentials: config.cors.credentials,
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+// Initialize WebSocket service
+const WebSocketService = require('./services/websocket.service');
+const websocketService = new WebSocketService(io);
+
+// Make io and websocket service available globally
+global.io = io;
+global.websocketService = websocketService;
 
 // Security middleware
 app.use(helmet({
@@ -148,12 +168,13 @@ async function startServer() {
       process.exit(1);
     }
     
-    // Start HTTP server
-    const server = app.listen(config.port, () => {
+    // Start HTTP server with Socket.IO
+    server.listen(config.port, () => {
       console.log(`Server running on port ${config.port}`);
       console.log(`Environment: ${config.nodeEnv}`);
       console.log(`API Base URL: http://localhost:${config.port}${config.api.prefix}`);
       console.log(`Health Check: http://localhost:${config.port}/health`);
+      console.log(`WebSocket Server: ws://localhost:${config.port}`);
     });
     
     // Graceful shutdown handlers
@@ -207,4 +228,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = app; 
+module.exports = { app, server, io }; 

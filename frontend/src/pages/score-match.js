@@ -19,6 +19,162 @@ class ScoreMatchPage {
   }
 
   /**
+   * Initialize WebSocket listeners for real-time updates
+   */
+  initializeWebSocketListeners() {
+    // 如果WebSocket客户端可用，设置实时事件监听
+    if (window.wsClient && this.currentMatch) {
+      console.log('🔌 设置分数页面WebSocket监听器...');
+      
+      // 加入比赛房间
+      window.wsClient.joinMatch(this.currentMatch.id);
+      
+      // 监听分数更新事件
+      const scoreUpdateHandler = (event) => {
+        const data = event.detail;
+        if (data.matchId === this.currentMatch.id) {
+          console.log('📊 收到分数实时更新:', data);
+          this.handleRealTimeScoreUpdate(data);
+        }
+      };
+      
+      // 监听比赛状态更新事件
+      const matchStatusHandler = (event) => {
+        const data = event.detail;
+        if (data.matchId === this.currentMatch.id) {
+          console.log('🏁 收到比赛状态更新:', data);
+          this.handleRealTimeMatchStatusUpdate(data);
+        }
+      };
+      
+      // 添加事件监听器
+      window.addEventListener('scoreUpdated', scoreUpdateHandler);
+      window.addEventListener('matchStatusUpdated', matchStatusHandler);
+      
+      // 存储处理器引用以便后续清理
+      this.scoreUpdateHandler = scoreUpdateHandler;
+      this.matchStatusHandler = matchStatusHandler;
+    }
+  }
+  
+  /**
+   * 处理实时分数更新
+   */
+  handleRealTimeScoreUpdate(data) {
+    // 如果是其他评委的分数更新，刷新页面数据
+    if (data.judgeId !== this.authManager.currentUser?.id) {
+      console.log('📊 其他评委更新了分数，刷新数据...');
+      this.refreshScoreData();
+    }
+  }
+  
+  /**
+   * 处理实时比赛状态更新
+   */
+  handleRealTimeMatchStatusUpdate(data) {
+    console.log('🏁 比赛状态已更新:', data.status);
+    
+    // 更新页面上的比赛状态显示
+    const statusElement = document.querySelector('#match-status');
+    if (statusElement) {
+      statusElement.textContent = data.status;
+      statusElement.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getStatusClass(data.status)}`;
+    }
+    
+    // 如果比赛已完成，显示特殊提示
+    if (data.status === 'completed') {
+      const completedNotice = document.createElement('div');
+      completedNotice.className = 'mt-4 p-4 bg-green-50 border border-green-200 rounded-md';
+      completedNotice.innerHTML = `
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-green-800">比赛已完成</h3>
+            <div class="mt-2 text-sm text-green-700">
+              <p>所有评委的分数已提交，比赛评分已完成。</p>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      const container = document.querySelector('#score-match-container');
+      if (container && !container.querySelector('.completed-notice')) {
+        completedNotice.classList.add('completed-notice');
+        container.appendChild(completedNotice);
+      }
+    }
+  }
+  
+  /**
+   * 刷新分数数据
+   */
+  async refreshScoreData() {
+    try {
+      // 重新获取现有分数
+      const scores = await this.scoreService.getMatchScores(this.currentMatch.id);
+      this.existingScores = scores.data;
+      
+      // 更新UI显示
+      this.populateExistingScores();
+      this.updateTotalScores();
+      this.updateSubmitButtonState();
+      
+      console.log('✅ 分数数据已刷新');
+    } catch (error) {
+      console.error('❌ 刷新分数数据失败:', error);
+    }
+  }
+  
+  /**
+   * 获取状态样式类
+   */
+  getStatusClass(status) {
+    switch (status) {
+      case 'draft':
+        return 'bg-gray-100 text-gray-800';
+      case 'prep_period':
+        return 'bg-blue-100 text-blue-800';
+      case 'team_a_presentation':
+      case 'team_b_presentation':
+        return 'bg-purple-100 text-purple-800';
+      case 'moderator_period_1':
+      case 'moderator_period_2':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'team_a_commentary':
+      case 'team_b_commentary':
+        return 'bg-orange-100 text-orange-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  }
+  
+  /**
+   * 清理WebSocket监听器
+   */
+  cleanupWebSocketListeners() {
+    if (this.scoreUpdateHandler) {
+      window.removeEventListener('scoreUpdated', this.scoreUpdateHandler);
+      this.scoreUpdateHandler = null;
+    }
+    
+    if (this.matchStatusHandler) {
+      window.removeEventListener('matchStatusUpdated', this.matchStatusHandler);
+      this.matchStatusHandler = null;
+    }
+    
+    // 离开比赛房间
+    if (window.wsClient && this.currentMatch) {
+      window.wsClient.leaveMatch(this.currentMatch.id);
+    }
+  }
+
+  /**
    * Initialize event listeners
    */
   initializeEventListeners() {
@@ -27,6 +183,9 @@ class ScoreMatchPage {
     if (backButton) {
       backButton.addEventListener('click', async () => {
         try {
+          // Clean up WebSocket listeners before leaving
+          this.cleanupWebSocketListeners();
+          
           // Simple and reliable navigation back to workspace
           if (this.currentMatch?.eventId && window.app?.ui) {
             console.log('Back button clicked, navigating to workspace...');
@@ -116,6 +275,9 @@ class ScoreMatchPage {
       // Replace app content with scoring page
       appEl.innerHTML = this.renderScorePage();
       this.initializeEventListeners();
+      
+      // Initialize WebSocket listeners for real-time updates
+      this.initializeWebSocketListeners();
       
       // Initialize total score calculations and submit button state
       setTimeout(() => {

@@ -47,6 +47,8 @@
   border-bottom-color: #d1d5db;
 }
 
+/* WebSocket相关样式已移除 - 用户不需要看到连接状态 */
+
 /* Event workspace specific styles */
 .event-card {
   transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;

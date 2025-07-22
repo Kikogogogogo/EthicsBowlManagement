@@ -680,7 +680,13 @@ class EventWorkspacePage {
    */
   async preloadJudgeScoresStatus() {
     try {
-      const judgeId = this.authManager.currentUser.id;
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) {
+        console.warn('⚠️ [EventWorkspace] Cannot preload judge scores - no current user');
+        return;
+      }
+      
+      const judgeId = currentUser.id;
       
       for (const match of this.matches) {
         try {
@@ -3410,7 +3416,8 @@ class EventWorkspacePage {
    */
   async hasJudgeSubmittedScores(matchId) {
     try {
-      if (!this.authManager.currentUser || this.authManager.currentUser.role !== 'judge') {
+      const currentUser = this.getCurrentUser();
+      if (!currentUser || currentUser.role !== 'judge') {
         return false;
       }
       
@@ -3419,7 +3426,7 @@ class EventWorkspacePage {
       
       // Check if current judge has submitted scores
       const currentJudgeScores = scores.filter(
-        score => score.judgeId === this.authManager.currentUser.id && score.isSubmitted
+        score => score.judgeId === currentUser.id && score.isSubmitted
       );
       
       return currentJudgeScores.length > 0;
@@ -3434,7 +3441,8 @@ class EventWorkspacePage {
    */
   async refreshMatchScoreStatus(matchId) {
     try {
-      if (this.authManager.currentUser.role === 'judge') {
+      const currentUser = this.getCurrentUser();
+      if (currentUser && currentUser.role === 'judge') {
         const hasSubmitted = await this.hasJudgeSubmittedScores(matchId);
         this.judgeScoresCache.set(matchId, hasSubmitted);
         
@@ -3455,7 +3463,8 @@ class EventWorkspacePage {
    * Refresh all judge scores status
    */
   async refreshAllScoreStatuses() {
-    if (this.authManager.currentUser.role === 'judge') {
+    const currentUser = this.getCurrentUser();
+    if (currentUser && currentUser.role === 'judge') {
       await this.preloadJudgeScoresStatus();
       
       // Re-render current tab if it shows matches
@@ -3985,10 +3994,31 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * 安全地获取当前用户
+   */
+  getCurrentUser() {
+    if (!this.authManager || !this.authManager.currentUser) {
+      console.warn('⚠️ [EventWorkspace] AuthManager or currentUser is null');
+      return null;
+    }
+    return this.authManager.currentUser;
+  }
+
+  /**
    * Get the effective role for the current user
    */
   getEffectiveRole() {
-    return this.effectiveRole || this.authManager.currentUser.role;
+    if (this.effectiveRole) {
+      return this.effectiveRole;
+    }
+    
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+      console.warn('⚠️ [EventWorkspace] No current user, defaulting to guest role');
+      return 'guest';
+    }
+    
+    return currentUser.role;
   }
 
   /**
@@ -4392,15 +4422,22 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     try {
       console.log('🔄 [RoleSwitcher] Switching role from', this.getEffectiveRole(), 'to', newRole);
       
+      // 安全检查：确保用户存在
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) {
+        console.error('❌ [RoleSwitcher] Current user is null, cannot switch roles');
+        return;
+      }
+      
       // Only allow admin users to switch roles
-      if (this.authManager.currentUser.role !== 'admin') {
+      if (currentUser.role !== 'admin') {
         console.warn('⚠️ [RoleSwitcher] Role switching only allowed for admin users');
         return;
       }
 
       // Store original role if not already stored
       if (!this.originalRole) {
-        this.originalRole = this.authManager.currentUser.role;
+        this.originalRole = currentUser.role;
       }
 
       // Set effective role
