@@ -7,6 +7,9 @@ import { authManager, OAuthCallbackHandler, ApiError } from './auth.js';
 import { authService, healthService, eventService, teamService, userService, preApprovedEmailService, matchService, scoreService, statisticsService } from './api.js';
 import { initWebSocket, getWebSocketClient, destroyWebSocket } from './websocket.js';
 
+// Import CSS
+import '../styles/main.css';
+
 // Import page modules
 import '../pages/dashboard.js';
 import '../pages/events.js';
@@ -154,6 +157,11 @@ class UIManager {
    */
   showPage(pageName) {
     console.log(`UIManager.showPage(${pageName}) called`);
+    
+    // Show main content if hidden
+    if (this.elements.content) {
+      this.elements.content.classList.remove('hidden');
+    }
     
     // Hide all pages
     Object.values(this.elements).forEach(el => {
@@ -685,6 +693,8 @@ class App {
         this.ui.showPage('pending');
         this.ui.hideLoading();
       } else {
+        // Show login page for unauthenticated users or errors
+        console.log('🔓 用户未认证，显示登录页面');
         this.ui.showPage('login');
         this.ui.hideLoading();
       }
