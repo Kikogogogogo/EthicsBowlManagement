@@ -12,6 +12,7 @@ import '../pages/dashboard.js';
 import '../pages/events.js';
 import '../pages/teams.js';
 import '../pages/users.js';
+import '../pages/score-match.js';
 
 import '../pages/event-workspace.js';
 

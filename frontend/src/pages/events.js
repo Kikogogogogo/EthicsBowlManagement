@@ -628,4 +628,7 @@ class EventsPage {
       this.ui.elements.eventModalError.classList.add('hidden');
     }
   }
-} 
+}
+
+// Make EventsPage globally available
+window.EventsPage = EventsPage; 

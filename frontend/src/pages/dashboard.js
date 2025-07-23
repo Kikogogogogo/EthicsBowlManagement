@@ -274,4 +274,5 @@ class DashboardPage {
   }
 }
 
-// DashboardPage is now a global class 
+// Make DashboardPage globally available
+window.DashboardPage = DashboardPage; 

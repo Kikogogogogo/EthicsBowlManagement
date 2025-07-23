@@ -456,4 +456,7 @@ class TeamsPage {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
-} 
+}
+
+// Make TeamsPage globally available
+window.TeamsPage = TeamsPage; 

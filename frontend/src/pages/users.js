@@ -1233,4 +1233,7 @@ class UsersPage {
     if (pendingUsersElement) pendingUsersElement.textContent = pendingUsers;
     if (adminUsersElement) adminUsersElement.textContent = adminUsers;
   }
-} 
+}
+
+// Make UsersPage globally available
+window.UsersPage = UsersPage; 
