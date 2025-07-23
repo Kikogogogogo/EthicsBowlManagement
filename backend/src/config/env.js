@@ -54,7 +54,13 @@ const config = {
   
   // Security configuration
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN ? 
+      process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : 
+      [
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'https://ethics-bowl-management.vercel.app', 
+      ],
     credentials: true,
   },
   
