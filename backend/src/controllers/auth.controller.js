@@ -1,5 +1,6 @@
 const AuthService = require('../services/auth.service');
 const GoogleAuthService = require('../services/google-auth.service');
+const { config } = require('../config/env');
 
 class AuthController {
   constructor() {
@@ -42,20 +43,23 @@ class AuthController {
     try {
       const { code, state, error } = req.query;
       
+      // Get frontend URL from config
+      const frontendUrl = config.frontend.url;
+      
       // Handle OAuth errors
       if (error) {
-        return res.redirect(`http://localhost:8080/?error=${encodeURIComponent(error)}`);
+        return res.redirect(`${frontendUrl}/?error=${encodeURIComponent(error)}`);
       }
       
       if (!code) {
-        return res.redirect('http://localhost:8080/?error=missing_code');
+        return res.redirect(`${frontendUrl}/?error=missing_code`);
       }
       
       // Process the OAuth callback
       const result = await this.authService.handleGoogleCallback(code);
       
       // Redirect to frontend with success data
-      const successUrl = `http://localhost:8080/?success=true&token=${encodeURIComponent(result.token)}&refreshToken=${encodeURIComponent(result.refreshToken)}`;
+      const successUrl = `${frontendUrl}/?success=true&token=${encodeURIComponent(result.token)}&refreshToken=${encodeURIComponent(result.refreshToken)}`;
       res.redirect(successUrl);
       
     } catch (error) {
@@ -66,7 +70,7 @@ class AuthController {
         errorMessage = 'account_pending_approval';
       }
       
-      res.redirect(`http://localhost:8080/?error=${encodeURIComponent(errorMessage)}`);
+      res.redirect(`${config.frontend.url}/?error=${encodeURIComponent(errorMessage)}`);
     }
   };
 

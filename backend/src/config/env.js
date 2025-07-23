@@ -6,7 +6,8 @@ const requiredEnvVars = [
   'JWT_EXPIRES_IN',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
-  'GOOGLE_REDIRECT_URI'
+  'GOOGLE_REDIRECT_URI',
+  'FRONTEND_URL'
 ];
 
 // Validate required environment variables
@@ -68,6 +69,11 @@ const config = {
   app: {
     name: 'Ethics Bowl Scoring Platform',
     version: '1.0.0',
+  },
+  
+  // Frontend configuration
+  frontend: {
+    url: process.env.FRONTEND_URL || 'http://localhost:8080',
   },
 };
 
