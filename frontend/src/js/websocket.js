@@ -26,11 +26,17 @@ class WebSocketClient {
    */
   connect() {
     try {
-      // Get backend address from current page URL
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const port = '3000'; // Backend port
-      const wsUrl = `${protocol}//${host}:${port}`;
+      // Get backend WebSocket URL from environment or fallback to localhost
+      let wsUrl;
+      if (import.meta.env.VITE_WEBSOCKET_URL) {
+        wsUrl = import.meta.env.VITE_WEBSOCKET_URL;
+      } else {
+        // Fallback for development
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        const port = '3000'; // Backend port
+        wsUrl = `${protocol}//${host}:${port}`;
+      }
 
       console.log('Connecting to WebSocket server:', wsUrl);
 
