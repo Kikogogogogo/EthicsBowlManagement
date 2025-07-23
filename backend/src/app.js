@@ -23,8 +23,7 @@ validateEnv();
 
 // Create Express app
 const app = express();
-
-app.set('trust proxy', 1); 
+app.set('trust proxy', true);
 
 // Create HTTP server and Socket.IO server
 const server = http.createServer(app);
