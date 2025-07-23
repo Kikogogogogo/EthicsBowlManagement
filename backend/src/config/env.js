@@ -59,7 +59,7 @@ const config = {
       [
         'http://localhost:3000',
         'http://localhost:8080',
-        'https://ethics-bowl-management.vercel.app', 
+        'https://ethics-bowl-management2025.vercel.app', 
       ],
     credentials: true,
   },
