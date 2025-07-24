@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: './', // 使用相对路径，修复 Vercel 部署的资源路径问题
+  base: process.env.NODE_ENV === 'production' ? './' : '/',
   server: {
     port: 8080,
     open: true,

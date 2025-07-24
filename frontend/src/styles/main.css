@@ -122,6 +122,120 @@
   .event-card:hover {
     transform: none;
   }
+  
+  /* Mobile navbar improvements */
+  .logo-container {
+    min-width: 60px;
+    min-height: 42px;
+  }
+  
+  .logo-container img {
+    height: 12px !important;
+    width: auto !important;
+  }
+  
+  /* Ensure all desktop navigation is hidden on mobile */
+  .hidden.md\\:flex {
+    display: none !important;
+  }
+  
+  /* Force hide any desktop navigation elements on mobile */
+  @media (max-width: 767px) {
+    [class*="md:flex"] {
+      display: none !important;
+    }
+    
+    /* Ensure only mobile menu buttons are visible */
+    [id*="mobile-menu-btn"] {
+      display: flex !important;
+    }
+    
+    /* Hide all navigation menus except the current page's */
+    nav > div > div > div > div[id*="main-nav"] {
+      display: none !important;
+    }
+    
+    /* Ensure only the current page's navbar is visible */
+    .hidden[id*="-page"] nav {
+      display: none !important;
+    }
+  }
+  
+  /* Mobile dropdown menu animations */
+  #mobile-menu-dashboard,
+  #mobile-menu-events,
+  #mobile-menu-teams,
+  #mobile-menu-users {
+    transition: all 0.2s ease-in-out;
+    transform-origin: top right;
+  }
+  
+  #mobile-menu-dashboard.hidden,
+  #mobile-menu-events.hidden,
+  #mobile-menu-teams.hidden,
+  #mobile-menu-users.hidden {
+    opacity: 0;
+    transform: scale(0.95) translateY(-5px);
+    pointer-events: none;
+  }
+  
+  #mobile-menu-dashboard:not(.hidden),
+  #mobile-menu-events:not(.hidden),
+  #mobile-menu-teams:not(.hidden),
+  #mobile-menu-users:not(.hidden) {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+  }
+  
+  /* Mobile dropdown button styling */
+  #mobile-menu-btn-dashboard,
+  #mobile-menu-btn-events,
+  #mobile-menu-btn-teams,
+  #mobile-menu-btn-users {
+    transition: all 0.2s ease-in-out;
+    border-radius: 6px;
+    padding: 6px 12px;
+  }
+  
+  #mobile-menu-btn-dashboard:hover,
+  #mobile-menu-btn-events:hover,
+  #mobile-menu-btn-teams:hover,
+  #mobile-menu-btn-users:hover {
+    background-color: #f3f4f6;
+  }
+  
+  /* Mobile dropdown menu styling */
+  #mobile-menu-dashboard,
+  #mobile-menu-events,
+  #mobile-menu-teams,
+  #mobile-menu-users {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  #mobile-menu-dashboard button,
+  #mobile-menu-events button,
+  #mobile-menu-teams button,
+  #mobile-menu-users button {
+    transition: all 0.15s ease-in-out;
+    border-radius: 4px;
+    margin: 1px 4px;
+  }
+  
+  #mobile-menu-dashboard button:hover,
+  #mobile-menu-events button:hover,
+  #mobile-menu-teams button:hover,
+  #mobile-menu-users button:hover {
+    background-color: #f9fafb;
+  }
+  
+  /* Mobile user info styling */
+  #mobile-menu-dashboard .border-t,
+  #mobile-menu-events .border-t,
+  #mobile-menu-teams .border-t,
+  #mobile-menu-users .border-t {
+    border-color: #e5e7eb;
+  }
 }
 
 /* Status badges */
@@ -168,4 +282,112 @@
   background-color: #f3f4f6;
   color: #6b7280;
   border: 1px solid #d1d5db;
+}
+
+/* Mobile table optimizations */
+@media (max-width: 767px) {
+  /* Hide table headers on mobile */
+  .hidden.md\:table-header-group {
+    display: none !important;
+  }
+  
+  /* Make table rows display as blocks on mobile */
+  table tbody tr {
+    display: block;
+    margin-bottom: 1rem;
+  }
+  
+  /* Make table cells display as blocks on mobile */
+  table tbody td {
+    display: block;
+    padding: 0;
+  }
+  
+  /* Ensure proper spacing for mobile cards */
+  .bg-white.rounded-lg.border.border-gray-200 {
+    margin: 0;
+    border-radius: 0.5rem;
+  }
+  
+  /* Optimize button spacing on mobile */
+  .flex.justify-end.space-x-2 {
+    gap: 0.5rem;
+  }
+  
+  /* Make buttons more touch-friendly on mobile */
+  button {
+    min-height: 44px;
+  }
+  
+  /* Optimize form inputs on mobile */
+  input, select, textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Improve mobile card spacing */
+  .space-y-3 > * + * {
+    margin-top: 0.75rem;
+  }
+  
+  /* Better mobile button styling */
+  .text-sm.px-3.py-1\.5.rounded-md {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+  
+  /* Mobile grid improvements */
+  .grid.grid-cols-2.md\:grid-cols-4 {
+    gap: 0.75rem;
+  }
+  
+  /* Mobile filter improvements */
+  .grid.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4 {
+    gap: 1rem;
+  }
+}
+
+/* Events page mobile optimizations */
+@media (max-width: 767px) {
+  /* Events cards styling */
+  #events-cards-container {
+    padding: 0 1rem;
+  }
+  
+  /* Events card hover effects */
+  .bg-white.rounded-lg.border.border-gray-200.p-4.mb-4 {
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .bg-white.rounded-lg.border.border-gray-200.p-4.mb-4:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  /* Events page header improvements */
+  .text-2xl.font-semibold.text-gray-900 {
+    font-size: 1.5rem;
+  }
+  
+  /* Events table container on mobile */
+  #events-table-container {
+    box-shadow: none;
+    border: none;
+  }
+  
+  /* Events card spacing */
+  .space-y-3 > * + * {
+    margin-top: 0.75rem;
+  }
+  
+  /* Events card grid improvements */
+  .grid.grid-cols-2.gap-4 {
+    gap: 1rem;
+  }
+  
+  /* Events action buttons */
+  .event-actions .text-sm.px-3.py-1\.5.rounded-md {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    min-height: 44px;
+  }
 } 

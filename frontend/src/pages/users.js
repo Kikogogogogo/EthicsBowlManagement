@@ -193,7 +193,7 @@ class UsersPage {
     if (this.users.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+          <td colspan="6" class="px-4 sm:px-6 py-8 text-center text-gray-500">
             <div class="flex flex-col items-center">
               <svg class="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
@@ -207,71 +207,151 @@ class UsersPage {
       return;
     }
 
-    tableBody.innerHTML = this.users.map(user => `
-      <tr class="hover:bg-gray-50">
-        <td class="px-6 py-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0 h-10 w-10">
-              <div class="h-10 w-10 rounded-full bg-gray-600 flex items-center justify-center">
-                <span class="text-sm font-medium text-white">
-                  ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+    // Check if we're on mobile
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+      // Mobile card layout
+      tableBody.innerHTML = this.users.map(user => `
+        <tr class="block border-b border-gray-200 last:border-b-0">
+          <td class="block px-4 py-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+              <!-- User Info -->
+              <div class="flex items-center space-x-3">
+                <div class="flex-shrink-0 h-12 w-12">
+                  <div class="h-12 w-12 rounded-full bg-gray-600 flex items-center justify-center">
+                    <span class="text-sm font-medium text-white">
+                      ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-base font-medium text-gray-900 truncate">
+                    ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+                  </div>
+                  <div class="text-sm text-gray-500 truncate">${this.escapeHtml(user.email)}</div>
+                </div>
+              </div>
+              
+              <!-- Status Info -->
+              <div class="flex flex-wrap gap-2">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
+                  ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                  user.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }">
+                  <div class="w-2 h-2 rounded-full ${
+                    user.isActive ? 'bg-green-400' : 'bg-gray-400'
+                  } mr-1.5"></div>
+                  ${user.isActive ? 'Active' : 'Inactive'}
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                  user.isEmailVerified ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                }">
+                  ${user.isEmailVerified ? 'Verified' : 'Pending'}
                 </span>
               </div>
-            </div>
-            <div class="ml-4">
-              <div class="text-sm font-medium text-gray-900">
-                ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+              
+              <!-- Additional Info -->
+              <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span class="text-gray-500">Events:</span>
+                  <span class="ml-1 font-medium text-gray-900">${user.eventsCount || 0}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Last Login:</span>
+                  <span class="ml-1 font-medium text-gray-900">${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}</span>
+                </div>
               </div>
-              <div class="text-sm text-gray-500">${this.escapeHtml(user.email)}</div>
+              
+              <!-- Actions -->
+              <div class="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                <button type="button" 
+                        class="text-sm text-gray-600 hover:text-gray-900 edit-user-btn px-3 py-1.5 rounded-md hover:bg-gray-100 border border-gray-300" 
+                        data-user-id="${user.id}">
+                  Edit
+                </button>
+                ${!user.isActive ? `
+                  <button type="button" 
+                          class="text-sm text-green-600 hover:text-green-900 activate-user-btn px-3 py-1.5 rounded-md hover:bg-green-50 border border-green-300" 
+                          data-user-id="${user.id}">
+                    Activate
+                  </button>
+                ` : ''}
+              </div>
             </div>
-          </div>
-        </td>
-        <td class="px-6 py-4">
-          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
-            ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-          </span>
-        </td>
-        <td class="px-6 py-4">
-          <div class="flex flex-col space-y-1">
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-              user.isActive ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
-            }">
-              <div class="w-2 h-2 rounded-full ${
-                user.isActive ? 'bg-gray-600' : 'bg-gray-400'
-              } mr-2"></div>
-              ${user.isActive ? 'Active' : 'Inactive'}
+          </td>
+        </tr>
+      `).join('');
+    } else {
+      // Desktop table layout
+      tableBody.innerHTML = this.users.map(user => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4">
+            <div class="flex items-center">
+              <div class="flex-shrink-0 h-10 w-10">
+                <div class="h-10 w-10 rounded-full bg-gray-600 flex items-center justify-center">
+                  <span class="text-sm font-medium text-white">
+                    ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+                  </span>
+                </div>
+              </div>
+              <div class="ml-4">
+                <div class="text-sm font-medium text-gray-900">
+                  ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+                </div>
+                <div class="text-sm text-gray-500">${this.escapeHtml(user.email)}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
+              ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
             </span>
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-              user.isEmailVerified ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
-            }">
-              ${user.isEmailVerified ? 'Verified' : 'Pending'}
-            </span>
-          </div>
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-900">
-          ${user.eventsCount || 0}
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-500">
-          ${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
-        </td>
-        <td class="px-6 py-4 text-right text-sm font-medium">
-          <div class="flex justify-end space-x-2">
-            <button type="button" 
-                    class="text-gray-600 hover:text-gray-900 edit-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
-                    data-user-id="${user.id}">
-              Edit
-            </button>
-            ${!user.isActive ? `
+          </td>
+          <td class="px-6 py-4">
+            <div class="flex flex-col space-y-1">
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                user.isActive ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
+              }">
+                <div class="w-2 h-2 rounded-full ${
+                  user.isActive ? 'bg-gray-600' : 'bg-gray-400'
+                } mr-2"></div>
+                ${user.isActive ? 'Active' : 'Inactive'}
+              </span>
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                user.isEmailVerified ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
+              }">
+                ${user.isEmailVerified ? 'Verified' : 'Pending'}
+              </span>
+            </div>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-900">
+            ${user.eventsCount || 0}
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-500">
+            ${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
+          </td>
+          <td class="px-6 py-4 text-right text-sm font-medium">
+            <div class="flex justify-end space-x-2">
               <button type="button" 
-                      class="text-gray-600 hover:text-gray-900 activate-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                      class="text-gray-600 hover:text-gray-900 edit-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
                       data-user-id="${user.id}">
-                Activate
+                Edit
               </button>
-            ` : ''}
-          </div>
-        </td>
-      </tr>
-    `).join('');
+              ${!user.isActive ? `
+                <button type="button" 
+                        class="text-gray-600 hover:text-gray-900 activate-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                        data-user-id="${user.id}">
+                  Activate
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
 
     if (pagination) {
       this.renderPagination(pagination);
@@ -287,7 +367,7 @@ class UsersPage {
     if (this.pendingUsers.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+          <td colspan="5" class="px-4 sm:px-6 py-8 text-center text-gray-500">
             <div class="flex flex-col items-center">
               <svg class="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -301,56 +381,120 @@ class UsersPage {
       return;
     }
 
-    tableBody.innerHTML = this.pendingUsers.map(user => `
-      <tr class="hover:bg-gray-50">
-        <td class="px-6 py-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0 h-10 w-10">
-              <div class="h-10 w-10 rounded-full bg-gray-400 flex items-center justify-center">
-                <span class="text-sm font-medium text-white">
-                  ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+    // Check if we're on mobile
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+      // Mobile card layout
+      tableBody.innerHTML = this.pendingUsers.map(user => `
+        <tr class="block border-b border-gray-200 last:border-b-0">
+          <td class="block px-4 py-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+              <!-- User Info -->
+              <div class="flex items-center space-x-3">
+                <div class="flex-shrink-0 h-12 w-12">
+                  <div class="h-12 w-12 rounded-full bg-gray-400 flex items-center justify-center">
+                    <span class="text-sm font-medium text-white">
+                      ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-base font-medium text-gray-900 truncate">
+                    ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+                  </div>
+                  <div class="text-sm text-gray-500 truncate">${this.escapeHtml(user.email)}</div>
+                </div>
+              </div>
+              
+              <!-- Status Info -->
+              <div class="flex flex-wrap gap-2">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
+                  ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                  user.isEmailVerified ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                }">
+                  ${user.isEmailVerified ? 'Verified' : 'Pending'}
                 </span>
               </div>
-            </div>
-            <div class="ml-4">
-              <div class="text-sm font-medium text-gray-900">
-                ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+              
+              <!-- Additional Info -->
+              <div class="text-sm">
+                <span class="text-gray-500">Registered:</span>
+                <span class="ml-1 font-medium text-gray-900">${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</span>
               </div>
-              <div class="text-sm text-gray-500">${this.escapeHtml(user.email)}</div>
+              
+              <!-- Actions -->
+              <div class="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                <button type="button" 
+                        class="text-sm text-gray-600 hover:text-gray-900 edit-pending-user-btn px-3 py-1.5 rounded-md hover:bg-gray-100 border border-gray-300" 
+                        data-user-id="${user.id}">
+                  Edit
+                </button>
+                <button type="button" 
+                        class="text-sm text-green-600 hover:text-green-900 activate-user-btn px-3 py-1.5 rounded-md hover:bg-green-50 border border-green-300" 
+                        data-user-id="${user.id}">
+                  Approve
+                </button>
+              </div>
             </div>
-          </div>
-        </td>
-        <td class="px-6 py-4">
-          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
-            ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-          </span>
-        </td>
-        <td class="px-6 py-4">
-          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-            user.isEmailVerified ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
-          }">
-            ${user.isEmailVerified ? 'Verified' : 'Pending'}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-500">
-          ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
-        </td>
-        <td class="px-6 py-4 text-right text-sm font-medium">
-          <div class="flex justify-end space-x-2">
-            <button type="button" 
-                    class="text-gray-600 hover:text-gray-900 edit-pending-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
-                    data-user-id="${user.id}">
-              Edit
-            </button>
-            <button type="button" 
-                    class="text-gray-600 hover:text-gray-900 activate-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
-                    data-user-id="${user.id}">
-              Approve
-            </button>
-          </div>
-        </td>
-      </tr>
-    `).join('');
+          </td>
+        </tr>
+      `).join('');
+    } else {
+      // Desktop table layout
+      tableBody.innerHTML = this.pendingUsers.map(user => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4">
+            <div class="flex items-center">
+              <div class="flex-shrink-0 h-10 w-10">
+                <div class="h-10 w-10 rounded-full bg-gray-400 flex items-center justify-center">
+                  <span class="text-sm font-medium text-white">
+                    ${this.escapeHtml(user.firstName.charAt(0) + user.lastName.charAt(0))}
+                  </span>
+                </div>
+              </div>
+              <div class="ml-4">
+                <div class="text-sm font-medium text-gray-900">
+                  ${this.escapeHtml(user.firstName)} ${this.escapeHtml(user.lastName)}
+                </div>
+                <div class="text-sm text-gray-500">${this.escapeHtml(user.email)}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(user.role)}">
+              ${user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+            </span>
+          </td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+              user.isEmailVerified ? 'bg-gray-100 text-gray-800' : 'bg-gray-200 text-gray-600'
+            }">
+              ${user.isEmailVerified ? 'Verified' : 'Pending'}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-500">
+            ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+          </td>
+          <td class="px-6 py-4 text-right text-sm font-medium">
+            <div class="flex justify-end space-x-2">
+              <button type="button" 
+                      class="text-gray-600 hover:text-gray-900 edit-pending-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                      data-user-id="${user.id}">
+                Edit
+              </button>
+              <button type="button" 
+                      class="text-gray-600 hover:text-gray-900 activate-user-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                      data-user-id="${user.id}">
+                Approve
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
 
     this.attachPendingUserTableEventListeners();
   }
@@ -362,7 +506,7 @@ class UsersPage {
     if (this.preApprovedEmails.length === 0) {
       tableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+          <td colspan="5" class="px-4 sm:px-6 py-8 text-center text-gray-500">
             <div class="flex flex-col items-center">
               <svg class="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
@@ -376,49 +520,111 @@ class UsersPage {
       return;
     }
 
-    tableBody.innerHTML = this.preApprovedEmails.map(email => `
-      <tr class="hover:bg-gray-50">
-        <td class="px-6 py-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0 h-8 w-8">
-              <div class="h-8 w-8 rounded-full bg-gray-600 flex items-center justify-center">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
-                </svg>
+    // Check if we're on mobile
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+      // Mobile card layout
+      tableBody.innerHTML = this.preApprovedEmails.map(email => `
+        <tr class="block border-b border-gray-200 last:border-b-0">
+          <td class="block px-4 py-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+              <!-- Email Info -->
+              <div class="flex items-center space-x-3">
+                <div class="flex-shrink-0 h-10 w-10">
+                  <div class="h-10 w-10 rounded-full bg-gray-600 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                    </svg>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-base font-medium text-gray-900 break-all">${this.escapeHtml(email.email)}</div>
+                </div>
+              </div>
+              
+              <!-- Status Info -->
+              <div class="flex flex-wrap gap-2">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(email.role)}">
+                  ${email.role.charAt(0).toUpperCase() + email.role.slice(1)}
+                </span>
+              </div>
+              
+              <!-- Additional Info -->
+              <div class="space-y-2 text-sm">
+                <div>
+                  <span class="text-gray-500">Notes:</span>
+                  <span class="ml-1 font-medium text-gray-900">${email.notes ? this.escapeHtml(email.notes) : 'None'}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Created by:</span>
+                  <span class="ml-1 font-medium text-gray-900">${email.creator ? this.escapeHtml(email.creator.firstName + ' ' + email.creator.lastName) : 'System'}</span>
+                </div>
+              </div>
+              
+              <!-- Actions -->
+              <div class="flex justify-end space-x-2 pt-2 border-t border-gray-100">
+                <button type="button" 
+                        class="text-sm text-gray-600 hover:text-gray-900 edit-preapproved-email-btn px-3 py-1.5 rounded-md hover:bg-gray-100 border border-gray-300" 
+                        data-email-id="${email.id}">
+                  Edit
+                </button>
+                <button type="button" 
+                        class="text-sm text-red-600 hover:text-red-900 delete-preapproved-email-btn px-3 py-1.5 rounded-md hover:bg-red-50 border border-red-300" 
+                        data-email-id="${email.id}">
+                  Delete
+                </button>
               </div>
             </div>
-            <div class="ml-3">
-              <div class="text-sm font-medium text-gray-900">${this.escapeHtml(email.email)}</div>
+          </td>
+        </tr>
+      `).join('');
+    } else {
+      // Desktop table layout
+      tableBody.innerHTML = this.preApprovedEmails.map(email => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4">
+            <div class="flex items-center">
+              <div class="flex-shrink-0 h-8 w-8">
+                <div class="h-8 w-8 rounded-full bg-gray-600 flex items-center justify-center">
+                  <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-3">
+                <div class="text-sm font-medium text-gray-900">${this.escapeHtml(email.email)}</div>
+              </div>
             </div>
-          </div>
-        </td>
-        <td class="px-6 py-4">
-          <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(email.role)}">
-            ${email.role.charAt(0).toUpperCase() + email.role.slice(1)}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-500">
-          ${email.notes ? this.escapeHtml(email.notes) : '-'}
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-500">
-          ${email.creator ? this.escapeHtml(email.creator.firstName + ' ' + email.creator.lastName) : 'System'}
-        </td>
-        <td class="px-6 py-4 text-right text-sm font-medium">
-          <div class="flex justify-end space-x-2">
-            <button type="button" 
-                    class="text-gray-600 hover:text-gray-900 edit-preapproved-email-btn px-3 py-1 rounded-md hover:bg-gray-100" 
-                    data-email-id="${email.id}">
-              Edit
-            </button>
-            <button type="button" 
-                    class="text-gray-600 hover:text-gray-900 delete-preapproved-email-btn px-3 py-1 rounded-md hover:bg-gray-100" 
-                    data-email-id="${email.id}">
-              Delete
-            </button>
-          </div>
-        </td>
-      </tr>
-    `).join('');
+          </td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${this.getRoleBadgeClass(email.role)}">
+              ${email.role.charAt(0).toUpperCase() + email.role.slice(1)}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-500">
+            ${email.notes ? this.escapeHtml(email.notes) : '-'}
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-500">
+            ${email.creator ? this.escapeHtml(email.creator.firstName + ' ' + email.creator.lastName) : 'System'}
+          </td>
+          <td class="px-6 py-4 text-right text-sm font-medium">
+            <div class="flex justify-end space-x-2">
+              <button type="button" 
+                      class="text-gray-600 hover:text-gray-900 edit-preapproved-email-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                      data-email-id="${email.id}">
+                Edit
+              </button>
+              <button type="button" 
+                      class="text-gray-600 hover:text-gray-900 delete-preapproved-email-btn px-3 py-1 rounded-md hover:bg-gray-100" 
+                      data-email-id="${email.id}">
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
 
     this.attachPreApprovedEmailTableEventListeners();
   }
@@ -433,13 +639,18 @@ class UsersPage {
       <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
         <div class="flex-1 flex justify-between sm:hidden">
           <button type="button" 
-                  class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                   ${!hasPrev ? 'disabled' : ''} 
                   onclick="window.usersPage.goToPage(${page - 1})">
             Previous
           </button>
+          <div class="flex items-center px-4">
+            <span class="text-sm text-gray-700">
+              Page <span class="font-medium">${page}</span> of <span class="font-medium">${totalPages}</span>
+            </span>
+          </div>
           <button type="button" 
-                  class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                   ${!hasNext ? 'disabled' : ''} 
                   onclick="window.usersPage.goToPage(${page + 1})">
             Next

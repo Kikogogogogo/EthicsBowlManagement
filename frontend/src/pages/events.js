@@ -12,6 +12,10 @@ class EventsPage {
     this.eventService = null; // Will be set from global
     this.authManager = null; // Will be set from global
     this.initializeEventListeners();
+    
+    // Add window resize listener for responsive layout
+    this.boundHandleResize = this.handleResize.bind(this);
+    window.addEventListener('resize', this.boundHandleResize);
   }
 
   /**
@@ -117,113 +121,269 @@ class EventsPage {
     const tbody = this.ui.elements.eventsTableBody;
     if (!tbody) return;
 
-    tbody.innerHTML = '';
+    // Check if we're on mobile
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+      // Mobile card layout - replace table with cards container
+      const tableContainer = tbody.closest('.overflow-hidden');
+      if (tableContainer) {
+        // Check if cards container already exists
+        let cardsContainer = document.getElementById('events-cards-container');
+        if (!cardsContainer) {
+          // Create cards container
+          cardsContainer = document.createElement('div');
+          cardsContainer.className = 'space-y-4 px-4';
+          cardsContainer.id = 'events-cards-container';
+          
+          // Replace table with cards container
+          tableContainer.parentNode.replaceChild(cardsContainer, tableContainer);
+        } else {
+          // Clear existing cards
+          cardsContainer.innerHTML = '';
+        }
+        
+        // Add events as cards
+        events.forEach(event => {
+          const card = this.createEventRow(event);
+          cardsContainer.appendChild(card);
+        });
+      }
+    } else {
+      // Desktop table layout
+      // Check if we need to restore table
+      const cardsContainer = document.getElementById('events-cards-container');
+      if (cardsContainer) {
+        // Restore table structure
+        const tableContainer = document.getElementById('events-table-container');
+        if (tableContainer) {
+          cardsContainer.parentNode.replaceChild(tableContainer, cardsContainer);
+        }
+      }
+      
+      tbody.innerHTML = '';
+      
+      events.forEach(event => {
+        const row = this.createEventRow(event);
+        tbody.appendChild(row);
+      });
+    }
+  }
 
-    events.forEach(event => {
-      const row = this.createEventRow(event);
-      tbody.appendChild(row);
-    });
+  /**
+   * Handle window resize for responsive layout
+   */
+  handleResize() {
+    if (this.events && this.events.length > 0) {
+      this.displayEvents(this.events);
+    }
   }
 
   /**
    * Create event table row
    */
   createEventRow(event) {
-    const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-50 cursor-pointer';
+    // Check if we're on mobile
+    const isMobile = window.innerWidth < 768;
     
-    const eventDate = new Date(event.eventDate).toLocaleDateString();
-    const statusBadge = this.getStatusBadge(event.status);
-    const teamCount = event.stats?.teamsCount || 0;
-    
-    // Only show actions for admin users
-    const isAdmin = this.authManager.currentUser && this.authManager.currentUser.role === 'admin';
-    
-    row.innerHTML = `
-      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-        <div class="flex items-center space-x-3">
-          <div class="flex-shrink-0">
-            <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-              </svg>
+    if (isMobile) {
+      // Mobile card layout
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-lg border border-gray-200 p-4 sm:p-4 mb-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer';
+      
+      const eventDate = new Date(event.eventDate).toLocaleDateString();
+      const statusBadge = this.getStatusBadge(event.status);
+      const teamCount = event.stats?.teamsCount || 0;
+      const isAdmin = this.authManager.currentUser && this.authManager.currentUser.role === 'admin';
+      
+      card.innerHTML = `
+        <div class="space-y-3">
+          <!-- Event Header -->
+          <div class="flex items-center space-x-3">
+            <div class="flex-shrink-0">
+              <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg class="h-7 w-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-base font-medium text-gray-900 truncate">${event.name}</div>
+              <div class="text-sm text-gray-500">Click to enter workspace</div>
             </div>
           </div>
-          <div>
-            <div class="font-medium text-gray-900">${event.name}</div>
-            <div class="text-sm text-gray-500">Click to enter workspace</div>
+          
+          <!-- Event Details -->
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span class="text-gray-500">Date:</span>
+              <span class="ml-1 font-medium text-gray-900">${eventDate}</span>
+            </div>
+            <div>
+              <span class="text-gray-500">Teams:</span>
+              <span class="ml-1 font-medium text-gray-900">${teamCount}${event.maxTeams ? ` / ${event.maxTeams}` : ''}</span>
+            </div>
+          </div>
+          
+          <!-- Status -->
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-gray-500 text-sm">Status:</span>
+              <div class="mt-1">${statusBadge}</div>
+            </div>
+            ${isAdmin ? '<div class="event-actions flex space-x-2"></div>' : '<span class="text-gray-400 text-sm">View only</span>'}
           </div>
         </div>
-      </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        ${eventDate}
-      </td>
-      <td class="px-6 py-4 whitespace-nowrap">
-        ${statusBadge}
-      </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        ${teamCount}${event.maxTeams ? ` / ${event.maxTeams}` : ''}
-      </td>
-      <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        ${isAdmin ? '<div class="event-actions"></div>' : '<span class="text-gray-400">View only</span>'}
-      </td>
-    `;
-    
-    // Add click handler for the entire row (except actions column)
-    row.addEventListener('click', (e) => {
-      // Don't navigate if clicking on action buttons
-      if (!e.target.closest('.event-actions')) {
-        this.openEventWorkspace(event.id);
-      }
-    });
-    
-    // Add event listeners for admin users
-    if (isAdmin) {
-      const actionsContainer = row.querySelector('.event-actions');
+      `;
       
-      // Create edit button
-      const editBtn = document.createElement('button');
-      editBtn.className = 'text-black hover:text-gray-700 mr-4 disabled:opacity-50 disabled:cursor-not-allowed';
-      editBtn.textContent = 'Edit';
-      editBtn.addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent row click
-        if (this.isOperationInProgress) return;
+      // Add click handler for the entire card (except actions)
+      card.addEventListener('click', (e) => {
+        if (!e.target.closest('.event-actions')) {
+          this.openEventWorkspace(event.id);
+        }
+      });
+      
+      // Add event listeners for admin users
+      if (isAdmin) {
+        const actionsContainer = card.querySelector('.event-actions');
         
-        // Disable button during operation
-        editBtn.disabled = true;
-        editBtn.textContent = 'Loading...';
-        
-        await this.editEvent(event.id);
-        
-        // Re-enable button
-        editBtn.disabled = false;
+        // Create edit button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'text-sm text-gray-600 hover:text-gray-900 edit-event-btn px-3 py-1.5 rounded-md hover:bg-gray-100 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed';
         editBtn.textContent = 'Edit';
-      });
-      
-      // Create delete button
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent row click
-        if (this.isOperationInProgress) return;
+        editBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (this.isOperationInProgress) return;
+          
+          editBtn.disabled = true;
+          editBtn.textContent = 'Loading...';
+          
+          await this.editEvent(event.id);
+          
+          editBtn.disabled = false;
+          editBtn.textContent = 'Edit';
+        });
         
-        // Disable button during operation
-        deleteBtn.disabled = true;
-        deleteBtn.textContent = 'Deleting...';
-        
-        await this.deleteEvent(event.id);
-        
-        // Re-enable button (though it may be removed if deletion succeeds)
-        deleteBtn.disabled = false;
+        // Create delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'text-sm text-red-600 hover:text-red-900 delete-event-btn px-3 py-1.5 rounded-md hover:bg-red-50 border border-red-300 disabled:opacity-50 disabled:cursor-not-allowed';
         deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (this.isOperationInProgress) return;
+          
+          deleteBtn.disabled = true;
+          deleteBtn.textContent = 'Deleting...';
+          
+          await this.deleteEvent(event.id);
+          
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = 'Delete';
+        });
+        
+        actionsContainer.appendChild(editBtn);
+        actionsContainer.appendChild(deleteBtn);
+      }
+      
+      return card;
+    } else {
+      // Desktop table layout
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50 cursor-pointer';
+      
+      const eventDate = new Date(event.eventDate).toLocaleDateString();
+      const statusBadge = this.getStatusBadge(event.status);
+      const teamCount = event.stats?.teamsCount || 0;
+      
+      // Only show actions for admin users
+      const isAdmin = this.authManager.currentUser && this.authManager.currentUser.role === 'admin';
+      
+      row.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          <div class="flex items-center space-x-3">
+            <div class="flex-shrink-0">
+              <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+              </div>
+            </div>
+            <div>
+              <div class="font-medium text-gray-900">${event.name}</div>
+              <div class="text-sm text-gray-500">Click to enter workspace</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          ${eventDate}
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          ${statusBadge}
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          ${teamCount}${event.maxTeams ? ` / ${event.maxTeams}` : ''}
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+          ${isAdmin ? '<div class="event-actions"></div>' : '<span class="text-gray-400">View only</span>'}
+        </td>
+      `;
+      
+      // Add click handler for the entire row (except actions column)
+      row.addEventListener('click', (e) => {
+        // Don't navigate if clicking on action buttons
+        if (!e.target.closest('.event-actions')) {
+          this.openEventWorkspace(event.id);
+        }
       });
       
-      actionsContainer.appendChild(editBtn);
-      actionsContainer.appendChild(deleteBtn);
+      // Add event listeners for admin users
+      if (isAdmin) {
+        const actionsContainer = row.querySelector('.event-actions');
+        
+        // Create edit button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'text-black hover:text-gray-700 mr-4 disabled:opacity-50 disabled:cursor-not-allowed';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', async (e) => {
+          e.stopPropagation(); // Prevent row click
+          if (this.isOperationInProgress) return;
+          
+          // Disable button during operation
+          editBtn.disabled = true;
+          editBtn.textContent = 'Loading...';
+          
+          await this.editEvent(event.id);
+          
+          // Re-enable button
+          editBtn.disabled = false;
+          editBtn.textContent = 'Edit';
+        });
+        
+        // Create delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation(); // Prevent row click
+          if (this.isOperationInProgress) return;
+          
+          // Disable button during operation
+          deleteBtn.disabled = true;
+          deleteBtn.textContent = 'Deleting...';
+          
+          await this.deleteEvent(event.id);
+          
+          // Re-enable button (though it may be removed if deletion succeeds)
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = 'Delete';
+        });
+        
+        actionsContainer.appendChild(editBtn);
+        actionsContainer.appendChild(deleteBtn);
+      }
+      
+      return row;
     }
-    
-    return row;
   }
 
   /**
@@ -624,8 +784,18 @@ class EventsPage {
    * Hide error in event modal
    */
   hideEventModalError() {
-    if (this.ui.elements.eventModalError) {
-      this.ui.elements.eventModalError.classList.add('hidden');
+    const errorDiv = this.ui.elements.eventModalError;
+    if (errorDiv) {
+      errorDiv.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Cleanup method to remove event listeners
+   */
+  destroy() {
+    if (this.boundHandleResize) {
+      window.removeEventListener('resize', this.boundHandleResize);
     }
   }
 }

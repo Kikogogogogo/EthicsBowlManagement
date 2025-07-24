@@ -191,6 +191,22 @@ class UIManager {
       console.log(`Showing page: ${page.id}`);
       page.classList.remove('hidden');
       this.currentPage = pageName;
+      
+      // Force hide all desktop navigation on mobile
+      if (window.innerWidth < 768) {
+        const allNavMenus = document.querySelectorAll('[id*="main-nav"]');
+        allNavMenus.forEach(nav => {
+          nav.style.display = 'none';
+        });
+        
+        // Hide all desktop user info on mobile
+        const allUserInfos = document.querySelectorAll('[id*="user-name"]:not([id*="mobile"]), [id*="user-role"]:not([id*="mobile"])');
+        allUserInfos.forEach(info => {
+          if (info.closest('.hidden')) {
+            info.style.display = 'none';
+          }
+        });
+      }
     } else {
       console.error(`Page not found for: ${pageName}`);
     }
@@ -357,6 +373,16 @@ class UIManager {
       this.elements.userRole.textContent = user.role?.toUpperCase() || 'USER';
     }
     
+    // Update mobile user info
+    const userNameMobile = document.getElementById('user-name-mobile');
+    const userRoleMobile = document.getElementById('user-role-mobile');
+    if (userNameMobile) {
+      userNameMobile.textContent = user.name || user.email;
+    }
+    if (userRoleMobile) {
+      userRoleMobile.textContent = user.role?.toUpperCase() || 'USER';
+    }
+    
     // Show main navigation and configure based on user role
     if (this.elements.mainNav) {
       this.elements.mainNav.classList.remove('hidden');
@@ -367,11 +393,27 @@ class UIManager {
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'block';
         if (this.elements.navTeams) this.elements.navTeams.style.display = 'block';
         if (this.elements.navUsers) this.elements.navUsers.style.display = 'block';
+        
+        // Also show/hide mobile navigation buttons
+        const navEventsMobile = document.getElementById('nav-events-mobile');
+        const navTeamsMobile = document.getElementById('nav-teams-mobile');
+        const navUsersMobile = document.getElementById('nav-users-mobile');
+        if (navEventsMobile) navEventsMobile.style.display = 'block';
+        if (navTeamsMobile) navTeamsMobile.style.display = 'block';
+        if (navUsersMobile) navUsersMobile.style.display = 'block';
       } else {
         // Non-admin only sees Dashboard
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'none';
         if (this.elements.navTeams) this.elements.navTeams.style.display = 'none';
         if (this.elements.navUsers) this.elements.navUsers.style.display = 'none';
+        
+        // Also hide mobile navigation buttons
+        const navEventsMobile = document.getElementById('nav-events-mobile');
+        const navTeamsMobile = document.getElementById('nav-teams-mobile');
+        const navUsersMobile = document.getElementById('nav-users-mobile');
+        if (navEventsMobile) navEventsMobile.style.display = 'none';
+        if (navTeamsMobile) navTeamsMobile.style.display = 'none';
+        if (navUsersMobile) navUsersMobile.style.display = 'none';
       }
     }
   }
@@ -386,6 +428,16 @@ class UIManager {
     if (this.elements.userRoleEvents) {
       this.elements.userRoleEvents.textContent = user.role?.toUpperCase() || 'USER';
     }
+    
+    // Update mobile user info
+    const userNameEventsMobile = document.getElementById('user-name-events-mobile');
+    const userRoleEventsMobile = document.getElementById('user-role-events-mobile');
+    if (userNameEventsMobile) {
+      userNameEventsMobile.textContent = user.name || user.email;
+    }
+    if (userRoleEventsMobile) {
+      userRoleEventsMobile.textContent = user.role?.toUpperCase() || 'USER';
+    }
   }
 
   /**
@@ -398,6 +450,16 @@ class UIManager {
     if (this.elements.userRoleTeams) {
       this.elements.userRoleTeams.textContent = user.role?.toUpperCase() || 'USER';
     }
+    
+    // Update mobile user info
+    const userNameTeamsMobile = document.getElementById('user-name-teams-mobile');
+    const userRoleTeamsMobile = document.getElementById('user-role-teams-mobile');
+    if (userNameTeamsMobile) {
+      userNameTeamsMobile.textContent = user.name || user.email;
+    }
+    if (userRoleTeamsMobile) {
+      userRoleTeamsMobile.textContent = user.role?.toUpperCase() || 'USER';
+    }
   }
 
   /**
@@ -409,6 +471,16 @@ class UIManager {
     }
     if (this.elements.userRoleUsers) {
       this.elements.userRoleUsers.textContent = user.role?.toUpperCase() || 'USER';
+    }
+    
+    // Update mobile user info
+    const userNameUsersMobile = document.getElementById('user-name-users-mobile');
+    const userRoleUsersMobile = document.getElementById('user-role-users-mobile');
+    if (userNameUsersMobile) {
+      userNameUsersMobile.textContent = user.name || user.email;
+    }
+    if (userRoleUsersMobile) {
+      userRoleUsersMobile.textContent = user.role?.toUpperCase() || 'USER';
     }
   }
 
@@ -522,6 +594,77 @@ class App {
         this.handleLogout();
       });
     }
+
+    // Mobile menu toggle functions
+    const setupMobileMenu = (btnId, menuId, mobileButtons) => {
+      const menuBtn = document.getElementById(btnId);
+      const menu = document.getElementById(menuId);
+      
+      if (menuBtn && menu) {
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isHidden = menu.classList.contains('hidden');
+          if (isHidden) {
+            menu.classList.remove('hidden');
+          } else {
+            menu.classList.add('hidden');
+          }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!menuBtn.contains(e.target) && !menu.contains(e.target)) {
+            menu.classList.add('hidden');
+          }
+        });
+        
+        // Setup mobile navigation buttons
+        mobileButtons.forEach(btn => {
+          const element = document.getElementById(btn.id);
+          if (element) {
+            element.addEventListener('click', () => {
+              btn.handler();
+              menu.classList.add('hidden');
+            });
+          }
+        });
+      }
+    };
+
+    // Setup mobile menus for all pages
+    setupMobileMenu('mobile-menu-btn-dashboard', 'mobile-menu-dashboard', [
+      { id: 'nav-dashboard-mobile', handler: () => this.showDashboard() },
+      { id: 'nav-events-mobile', handler: () => this.showEventsPage() },
+      { id: 'nav-teams-mobile', handler: () => this.showTeamsPage() },
+      { id: 'nav-users-mobile', handler: () => this.showUsersPage() },
+      { id: 'logout-btn-mobile', handler: () => this.handleLogout() }
+    ]);
+
+    setupMobileMenu('mobile-menu-btn-events', 'mobile-menu-events', [
+      { id: 'nav-dashboard-events-mobile', handler: () => this.showDashboard() },
+      { id: 'nav-events-events-mobile', handler: () => this.showEventsPage() },
+      { id: 'nav-teams-events-mobile', handler: () => this.showTeamsPage() },
+      { id: 'nav-users-events-mobile', handler: () => this.showUsersPage() },
+      { id: 'logout-btn-events-mobile', handler: () => this.handleLogout() }
+    ]);
+
+    setupMobileMenu('mobile-menu-btn-teams', 'mobile-menu-teams', [
+      { id: 'nav-dashboard-teams-mobile', handler: () => this.showDashboard() },
+      { id: 'nav-events-teams-mobile', handler: () => this.showEventsPage() },
+      { id: 'nav-teams-teams-mobile', handler: () => this.showTeamsPage() },
+      { id: 'nav-users-teams-mobile', handler: () => this.showUsersPage() },
+      { id: 'logout-btn-teams-mobile', handler: () => this.handleLogout() }
+    ]);
+
+    setupMobileMenu('mobile-menu-btn-users', 'mobile-menu-users', [
+      { id: 'nav-dashboard-users-mobile', handler: () => this.showDashboard() },
+      { id: 'nav-events-users-mobile', handler: () => this.showEventsPage() },
+      { id: 'nav-teams-users-mobile', handler: () => this.showTeamsPage() },
+      { id: 'nav-users-users-mobile', handler: () => this.showUsersPage() },
+      { id: 'logout-btn-users-mobile', handler: () => this.handleLogout() }
+    ]);
+
+
 
     // Navigation buttons
     if (this.ui.elements.navDashboard) {
