@@ -906,7 +906,7 @@ class App {
         } else {
           console.log('✅ User IS active, showing dashboard');
           // Initialize WebSocket for successful OAuth login
-          console.log('🔌 OAuth登录成功，初始化WebSocket客户端...');
+          console.log('🔌 OAuth login successful, initializing WebSocket client...');
           const wsClient = initWebSocket();
           window.wsClient = wsClient;
           
