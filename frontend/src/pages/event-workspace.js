@@ -1871,11 +1871,18 @@ class EventWorkspacePage {
       </div>
 
       <!-- Export Results Modal -->
-      <div id="exportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-lg w-full mx-4">
-          <div class="px-6 py-4 border-b border-gray-300">
-            <h3 class="text-lg font-medium text-gray-900">Export Results</h3>
-            <p class="text-sm text-gray-600 mt-1">Choose what you would like to export</p>
+      <div id="exportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-lg w-full mx-auto my-8 relative">
+          <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-start">
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">Export Results</h3>
+              <p class="text-sm text-gray-600 mt-1">Choose what you would like to export</p>
+            </div>
+            <button type="button" data-modal-close="exportModal" class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
           </div>
           <div class="p-6 space-y-6">
             <!-- Round Results Export -->
@@ -1954,8 +1961,8 @@ class EventWorkspacePage {
       </div>
 
       <!-- Round Robin Modal -->
-      <div id="roundRobinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-4">
+      <div id="roundRobinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-auto my-8 relative">
           <div class="px-6 py-4 border-b border-gray-300">
             <h3 class="text-lg font-medium text-gray-900">Generate Round Robin Matches</h3>
           </div>
@@ -2095,7 +2102,7 @@ class EventWorkspacePage {
       </div>
 
       <!-- View Scores Modal -->
-      <div id="viewScoresModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+      <div id="viewScoresModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <!-- Content will be dynamically inserted by renderViewScoresModal -->
         </div>
