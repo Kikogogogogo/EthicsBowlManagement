@@ -185,27 +185,133 @@ class ExportController {
     lines.push(`"Generated on: ${new Date(roundData.timestamp).toLocaleString()}"`);
     lines.push('');
     
-    // 比赛结果表头
-    lines.push('"Match","Team A","Team B","Winner","Team A Votes","Team B Votes","Team A Score Diff","Team B Score Diff","Two Judge Protocol","Room","Scheduled Time"');
-    
-    // 比赛结果数据
-    roundData.round.matches.forEach(match => {
+    // 处理每场比赛
+    roundData.round.matches.forEach((match, matchIndex) => {
       const teamA = match.teamA?.name || 'TBD';
       const teamB = match.teamB?.name || 'TBD';
       const winner = match.winner?.name || (match.status === 'completed' ? 'Tie' : 'Pending');
-      const teamAVotes = match.votes?.teamA || 0;
-      const teamBVotes = match.votes?.teamB || 0;
-      const teamAScoreDiff = match.scoreDifferentials?.teamA || 0;
-      const teamBScoreDiff = match.scoreDifferentials?.teamB || 0;
       const twoJudgeProtocol = match.useTwoJudgeProtocol ? 'Yes' : 'No';
       const room = match.room || 'Not assigned';
       const scheduledTime = match.scheduledTime ? 
         new Date(match.scheduledTime).toLocaleString() : 'Not scheduled';
       
-      lines.push(`"${teamA} vs ${teamB}","${teamA}","${teamB}","${winner}","${teamAVotes}","${teamBVotes}","${teamAScoreDiff}","${teamBScoreDiff}","${twoJudgeProtocol}","${room}","${scheduledTime}"`);
+      // 比赛基本信息
+      lines.push(`"=== MATCH ${matchIndex + 1}: ${teamA} vs ${teamB} ==="`);
+      lines.push(`"Winner: ${winner}"`);
+      lines.push(`"Two Judge Protocol: ${twoJudgeProtocol}"`);
+      lines.push(`"Room: ${room}"`);
+      lines.push(`"Scheduled Time: ${scheduledTime}"`);
+      lines.push('');
+
+      if (match.status === 'completed' && match.judgeScores) {
+        // 详细评分表头
+        const criteriaKeys = this.getCriteriaKeys(match.judgeScores);
+        const commentCount = this.getCommentCount(match.judgeScores);
+        
+        // 构建表头
+        let header = '"Judge","Team","Total Score"';
+        criteriaKeys.forEach(key => {
+          header += `,"${this.formatCriteriaName(key)}"`;
+        });
+        for (let i = 1; i <= commentCount; i++) {
+          header += `,"Question ${i}"`;
+        }
+        header += ',"Comment Avg","Notes"';
+        lines.push(header);
+        
+        // 每个评委的详细评分
+        Object.entries(match.judgeScores).forEach(([judgeName, judgeData]) => {
+          Object.entries(judgeData.teams).forEach(([teamName, teamScore]) => {
+            let row = `"${judgeName}","${teamName}","${teamScore.totalScore.toFixed(1)}"`;
+            
+            // 添加标准分数
+            criteriaKeys.forEach(key => {
+              const score = teamScore.criteriaScores?.[key] || 0;
+              row += `,"${score}"`;
+            });
+            
+            // 添加评委问题分数
+            const commentScores = teamScore.commentScores || [];
+            for (let i = 0; i < commentCount; i++) {
+              const score = commentScores[i] || 0;
+              row += `,"${score}"`;
+            }
+            
+            // 添加评委问题平均分
+            const commentAvg = commentScores.length > 0 
+              ? (commentScores.reduce((sum, score) => sum + (score || 0), 0) / commentScores.length).toFixed(1)
+              : '0';
+            row += `,"${commentAvg}"`;
+            
+            // 添加备注
+            const notes = (teamScore.notes || '').replace(/"/g, '""');
+            row += `,"${notes}"`;
+            
+            lines.push(row);
+          });
+        });
+        
+        // 投票总结
+        lines.push('');
+        lines.push('"=== VOTING SUMMARY ==="');
+        lines.push(`"${teamA} Votes: ${match.votes?.teamA || 0}"`);
+        lines.push(`"${teamB} Votes: ${match.votes?.teamB || 0}"`);
+        lines.push(`"${teamA} Score Differential: ${match.scoreDifferentials?.teamA || 0}"`);
+        lines.push(`"${teamB} Score Differential: ${match.scoreDifferentials?.teamB || 0}"`);
+      } else {
+        lines.push('"Match not completed or no scores available"');
+      }
+      
+      lines.push('');
+      lines.push('');
     });
     
     return lines.join('\n');
+  }
+
+  /**
+   * 获取所有评分标准的键
+   */
+  getCriteriaKeys(judgeScores) {
+    const keys = new Set();
+    Object.values(judgeScores).forEach(judgeData => {
+      Object.values(judgeData.teams).forEach(teamScore => {
+        if (teamScore.criteriaScores) {
+          Object.keys(teamScore.criteriaScores).forEach(key => keys.add(key));
+        }
+      });
+    });
+    return Array.from(keys).sort();
+  }
+
+  /**
+   * 获取评委问题的最大数量
+   */
+  getCommentCount(judgeScores) {
+    let maxCount = 0;
+    Object.values(judgeScores).forEach(judgeData => {
+      Object.values(judgeData.teams).forEach(teamScore => {
+        if (teamScore.commentScores && Array.isArray(teamScore.commentScores)) {
+          maxCount = Math.max(maxCount, teamScore.commentScores.length);
+        }
+      });
+    });
+    return maxCount;
+  }
+
+  /**
+   * 格式化评分标准名称
+   */
+  formatCriteriaName(key) {
+    const nameMap = {
+      clarity: 'Clarity',
+      analysis: 'Analysis', 
+      engagement: 'Engagement',
+      argumentation: 'Argumentation',
+      reasoning: 'Reasoning',
+      response: 'Response'
+    };
+    return nameMap[key] || key.charAt(0).toUpperCase() + key.slice(1);
   }
 
   /**
@@ -245,21 +351,93 @@ class ExportController {
     
     lines.push('');
     
-    // 详细比赛结果
-    lines.push('"=== DETAILED MATCH RESULTS ==="');
-    lines.push('"Round","Match","Team A","Team B","Winner","Team A Votes","Team B Votes","Team A Score Diff","Team B Score Diff","Two Judge Protocol"');
+    // 按轮次的详细比赛结果
+    lines.push('"=== DETAILED MATCH RESULTS BY ROUND ==="');
+    lines.push('');
     
-    eventData.matchResults.forEach(match => {
-      const teamA = match.teamA?.name || 'TBD';
-      const teamB = match.teamB?.name || 'TBD';
-      const winner = match.winner?.name || 'Tie';
-      const teamAVotes = match.votes?.teamA || 0;
-      const teamBVotes = match.votes?.teamB || 0;
-      const teamAScoreDiff = match.scoreDifferentials?.teamA || 0;
-      const teamBScoreDiff = match.scoreDifferentials?.teamB || 0;
-      const twoJudgeProtocol = match.useTwoJudgeProtocol ? 'Yes' : 'No';
+    eventData.roundResults.forEach(round => {
+      lines.push(`"=== ROUND ${round.roundNumber} ==="`);  
+      lines.push('');
       
-      lines.push(`"${match.roundNumber}","${teamA} vs ${teamB}","${teamA}","${teamB}","${winner}","${teamAVotes}","${teamBVotes}","${teamAScoreDiff}","${teamBScoreDiff}","${twoJudgeProtocol}"`);
+      round.matches.forEach((match, matchIndex) => {
+        const teamA = match.teamA?.name || 'TBD';
+        const teamB = match.teamB?.name || 'TBD';
+        const winner = match.winner?.name || (match.status === 'completed' ? 'Tie' : 'Pending');
+        const twoJudgeProtocol = match.useTwoJudgeProtocol ? 'Yes' : 'No';
+        const room = match.room || 'Not assigned';
+        const scheduledTime = match.scheduledTime ? 
+          new Date(match.scheduledTime).toLocaleString() : 'Not scheduled';
+        
+        // 比赛基本信息
+        lines.push(`"--- Match ${matchIndex + 1}: ${teamA} vs ${teamB} ---"`);
+        lines.push(`"Winner: ${winner}"`);
+        lines.push(`"Two Judge Protocol: ${twoJudgeProtocol}"`);
+        lines.push(`"Room: ${room}"`);
+        lines.push(`"Scheduled Time: ${scheduledTime}"`);
+        
+        if (match.status === 'completed' && match.judgeScores) {
+          // 详细评分表头
+          const criteriaKeys = this.getCriteriaKeys(match.judgeScores);
+          const commentCount = this.getCommentCount(match.judgeScores);
+          
+          // 构建表头
+          let header = '"Judge","Team","Total Score"';
+          criteriaKeys.forEach(key => {
+            header += `,"${this.formatCriteriaName(key)}"`;
+          });
+          for (let i = 1; i <= commentCount; i++) {
+            header += `,"Question ${i}"`;
+          }
+          header += ',"Comment Avg","Notes"';
+          lines.push(header);
+          
+          // 每个评委的详细评分
+          Object.entries(match.judgeScores).forEach(([judgeName, judgeData]) => {
+            Object.entries(judgeData.teams).forEach(([teamName, teamScore]) => {
+              let row = `"${judgeName}","${teamName}","${teamScore.totalScore.toFixed(1)}"`;
+              
+              // 添加标准分数
+              criteriaKeys.forEach(key => {
+                const score = teamScore.criteriaScores?.[key] || 0;
+                row += `,"${score}"`;
+              });
+              
+              // 添加评委问题分数
+              const commentScores = teamScore.commentScores || [];
+              for (let i = 0; i < commentCount; i++) {
+                const score = commentScores[i] || 0;
+                row += `,"${score}"`;
+              }
+              
+              // 添加评委问题平均分
+              const commentAvg = commentScores.length > 0 
+                ? (commentScores.reduce((sum, score) => sum + (score || 0), 0) / commentScores.length).toFixed(1)
+                : '0';
+              row += `,"${commentAvg}"`;
+              
+              // 添加备注
+              const notes = (teamScore.notes || '').replace(/"/g, '""');
+              row += `,"${notes}"`;
+              
+              lines.push(row);
+            });
+          });
+          
+          // 投票总结
+          lines.push('');
+          lines.push('"Voting Summary:"');
+          lines.push(`"${teamA} Votes: ${match.votes?.teamA || 0}"`);
+          lines.push(`"${teamB} Votes: ${match.votes?.teamB || 0}"`);
+          lines.push(`"${teamA} Score Differential: ${match.scoreDifferentials?.teamA || 0}"`);
+          lines.push(`"${teamB} Score Differential: ${match.scoreDifferentials?.teamB || 0}"`);
+        } else {
+          lines.push('"Match not completed or no scores available"');
+        }
+        
+        lines.push('');
+      });
+      
+      lines.push('');
     });
     
     return lines.join('\n');

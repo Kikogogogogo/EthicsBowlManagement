@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ethics Bowl - Login</title>
+    <title>Ethics Bowl - Management System</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="./src/assets/icon.png">
     <!-- Preload ECON.png to reduce flashing -->
     <link rel="preload" as="image" href="./src/assets/ECON.png">
     <style>
+        /* Import fonts first - must be at the top */
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
         /* Prevent layout shifts during image loading */
         .logo-container {
             min-width: 80px;
@@ -17,6 +20,302 @@
         /* Smooth transition for images */
         .logo-image {
             transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Landing Page Styles */
+        
+        .hero-title {
+            font-family: 'Space Grotesk', sans-serif;
+            animation: fadeInUp 1s ease-out;
+        }
+        
+        .text-gradient {
+            background: linear-gradient(135deg, #ffffff 0%, #ef4444 50%, #ffffff 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease-in-out infinite;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .typing-animation {
+            position: relative;
+        }
+        
+        .typing-animation::after {
+            content: '|';
+            animation: blink 1s infinite;
+            color: #ef4444;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        /* Floating Shapes */
+        .floating-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .shape {
+            position: absolute;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(239, 68, 68, 0.1) 100%);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        .shape-1 {
+            width: 300px;
+            height: 300px;
+            top: 10%;
+            left: -10%;
+            animation-delay: 0s;
+        }
+        
+        .shape-2 {
+            width: 200px;
+            height: 200px;
+            top: 60%;
+            right: -5%;
+            animation-delay: 2s;
+        }
+        
+        .shape-3 {
+            width: 150px;
+            height: 150px;
+            top: 80%;
+            left: 10%;
+            animation-delay: 4s;
+        }
+        
+        .shape-4 {
+            width: 100px;
+            height: 100px;
+            top: 20%;
+            right: 20%;
+            animation-delay: 1s;
+        }
+        
+        .shape-5 {
+            width: 250px;
+            height: 250px;
+            top: 40%;
+            left: 70%;
+            animation-delay: 3s;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-30px) rotate(180deg); }
+        }
+        
+        /* Feature Pills */
+        .feature-pill {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-pill:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        /* CTA Buttons */
+        .cta-primary {
+            display: inline-flex;
+            align-items: center;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cta-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.6s;
+        }
+        
+        .cta-primary:hover::before {
+            left: 100%;
+        }
+        
+        .cta-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+        }
+        
+        .cta-secondary {
+            display: inline-flex;
+            align-items: center;
+            padding: 16px 32px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .cta-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Feature Cards */
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        
+        .feature-card:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+            opacity: 0;
+        }
+        
+        .delay-300 {
+            animation-delay: 0.3s;
+        }
+        
+        .delay-500 {
+            animation-delay: 0.5s;
+        }
+        
+        /* Scroll Indicator */
+        .scroll-indicator {
+            animation: fadeInUp 1s ease-out 2s forwards;
+            opacity: 0;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .shape {
+                display: none;
+            }
+            
+            .feature-card {
+                margin-bottom: 1rem;
+            }
+        }
+        
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
         }
     </style>
 </head>
@@ -29,6 +328,144 @@
         
         <!-- Main content -->
         <div id="content" class="hidden">
+            <!-- Landing page -->
+            <div id="landing-page" class="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black relative overflow-hidden">
+                <!-- Animated background elements -->
+                <div class="absolute inset-0 overflow-hidden">
+                    <div class="floating-shapes">
+                        <div class="shape shape-1"></div>
+                        <div class="shape shape-2"></div>
+                        <div class="shape shape-3"></div>
+                        <div class="shape shape-4"></div>
+                        <div class="shape shape-5"></div>
+                    </div>
+                </div>
+                
+                <!-- Navigation -->
+                <nav class="relative z-10 flex items-center justify-between px-6 pt-6 lg:px-8">
+                    <div class="flex items-center">
+                        <div class="logo-container flex items-center">
+                            <img src="./src/assets/ECON.png" alt="ECON" class="h-12 w-auto object-contain logo-image opacity-0" 
+                                 onload="this.style.opacity='1'" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="h-10 w-10 hidden items-center justify-center rounded-full bg-red-600/80 backdrop-blur-sm">
+                                <span class="text-white font-bold text-lg">EB</span>
+                            </div>
+                        </div>
+                        <span class="ml-3 text-xl font-bold text-white">Ethics Bowl</span>
+                    </div>
+                    <div class="hidden md:flex items-center space-x-6">
+                        <a href="#features" class="text-white/80 hover:text-white transition-colors duration-200">Features</a>
+                        <a href="#about" class="text-white/80 hover:text-white transition-colors duration-200">About</a>
+                        <button id="nav-login-btn" class="bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-red-600 hover:border-red-600 transition-all duration-200 border border-white/20">
+                            Sign In
+                        </button>
+                    </div>
+                </nav>
+
+                <!-- Hero Section -->
+                <div class="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 text-center">
+                    <div class="max-w-4xl mx-auto">
+                        <!-- Animated title -->
+                        <h1 class="hero-title text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+                            <span class="text-gradient">Ethics Bowl</span>
+                            <br>
+                            <span class="typing-animation">Management System</span>
+                        </h1>
+                        
+                        <!-- Subtitle -->
+                        <p class="text-xl md:text-2xl text-white/80 mb-8 max-w-2xl mx-auto leading-relaxed fade-in-up">
+                            Streamline your ethics bowl competitions with powerful tools for scoring, team management, and real-time collaboration.
+                        </p>
+                        
+                        <!-- Feature highlights -->
+                        <div class="flex flex-wrap justify-center gap-4 mb-12 fade-in-up delay-300">
+                            <div class="feature-pill">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                                Real-time Scoring
+                            </div>
+                            <div class="feature-pill">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                </svg>
+                                Team Management
+                            </div>
+                            <div class="feature-pill">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                Analytics & Reports
+                            </div>
+                        </div>
+                        
+                        <!-- CTA Buttons -->
+                        <div class="flex flex-col sm:flex-row gap-4 justify-center fade-in-up delay-500">
+                            <button id="get-started-btn" class="cta-primary">
+                                <span>Get Started</span>
+                                <svg class="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                </svg>
+                            </button>
+                            <button id="learn-more-btn" class="cta-secondary">
+                                Learn More
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Scroll indicator -->
+                    <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 scroll-indicator">
+                        <div class="w-6 h-10 border-2 border-white/30 rounded-full relative">
+                            <div class="w-1 h-3 bg-white/60 rounded-full absolute top-2 left-1/2 transform -translate-x-1/2 animate-bounce"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Features Section -->
+                <div id="features" class="relative z-10 py-20 px-4">
+                    <div class="max-w-6xl mx-auto">
+                        <div class="text-center mb-16">
+                            <h2 class="text-4xl md:text-5xl font-bold text-white mb-4">Powerful Features</h2>
+                            <p class="text-xl text-white/80 max-w-2xl mx-auto">Everything you need to run successful ethics bowl competitions</p>
+                        </div>
+                        
+                        <div class="grid md:grid-cols-3 gap-8">
+                            <div class="feature-card group">
+                                <div class="feature-icon">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-2xl font-semibold text-white mb-4">Real-time Scoring</h3>
+                                <p class="text-white/70 leading-relaxed">Live score updates and judge collaboration with instant notifications and WebSocket connections.</p>
+                            </div>
+                            
+                            <div class="feature-card group">
+                                <div class="feature-icon">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-2xl font-semibold text-white mb-4">Smart Management</h3>
+                                <p class="text-white/70 leading-relaxed">Comprehensive team, judge, and event management with automated scheduling and assignments.</p>
+                            </div>
+                            
+                            <div class="feature-card group">
+                                <div class="feature-icon">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-2xl font-semibold text-white mb-4">Detailed Analytics</h3>
+                                <p class="text-white/70 leading-relaxed">Comprehensive reports and analytics with exportable results and performance insights.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Login page -->
             <div id="login-page" class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
                 <div class="max-w-md w-full space-y-8">

@@ -37,6 +37,12 @@ class UIManager {
       loading: document.getElementById('loading'),
       content: document.getElementById('content'),
       
+      // Landing page
+      landingPage: document.getElementById('landing-page'),
+      getStartedBtn: document.getElementById('get-started-btn'),
+      navLoginBtn: document.getElementById('nav-login-btn'),
+      learnMoreBtn: document.getElementById('learn-more-btn'),
+      
       // Login page
       loginPage: document.getElementById('login-page'),
       googleSigninBtn: document.getElementById('google-signin-btn'),
@@ -563,6 +569,25 @@ class App {
     this.eventListenersInitialized = true;
     this.navigationListeners = [];
     
+    // Landing page buttons
+    if (this.ui.elements.getStartedBtn) {
+      const handler = () => this.showLoginPage();
+      this.ui.elements.getStartedBtn.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.getStartedBtn, event: 'click', handler });
+    }
+    
+    if (this.ui.elements.navLoginBtn) {
+      const handler = () => this.showLoginPage();
+      this.ui.elements.navLoginBtn.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navLoginBtn, event: 'click', handler });
+    }
+    
+    if (this.ui.elements.learnMoreBtn) {
+      const handler = () => this.scrollToFeatures();
+      this.ui.elements.learnMoreBtn.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.learnMoreBtn, event: 'click', handler });
+    }
+    
     // Google Sign In button
     if (this.ui.elements.googleSigninBtn) {
       const handler = () => this.handleGoogleSignin();
@@ -836,15 +861,15 @@ class App {
         this.ui.showPage('pending');
         this.ui.hideLoading();
       } else {
-        // Show login page for unauthenticated users or errors
-        console.log('🔓 用户未认证，显示登录页面');
-        this.ui.showPage('login');
+        // Show landing page for unauthenticated users or errors
+        console.log('🔓 用户未认证，显示落地页面');
+        this.ui.showPage('landing');
         this.ui.hideLoading();
       }
     } catch (error) {
       console.error('Application initialization error:', error);
       this.ui.showError('System Error', 'Failed to initialize application');
-      this.ui.showPage('login');
+      this.ui.showPage('landing');
       this.ui.hideLoading();
     }
   }
@@ -1150,6 +1175,25 @@ class App {
       this.ui.showPage('users');
       await this.usersPage.init();
       this.updateNavigation('users');
+    }
+  }
+
+  /**
+   * Show login page from landing page
+   */
+  showLoginPage() {
+    console.log('🔓 [Landing] Navigating to login page...');
+    this.ui.showPage('login');
+  }
+
+  /**
+   * Scroll to features section
+   */
+  scrollToFeatures() {
+    console.log('📖 [Landing] Scrolling to features...');
+    const featuresSection = document.getElementById('features');
+    if (featuresSection) {
+      featuresSection.scrollIntoView({ behavior: 'smooth' });
     }
   }
 
