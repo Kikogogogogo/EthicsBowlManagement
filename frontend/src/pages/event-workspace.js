@@ -1004,12 +1004,15 @@ class EventWorkspacePage {
     }
 
     return `
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Statistics Cards -->
-        <div class="lg:col-span-2 space-y-6">
+      <div class="space-y-8">
+        <!-- Role Info -->
           ${roleInfo}
           
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Top Section: Statistics and Quick Actions -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <!-- Statistics Cards -->
+          <div class="lg:col-span-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             ${isAdmin ? `
               <div class="bg-white border border-gray-300 p-6 rounded-lg">
                 <div class="text-2xl font-bold text-gray-900">${this.teams.length}</div>
@@ -1018,41 +1021,20 @@ class EventWorkspacePage {
             ` : ''}
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
                           <div class="text-2xl font-bold text-gray-900">${draftMatches}</div>
-            <div class="text-gray-600">${isAdmin ? 'Draft Matches' : 'Your Draft'}</div>
+                <div class="text-gray-600">${isAdmin ? 'Draft Matches' : 'My Drafts'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${inProgressMatches}</div>
-              <div class="text-gray-600">${isAdmin ? 'Active Matches' : 'Your Active'}</div>
+                <div class="text-gray-600">${isAdmin ? 'Active Matches' : 'My Active'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${completedMatches}</div>
-              <div class="text-gray-600">${isAdmin ? 'Completed' : 'Completed'}</div>
-            </div>
-          </div>
-
-          <!-- Rounds Overview -->
-          <div class="bg-white border border-gray-300 rounded-lg">
-            <div class="px-6 py-4 border-b border-gray-300">
-              <h3 class="text-lg font-medium text-gray-900">Rounds Overview</h3>
-            </div>
-            <div class="p-6">
-              ${Object.keys(matchesByRound).map(round => `
-                <div class="mb-4 last:mb-0">
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium text-gray-900">Round ${round}</span>
-                    <span class="text-sm text-gray-500">${matchesByRound[round].filter(m => m.status === 'completed').length}/${matchesByRound[round].length} completed</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-gray-900 h-2 rounded-full" style="width: ${(matchesByRound[round].filter(m => m.status === 'completed').length / matchesByRound[round].length) * 100}%"></div>
-                  </div>
-                </div>
-              `).join('')}
+                <div class="text-gray-600">Completed</div>
             </div>
           </div>
         </div>
 
         <!-- Quick Actions -->
-        <div class="space-y-6">
           ${isAdmin ? `
             <div class="bg-white border border-gray-300 rounded-lg">
               <div class="px-6 py-4 border-b border-gray-300">
@@ -1068,19 +1050,27 @@ class EventWorkspacePage {
               </div>
             </div>
           ` : ''}
+        </div>
 
-          <!-- Current Standings -->
+        <!-- Middle Section: Rounds Overview and Recent Activity -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Rounds Overview -->
           <div class="bg-white border border-gray-300 rounded-lg">
-            <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
-              <h3 class="text-lg font-medium text-gray-900">Current Standings</h3>
-              <button onclick="window.eventWorkspacePage.refreshStandings()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                Refresh
-              </button>
+            <div class="px-6 py-4 border-b border-gray-300">
+              <h3 class="text-lg font-medium text-gray-900">Rounds Overview</h3>
             </div>
             <div class="p-6">
-              <div id="standingsContainer" class="space-y-2 max-h-96 overflow-y-auto">
-                <div class="text-gray-500 text-center py-4">Loading standings...</div>
+              ${Object.keys(matchesByRound).map(round => `
+                <div class="mb-4 last:mb-0">
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="font-medium text-gray-900">Round ${round}</span>
+                    <span class="text-sm text-gray-500">${matchesByRound[round].filter(m => m.status === 'completed').length}/${matchesByRound[round].length} completed</span>
               </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-gray-900 h-2 rounded-full" style="width: ${(matchesByRound[round].filter(m => m.status === 'completed').length / matchesByRound[round].length) * 100}%"></div>
+                  </div>
+                </div>
+              `).join('')}
             </div>
           </div>
 
@@ -1101,6 +1091,23 @@ class EventWorkspacePage {
                   </span>
                 </div>
               `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Section: Wide Standings Table -->
+        <div class="bg-white border border-gray-300 rounded-lg">
+          <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
+            <h3 class="text-xl font-medium text-gray-900">Current Standings</h3>
+            <div class="flex space-x-3">
+              <button onclick="window.eventWorkspacePage.refreshStandings()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium">
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+          <div class="p-6">
+            <div id="standingsContainer">
+              <div class="text-gray-500 text-center py-8">Loading...</div>
             </div>
           </div>
         </div>
@@ -4158,14 +4165,146 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       const standingsData = await this.getEventStandings();
       
       if (!standingsData?.standings || standingsData.standings.length === 0) {
-        return '<div class="text-gray-500 text-center py-4">No standings data available</div>';
+        return '<div class="text-gray-500 text-center py-8">No standings data available</div>';
       }
 
-      // Display all teams that have participated in matches with detailed ranking information
-      return standingsData.standings.map((standing, index) => `
-        <div class="flex items-center justify-between py-1.5 px-2 rounded-md ${index < 3 ? 'bg-gray-50' : ''} hover:bg-gray-50 transition-colors">
-          <div class="flex items-center space-x-2">
-            <div class="flex items-center justify-center w-5 h-5 rounded-full ${
+      // Display all teams in a wide table format
+      return this.renderWideStandingsTable(standingsData.standings);
+      
+    } catch (error) {
+      console.error('Error rendering current standings:', error);
+      // Fallback to simple client-side calculation if API call fails
+      return this.renderFallbackStandings();
+    }
+  }
+
+  renderWideStandingsTable(standings) {
+    return `
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Record</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Win Rate</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Votes</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score Diff</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${standings.map((standing, index) => this.renderWideStandingRow(standing, index)).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-4 text-center">
+        <p class="text-sm text-gray-500">💡 Click "View Details" to expand detailed match records for each team</p>
+      </div>
+    `;
+  }
+
+  renderWideStandingRow(standing, index) {
+    const teamId = standing.team.id;
+    const winRate = standing.totalMatches > 0 ? ((standing.wins / standing.totalMatches) * 100).toFixed(1) : 0;
+    
+    return `
+      <tr class="hover:bg-gray-50 transition-colors ${index < 3 ? 'bg-yellow-50' : ''}">
+        <td class="px-6 py-4 whitespace-nowrap">
+          <div class="flex items-center">
+            <div class="flex items-center justify-center w-8 h-8 rounded-full ${
+              index === 0 ? 'bg-yellow-500 text-white' :
+              index === 1 ? 'bg-gray-400 text-white' :
+              index === 2 ? 'bg-amber-600 text-white' :
+              'bg-gray-200 text-gray-600'
+            } text-sm font-bold">
+              ${standing.rank}
+            </div>
+            ${index < 3 ? `<span class="ml-2 text-lg">${index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}</span>` : ''}
+          </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <div>
+            <div class="text-sm font-medium text-gray-900">${standing.team.name}</div>
+            <div class="text-sm text-gray-500">${standing.team.school || 'No school'}</div>
+          </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-center">
+          <div class="text-sm font-medium text-gray-900">${standing.wins}-${standing.totalMatches - standing.wins}</div>
+          <div class="text-xs text-gray-500">${standing.totalMatches} matches</div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-center">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            winRate >= 70 ? 'bg-green-100 text-green-800' :
+            winRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+            'bg-red-100 text-red-800'
+          }">
+            ${winRate}%
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-center">
+          <div class="text-sm font-medium text-gray-900">${standing.votes}</div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-center">
+          <span class="text-sm font-medium ${standing.scoreDifferential >= 0 ? 'text-green-600' : 'text-red-600'}">
+            ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential}
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-center">
+          <button 
+            onclick="window.eventWorkspacePage.toggleTeamDetails('${teamId}')" 
+            class="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            View Details
+          </button>
+        </td>
+      </tr>
+      <tr id="team-details-${teamId}" class="hidden">
+        <td colspan="7" class="px-6 py-4 bg-gray-50">
+          <div id="team-details-content-${teamId}">
+            <!-- Details will be loaded here -->
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  renderDetailedStandingRow(standing, index) {
+    const teamId = standing.team.id;
+    const teamMatches = this.matches.filter(m => 
+      (m.teamAId === teamId || m.teamBId === teamId) && m.status === 'completed'
+    );
+
+    // Get detailed match information for this team
+    const matchDetails = teamMatches.map(match => {
+      const isTeamA = match.teamAId === teamId;
+      const opponent = isTeamA ? 
+        this.teams.find(t => t.id === match.teamBId) :
+        this.teams.find(t => t.id === match.teamAId);
+      
+      const isWinner = match.winnerId === teamId;
+      const result = isWinner ? 'W' : 'L';
+      
+      return {
+        match,
+        opponent: opponent || { name: 'Unknown', school: '' },
+        result,
+        round: match.roundNumber,
+        room: match.room || 'No room'
+      };
+    }).sort((a, b) => a.round - b.round);
+
+    const uniqueId = `standing-${teamId}`;
+
+    return `
+      <div class="border border-gray-200 rounded-lg mb-2 overflow-hidden">
+        <!-- Main standing row -->
+        <div class="flex items-center justify-between py-3 px-4 cursor-pointer hover:bg-gray-50 transition-colors" 
+             onclick="window.eventWorkspacePage.toggleStandingDetails(this)">
+          <div class="flex items-center space-x-3">
+            <div class="flex items-center justify-center w-6 h-6 rounded-full ${
               index === 0 ? 'bg-yellow-500 text-white' :
               index === 1 ? 'bg-gray-400 text-white' :
               index === 2 ? 'bg-amber-600 text-white' :
@@ -4174,24 +4313,80 @@ Note: Judges typically score each question individually (First, Second, Third Qu
               ${standing.rank}
             </div>
             <div>
-              <div class="font-medium text-gray-900 text-sm">${standing.team.name}</div>
+              <div class="font-medium text-gray-900">${standing.team.name}</div>
               <div class="text-xs text-gray-500">${standing.team.school || 'No school'}</div>
             </div>
+            <svg class="w-4 h-4 text-gray-400 transform transition-transform expand-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
           </div>
           <div class="text-right">
-            <div class="font-medium text-gray-900 text-sm">${standing.wins}-${standing.totalMatches - standing.wins}</div>
+            <div class="font-medium text-gray-900">${standing.wins}-${standing.totalMatches - standing.wins}</div>
             <div class="text-xs text-gray-500">
               ${standing.votes} votes • ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential} diff
             </div>
           </div>
         </div>
-      `).join('');
-      
-    } catch (error) {
-      console.error('Error rendering current standings:', error);
-      // Fallback to simple client-side calculation if API call fails
-      return this.renderFallbackStandings();
-    }
+
+        <!-- Expandable detailed section -->
+        <div class="hidden bg-gray-50 border-t border-gray-200">
+          <div class="p-4">
+            <h4 class="font-medium text-gray-900 mb-3">比赛记录 (${matchDetails.length} 场比赛)</h4>
+            
+            ${matchDetails.length === 0 ? 
+              '<div class="text-gray-500 text-sm italic">暂无比赛记录</div>' :
+              `<div class="space-y-2">
+                ${matchDetails.map(detail => `
+                  <div class="flex items-center justify-between py-2 px-3 bg-white rounded border ${
+                    detail.result === 'W' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                  }">
+                    <div class="flex items-center space-x-3">
+                      <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                        detail.result === 'W' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                      }">
+                        ${detail.result}
+                      </span>
+                      <div>
+                        <div class="font-medium text-sm">vs ${detail.opponent.name}</div>
+                        <div class="text-xs text-gray-500">${detail.opponent.school || 'No school'}</div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm font-medium">第 ${detail.round} 轮</div>
+                      <div class="text-xs text-gray-500">${detail.room}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>`
+            }
+
+            <!-- Team statistics -->
+            <div class="mt-4 pt-4 border-t border-gray-300">
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div>
+                  <div class="text-lg font-bold text-gray-900">${standing.wins}</div>
+                  <div class="text-xs text-gray-500">胜场</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold text-gray-900">${standing.totalMatches - standing.wins}</div>
+                  <div class="text-xs text-gray-500">负场</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold text-gray-900">${standing.votes}</div>
+                  <div class="text-xs text-gray-500">总票数</div>
+                </div>
+                <div>
+                  <div class="text-lg font-bold ${standing.scoreDifferential >= 0 ? 'text-green-600' : 'text-red-600'}">
+                    ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential}
+                  </div>
+                  <div class="text-xs text-gray-500">分差</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   /**
@@ -4210,39 +4405,26 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         team,
         wins,
         totalMatches,
-        winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0
+        winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0,
+        rank: 0, // Will be set after sorting
+        votes: 0, // Fallback doesn't have vote data
+        scoreDifferential: 0 // Fallback doesn't have score differential
       };
     }).sort((a, b) => {
       if (a.wins !== b.wins) return b.wins - a.wins;
       return b.winPercentage - a.winPercentage;
     });
 
+    // Set ranks
+    teamStandings.forEach((standing, index) => {
+      standing.rank = index + 1;
+    });
+
     if (teamStandings.length === 0) {
-      return '<div class="text-gray-500 text-center py-4">No teams available</div>';
+      return '<div class="text-gray-500 text-center py-8">No teams available</div>';
     }
 
-        return teamStandings.map((standing, index) => `
-      <div class="flex items-center justify-between py-1.5 px-2 rounded-md ${index < 3 ? 'bg-gray-50' : ''} hover:bg-gray-50 transition-colors">
-        <div class="flex items-center space-x-2">
-          <div class="flex items-center justify-center w-5 h-5 rounded-full ${
-            index === 0 ? 'bg-yellow-500 text-white' :
-            index === 1 ? 'bg-gray-400 text-white' :
-            index === 2 ? 'bg-amber-600 text-white' :
-            'bg-gray-200 text-gray-600'
-          } text-xs font-bold">
-            ${index + 1}
-          </div>
-          <div>
-            <div class="font-medium text-gray-900 text-sm">${standing.team.name}</div>
-            <div class="text-xs text-gray-500">${standing.team.school || 'No school'}</div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="font-medium text-gray-900 text-sm">${standing.wins}-${standing.totalMatches - standing.wins}</div>
-          <div class="text-xs text-gray-500">${standing.winPercentage}%</div>
-        </div>
-      </div>
-    `).join('');
+    return this.renderWideStandingsTable(teamStandings);
   }
 
   /**
@@ -4254,7 +4436,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       if (!container) return;
       
       // Show loading state
-      container.innerHTML = '<div class="text-gray-500 text-center py-4">Loading standings...</div>';
+      container.innerHTML = '<div class="text-gray-500 text-center py-8">Loading standings...</div>';
       
       // Get standings data
       const standingsHTML = await this.renderCurrentStandings();
@@ -4346,6 +4528,143 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         </div>
       </div>
     `).join('');
+  }
+
+  /**
+   * Toggle standing details visibility
+   */
+  toggleStandingDetails(clickedElement) {
+    const detailsSection = clickedElement.nextElementSibling;
+    const arrow = clickedElement.querySelector('.expand-arrow');
+    
+    if (detailsSection) {
+      const isHidden = detailsSection.classList.contains('hidden');
+      
+      if (isHidden) {
+        detailsSection.classList.remove('hidden');
+        if (arrow) {
+          arrow.style.transform = 'rotate(180deg)';
+        }
+      } else {
+        detailsSection.classList.add('hidden');
+        if (arrow) {
+          arrow.style.transform = 'rotate(0deg)';
+        }
+      }
+    }
+  }
+
+  /**
+   * Toggle team details in wide table
+   */
+  toggleTeamDetails(teamId) {
+    const detailsRow = document.getElementById(`team-details-${teamId}`);
+    const contentDiv = document.getElementById(`team-details-content-${teamId}`);
+    
+    if (!detailsRow || !contentDiv) return;
+    
+    const isHidden = detailsRow.classList.contains('hidden');
+    
+    if (isHidden) {
+      // Show details and load content
+      detailsRow.classList.remove('hidden');
+      contentDiv.innerHTML = this.renderTeamDetailsContent(teamId);
+    } else {
+      // Hide details
+      detailsRow.classList.add('hidden');
+    }
+  }
+
+  renderTeamDetailsContent(teamId) {
+    const team = this.teams.find(t => t.id === teamId);
+    if (!team) return '<div class="text-gray-500">Team not found</div>';
+
+    const teamMatches = this.matches.filter(m => 
+      (m.teamAId === teamId || m.teamBId === teamId) && m.status === 'completed'
+    );
+
+    if (teamMatches.length === 0) {
+      return '<div class="text-gray-500 text-center py-4">No completed matches found for this team</div>';
+    }
+
+    // Get detailed match information for this team
+    const matchDetails = teamMatches.map(match => {
+      const isTeamA = match.teamAId === teamId;
+      const opponent = isTeamA ? 
+        this.teams.find(t => t.id === match.teamBId) :
+        this.teams.find(t => t.id === match.teamAId);
+      
+      const isWinner = match.winnerId === teamId;
+      const result = isWinner ? 'W' : 'L';
+      
+      return {
+        match,
+        opponent: opponent || { name: 'Unknown Team', school: '' },
+        result,
+        isWinner,
+        round: match.roundNumber,
+        room: match.room || 'No room assigned'
+      };
+    }).sort((a, b) => a.round - b.round);
+
+    return `
+      <div class="bg-white rounded-lg p-4">
+        <h5 class="text-lg font-medium text-gray-900 mb-4">${team.name} Match Details</h5>
+        
+        <!-- Match History Table -->
+        <div class="overflow-x-auto mb-6">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Round</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opponent</th>
+                <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Result</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Room</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              ${matchDetails.map(detail => `
+                <tr class="${detail.isWinner ? 'bg-green-50' : 'bg-red-50'}">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900">Round ${detail.round}</td>
+                  <td class="px-4 py-3">
+                    <div class="text-sm font-medium text-gray-900">${detail.opponent.name}</div>
+                    <div class="text-xs text-gray-500">${detail.opponent.school || 'No school'}</div>
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      detail.isWinner ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }">
+                      ${detail.result}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${detail.room}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+          <div class="text-center">
+            <div class="text-xl font-bold text-green-600">${matchDetails.filter(d => d.isWinner).length}</div>
+            <div class="text-xs text-gray-500">Wins</div>
+          </div>
+          <div class="text-center">
+            <div class="text-xl font-bold text-red-600">${matchDetails.filter(d => !d.isWinner).length}</div>
+            <div class="text-xs text-gray-500">Losses</div>
+          </div>
+          <div class="text-center">
+            <div class="text-xl font-bold text-gray-900">${matchDetails.length}</div>
+            <div class="text-xs text-gray-500">Total</div>
+          </div>
+          <div class="text-center">
+            <div class="text-xl font-bold text-blue-600">${matchDetails.length > 0 ? ((matchDetails.filter(d => d.isWinner).length / matchDetails.length) * 100).toFixed(1) : 0}%</div>
+            <div class="text-xs text-gray-500">Win Rate</div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   /**
@@ -4628,8 +4947,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         if (!confirmed) return;
       }
 
-      // Generate Round Robin pairings
-      const pairings = this.generateRoundRobinPairings(selectedTeams);
+      // Generate random pairings for single round
+      const pairings = this.generateRandomPairings(selectedTeams);
       
       // Delete existing matches for the round if any
       if (existingMatches.length > 0) {
@@ -4644,8 +4963,17 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
       // Create new matches
       let createdCount = 0;
+      let byeTeams = [];
+      
       for (const pairing of pairings) {
         try {
+          // Handle bye (轮空) - when teamB is null
+          if (!pairing.teamB) {
+            byeTeams.push(pairing.teamA.name);
+            console.log(`Team ${pairing.teamA.name} has a bye this round`);
+            continue; // Skip creating a match for bye
+          }
+          
           const matchData = {
             roundNumber: roundNumber,
             teamAId: pairing.teamA.id,
@@ -4668,7 +4996,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Re-render the workspace
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
       
-      this.ui.showSuccess('Success', `Generated ${createdCount} Round Robin matches for Round ${roundNumber}`);
+      // Show success message with bye information
+      let message = `Generated ${createdCount} matches for Round ${roundNumber}`;
+      if (byeTeams.length > 0) {
+        message += `\n\nTeams with bye (轮空): ${byeTeams.join(', ')}`;
+      }
+      this.ui.showSuccess('Success', message);
       
     } catch (error) {
       console.error('Error generating Round Robin for round:', error);
@@ -5001,20 +5334,28 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    * @returns {Array} Array of pairing objects {teamA, teamB}
    */
   generateRandomPairings(teams) {
-    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    // Use Fisher-Yates shuffle algorithm for better randomness
+    const shuffledTeams = [...teams];
+    for (let i = shuffledTeams.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledTeams[i], shuffledTeams[j]] = [shuffledTeams[j], shuffledTeams[i]];
+    }
+    
     const pairings = [];
     
+    // Create pairs from shuffled teams
     for (let i = 0; i < shuffledTeams.length; i += 2) {
       if (i + 1 < shuffledTeams.length) {
+        // Even number: create a match between two teams
         pairings.push({
           teamA: shuffledTeams[i],
           teamB: shuffledTeams[i + 1]
         });
       } else {
-        // Handle odd number of teams with bye
+        // Odd number: last team gets a bye (轮空)
         pairings.push({
           teamA: shuffledTeams[i],
-          teamB: null // Bye
+          teamB: null // Bye (轮空)
         });
       }
     }
