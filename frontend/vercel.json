@@ -10,6 +10,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/v1/(.*)",
+      "destination": "https://pointpulse-backend.onrender.com/api/v1/$1"
+    },
+    {
       "source": "/((?!assets/|api/).*)",
       "destination": "/index.html"
     }
