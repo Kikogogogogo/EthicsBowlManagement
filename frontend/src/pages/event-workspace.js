@@ -2872,6 +2872,8 @@ class EventWorkspacePage {
    * Handle create match form submission
    */
   async handleCreateMatch(event) {
+    event.preventDefault();
+    
     // Prevent multiple submissions
     const submitButton = event.target.querySelector('button[type="submit"]');
     if (submitButton && submitButton.disabled) {
@@ -2891,13 +2893,51 @@ class EventWorkspacePage {
       
       const formData = new FormData(event.target);
       
+      // Comprehensive validation
+      const errors = [];
+      
+      // Validate round number
+      const roundNumber = parseInt(formData.get('roundNumber'));
+      if (!roundNumber || roundNumber < 1) {
+        errors.push('Please select a valid round number');
+      }
+      
+      // Validate team selection
+      const teamAId = formData.get('teamAId');
+      const teamBId = formData.get('teamBId');
+      
+      if (!teamAId) {
+        errors.push('Please select Team A');
+      }
+      if (!teamBId) {
+        errors.push('Please select Team B');
+      }
+      if (teamAId && teamBId && teamAId === teamBId) {
+        errors.push('Team A and Team B cannot be the same team');
+      }
+      
+      // Validate room
+      const room = formData.get('room')?.trim();
+      if (!room) {
+        errors.push('Please enter a room/location for the match');
+      }
+      
       // Get selected judge IDs from multiple select
       const judgeSelect = event.target.querySelector('select[name="judgeIds"]');
       const selectedJudgeIds = Array.from(judgeSelect.selectedOptions).map(option => option.value);
       
       // Validate judge selection (must be 2-3 judges)
-      if (selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
-        if (errorDiv) {
+      if (selectedJudgeIds.length < 2) {
+        errors.push('Please select at least 2 judges for the match');
+      } else if (selectedJudgeIds.length > 3) {
+        errors.push('Please select no more than 3 judges for the match');
+      }
+      
+      // Show validation errors if any
+      if (errors.length > 0) {
+        const errorMessage = errors.join('\n• ');
+        this.showCreateMatchError(`Validation Error:\n• ${errorMessage}`);
+        if (errorDiv && selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
           errorDiv.textContent = `Please select 2-3 judges. Currently selected: ${selectedJudgeIds.length}`;
           errorDiv.classList.remove('hidden');
         }
@@ -2906,63 +2946,117 @@ class EventWorkspacePage {
       }
       
       const matchData = {
-        roundNumber: parseInt(formData.get('roundNumber')),
-        teamAId: formData.get('teamAId'),
-        teamBId: formData.get('teamBId'),
+        roundNumber: roundNumber,
+        teamAId: teamAId,
+        teamBId: teamBId,
         moderatorId: formData.get('moderatorId') || null,
-        room: formData.get('room'),
+        room: room,
         scheduledTime: formData.get('scheduledTime') || null
       };
 
-      // Validate team selection (Team A and Team B cannot be the same)
-      if (matchData.teamAId === matchData.teamBId) {
-        this.ui.showError('Validation Error', 'Team A and Team B cannot be the same team');
-        return;
-      }
+      console.log('Creating match with data:', matchData);
 
       // Create the match first
-      const response = await this.matchService.createEventMatch(this.currentEventId, matchData);
-      const createdMatch = response.data || response;
+      let response;
+      let createdMatch;
+      
+      try {
+        response = await this.matchService.createEventMatch(this.currentEventId, matchData);
+        createdMatch = response.data || response;
+        
+        if (!createdMatch || !createdMatch.id) {
+          throw new Error('Invalid response from server - match creation failed');
+        }
+        
+        console.log('✅ Match created successfully:', createdMatch.id);
+      } catch (matchError) {
+        console.error('❌ Failed to create match:', matchError);
+        let errorMessage = 'Failed to create match';
+        
+        if (matchError.status === 400) {
+          errorMessage = 'Invalid match data provided. Please check all fields and try again.';
+        } else if (matchError.status === 403) {
+          errorMessage = 'You do not have permission to create matches for this event.';
+        } else if (matchError.status === 404) {
+          errorMessage = 'Event not found. Please refresh the page and try again.';
+        } else if (matchError.status === 409) {
+          errorMessage = 'A match with these teams already exists in this round.';
+        } else if (matchError.status === 500) {
+          errorMessage = 'Server error occurred while creating the match. Please try again later.';
+        } else if (matchError.message) {
+          errorMessage = `Failed to create match: ${matchError.message}`;
+        }
+        
+        this.showCreateMatchError(errorMessage);
+        return;
+      }
       
       // Assign judges (guaranteed to have 2-3 judges at this point)
-      console.log(`Assigning ${selectedJudgeIds.length} judges to match ${createdMatch.id}`);
+      console.log(`🎯 Assigning ${selectedJudgeIds.length} judges to match ${createdMatch.id}`);
       
       let successfulAssignments = 0;
+      let failedAssignments = [];
+      
       for (const judgeId of selectedJudgeIds) {
         try {
           await this.matchService.assignJudge(createdMatch.id, judgeId);
-          console.log(`Successfully assigned judge ${judgeId} to match`);
+          console.log(`✅ Successfully assigned judge ${judgeId} to match`);
           successfulAssignments++;
         } catch (judgeError) {
-          console.error(`Failed to assign judge ${judgeId}:`, judgeError);
+          console.error(`❌ Failed to assign judge ${judgeId}:`, judgeError);
+          failedAssignments.push(judgeId);
           // Continue with other judges even if one fails
         }
       }
       
+      // Close modal and show success/warning message
       this.closeModal('createMatchModal');
-      this.ui.showSuccess('Success', `Match created successfully! ${successfulAssignments} judges assigned.`);
+      
+      if (successfulAssignments === selectedJudgeIds.length) {
+        this.ui.showSuccess('Match Created', `Match created successfully with ${successfulAssignments} judges assigned.`);
+      } else if (successfulAssignments > 0) {
+        this.ui.showSuccess('Match Created with Warnings', 
+          `Match created successfully but only ${successfulAssignments} out of ${selectedJudgeIds.length} judges were assigned. ` +
+          `Please check judge assignments in the match details.`);
+      } else {
+        this.ui.showError('Match Created with Errors', 
+          'Match was created but no judges could be assigned. Please manually assign judges to this match.');
+      }
       
       // Reset form
       event.target.reset();
       
-      // Add the new match to local array to avoid full reload
-      this.matches.push(createdMatch);
-      
-      // Reload matches to get latest data and assignments
-      const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
-      this.matches = matchesResponse.data?.matches || [];
-      
-      // Re-render only the content, not the full workspace
-      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
-      
-      // Check for duplicate judge assignments after creating match
-      setTimeout(() => {
-        this.displayDuplicateJudgeWarnings();
-      }, 500);
+      try {
+        // Reload matches to get latest data and assignments
+        const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
+        this.matches = matchesResponse.data?.matches || [];
+        
+        // Re-render only the content, not the full workspace
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+        
+        // Check for duplicate judge assignments after creating match
+        setTimeout(() => {
+          this.displayDuplicateJudgeWarnings();
+        }, 500);
+        
+      } catch (reloadError) {
+        console.error('❌ Failed to reload matches after creation:', reloadError);
+        // Don't show error to user since match was created successfully
+      }
       
     } catch (error) {
-      console.error('Failed to create match:', error);
-      this.ui.showError('Error', 'Failed to create match: ' + error.message);
+      console.error('❌ Unexpected error during match creation:', error);
+      
+      let errorMessage = 'An unexpected error occurred while creating the match';
+      if (error.message) {
+        errorMessage += `: ${error.message}`;
+      }
+      errorMessage += '. Please try again or contact support if the problem persists.';
+      
+      this.showCreateMatchError(errorMessage);
     } finally {
       // Re-enable submit button
       const submitButton = event.target.querySelector('button[type="submit"]');
