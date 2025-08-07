@@ -240,9 +240,32 @@ class EventWorkspacePage {
       if (e.target.matches('#role-switcher')) {
         this.handleRoleSwitch(e.target.value);
       }
+      
+      // Match filters
+      if (e.target.matches('#roundFilter') || e.target.matches('#statusFilter')) {
+        this.applyMatchFilters();
+      }
     };
     document.addEventListener('change', changeHandler);
     this.eventListeners.push({ type: 'change', handler: changeHandler });
+  }
+
+  /**
+   * Get round display name with custom alias if available
+   */
+  getRoundDisplayName(roundNumber) {
+    if (!this.currentEvent || !this.currentEvent.roundNames) {
+      return `Round ${roundNumber}`;
+    }
+    
+    try {
+      const roundNames = JSON.parse(this.currentEvent.roundNames);
+      const customName = roundNames[roundNumber.toString()];
+      return customName ? `Round ${roundNumber} (${customName})` : `Round ${roundNumber}`;
+    } catch (e) {
+      console.warn('Failed to parse round names:', e);
+      return `Round ${roundNumber}`;
+    }
   }
 
   /**
@@ -737,7 +760,7 @@ class EventWorkspacePage {
                 <div class="border-l border-gray-300 pl-4">
                   <h1 class="text-2xl font-bold text-gray-900">${this.currentEvent.name}</h1>
                   <div class="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                    <span class="font-medium">Round ${this.currentEvent.currentRound} of ${this.currentEvent.totalRounds}</span>
+                    <span class="font-medium">${this.getRoundDisplayName(this.currentEvent.currentRound)} of ${this.currentEvent.totalRounds}</span>
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getStatusBadgeClasses(this.currentEvent.status)}">
                       ${this.getStatusText(this.currentEvent.status)}
                     </span>
@@ -857,8 +880,11 @@ class EventWorkspacePage {
       if (tabName === 'settings') {
         setTimeout(() => this.updateScoreCalculation(), 100);
       } else if (tabName === 'overview') {
-              // Load standings data asynchronously when switching to overview tab
-      setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+        // Load standings data asynchronously when switching to overview tab
+        setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+      } else if (tabName === 'matches') {
+        // Reset match filters when switching to matches tab
+        setTimeout(() => this.resetMatchFilters(), 100);
       }
 
       return true;
@@ -1063,7 +1089,7 @@ class EventWorkspacePage {
               ${Object.keys(matchesByRound).map(round => `
                 <div class="mb-4 last:mb-0">
                   <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium text-gray-900">Round ${round}</span>
+                    <span class="font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</span>
                     <span class="text-sm text-gray-500">${matchesByRound[round].filter(m => m.status === 'completed').length}/${matchesByRound[round].length} completed</span>
               </div>
                   <div class="w-full bg-gray-200 rounded-full h-2">
@@ -1084,7 +1110,7 @@ class EventWorkspacePage {
                 <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
                   <div>
                     <div class="font-medium text-sm">${this.teams.find(t => t.id === match.teamAId)?.name || 'TBD'} vs ${this.teams.find(t => t.id === match.teamBId)?.name || 'TBD'}</div>
-                    <div class="text-xs text-gray-500">Round ${match.roundNumber} • ${match.room || 'No room'}</div>
+                    <div class="text-xs text-gray-500">${this.getRoundDisplayName(match.roundNumber)} • ${match.room || 'No room'}</div>
                   </div>
                   <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
                     ${this.getMatchStatusText(match.status)}
@@ -1116,6 +1142,99 @@ class EventWorkspacePage {
   }
 
   /**
+   * Reset match filters to default values
+   */
+  resetMatchFilters() {
+    const roundFilter = document.getElementById('roundFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    
+    if (roundFilter) roundFilter.value = '';
+    if (statusFilter) statusFilter.value = '';
+    
+    // Clear filtered matches
+    this.filteredMatches = null;
+  }
+
+  /**
+   * Apply match filters and re-render matches content
+   */
+  applyMatchFilters() {
+    // Get filter values
+    const roundFilter = document.getElementById('roundFilter')?.value || '';
+    const statusFilter = document.getElementById('statusFilter')?.value || '';
+    
+    // Get all matches
+    let filteredMatches = [...this.allMatches || this.matches];
+    
+    // Apply round filter
+    if (roundFilter) {
+      filteredMatches = filteredMatches.filter(match => 
+        match.roundNumber.toString() === roundFilter
+      );
+    }
+    
+    // Apply status filter  
+    if (statusFilter) {
+      filteredMatches = filteredMatches.filter(match => 
+        match.status === statusFilter
+      );
+    }
+    
+    // Store filtered matches
+    this.filteredMatches = filteredMatches;
+    
+    // Re-render matches content only
+    this.renderMatchesContent();
+  }
+
+  /**
+   * Render only the matches content (without filters)
+   */
+  renderMatchesContent() {
+    const matchesContentContainer = document.getElementById('matches-content');
+    if (!matchesContentContainer) return;
+    
+    const currentUser = this.authManager.currentUser;
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    
+    // Use filtered matches if available, otherwise use all matches
+    const displayMatches = this.filteredMatches || this.matches;
+    
+    const matchesByRound = {};
+    displayMatches.forEach(match => {
+      const roundNum = match.roundNumber;
+      if (!matchesByRound[roundNum]) {
+        matchesByRound[roundNum] = [];
+      }
+      matchesByRound[roundNum].push(match);
+    });
+
+    const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
+      <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
+        </div>
+        <div class="divide-y divide-gray-200">
+          ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    const noMatchesHTML = `
+      <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
+        <div class="text-gray-500">
+          ${displayMatches.length === 0 && this.filteredMatches ? 'No matches found for the selected filters.' : 
+            (isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
+            'No matches assigned to you yet.')}
+        </div>
+      </div>
+    `;
+
+    matchesContentContainer.innerHTML = displayMatches.length === 0 ? noMatchesHTML : matchesHTML;
+  }
+
+  /**
    * Render matches tab
    */
   renderMatchesTab() {
@@ -1124,6 +1243,9 @@ class EventWorkspacePage {
     const isAdmin = effectiveRole === 'admin';
     const isModerator = effectiveRole === 'moderator';
     const isJudge = effectiveRole === 'judge';
+    
+    // Store all matches for filtering
+    this.allMatches = [...this.matches];
     
     // Use already filtered matches from loadEventData
     let displayMatches = this.matches;
@@ -1182,17 +1304,20 @@ class EventWorkspacePage {
           </div>
         </div>
 
+        <!-- Matches Content Container -->
+        <div id="matches-content">
         <!-- Matches by Round -->
         ${Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
-          <div class="bg-white border border-gray-300 rounded-lg">
+          <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
             <div class="px-6 py-4 border-b border-gray-300">
-              <h3 class="text-lg font-medium text-gray-900">Round ${round}</h3>
+              <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
             </div>
             <div class="divide-y divide-gray-200">
               ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
             </div>
           </div>
         `).join('')}
+        </div>
 
         ${displayMatches.length === 0 ? `
           <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
@@ -1968,12 +2093,26 @@ class EventWorkspacePage {
           </div>
           <form id="roundRobinForm" class="p-6 space-y-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Round <span class="text-red-500">*</span></label>
-              <select name="roundNumber" required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
-                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
-                  `<option value="${round}" ${round === 1 ? 'selected' : ''}>Round ${round}</option>`
-                ).join('')}
-              </select>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Select Rounds <span class="text-red-500">*</span></label>
+              <div class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto bg-gray-50">
+                <div class="space-y-2">
+                  ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => `
+                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                      <input type="checkbox" name="selectedRounds" value="${round}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                      <div class="text-sm font-medium text-gray-900">Round ${round}</div>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between items-center">
+                <p class="text-xs text-gray-500">
+                  <span class="text-red-600 font-medium">Required:</span> Select at least 1 round
+                </p>
+                <span id="roundSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
+              </div>
+              <div id="roundValidationError" class="mt-1 text-xs text-red-600 hidden">
+                Please select at least 1 round for Round Robin
+              </div>
             </div>
             
             <div>
@@ -2008,11 +2147,12 @@ class EventWorkspacePage {
                   <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                  <h5 class="text-sm font-medium text-blue-900">Round Robin Information</h5>
+                  <h5 class="text-sm font-medium text-blue-900">Random Tournament Information</h5>
                   <p class="text-sm text-blue-700 mt-1">
-                    Round Robin ensures each selected team plays against every other selected team exactly once.
-                    <span class="font-medium text-red-600">Cannot generate matches for rounds with completed matches.</span>
-                    If the selected round has draft/pending matches, they will be replaced with new Round Robin matches.
+                    Generates random matches for each selected round independently. Each round will have the same number of matches.
+                    If odd number of teams, one team will be randomly excluded from all rounds.
+                    <span class="font-medium text-red-600">Cannot generate matches for rounds that already have existing matches.</span>
+                    Please delete existing matches before generating new matches.
                   </p>
                 </div>
               </div>
@@ -4824,24 +4964,32 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const form = document.getElementById('roundRobinForm');
     if (form) {
       form.reset();
-      // Set default round to 1
-      const roundSelect = form.querySelector('select[name="roundNumber"]');
-      if (roundSelect) {
-        roundSelect.value = '1';
+      
+      // Clear round selection counter
+      const roundCounter = document.getElementById('roundSelectionCounter');
+      if (roundCounter) {
+        roundCounter.textContent = '0 selected';
       }
+      
       // Clear team selection counter
-      const counter = document.getElementById('teamSelectionCounter');
-      if (counter) {
-        counter.textContent = '0 selected';
+      const teamCounter = document.getElementById('teamSelectionCounter');
+      if (teamCounter) {
+        teamCounter.textContent = '0 selected';
       }
+      
       // Hide validation errors
-      const errorDiv = document.getElementById('teamValidationError');
-      if (errorDiv) {
-        errorDiv.classList.add('hidden');
+      const roundErrorDiv = document.getElementById('roundValidationError');
+      if (roundErrorDiv) {
+        roundErrorDiv.classList.add('hidden');
+      }
+      
+      const teamErrorDiv = document.getElementById('teamValidationError');
+      if (teamErrorDiv) {
+        teamErrorDiv.classList.add('hidden');
       }
     }
     
-    // Add event listeners for team selection
+    // Add event listeners for round and team selection
     this.addRoundRobinEventListeners();
   }
 
@@ -4862,15 +5010,28 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     form.removeEventListener('submit', submitHandler);
     form.addEventListener('submit', submitHandler);
     
+    // Handle round selection counter
+    const roundCheckboxes = form.querySelectorAll('input[name="selectedRounds"]');
+    const roundCounter = document.getElementById('roundSelectionCounter');
+    
+    roundCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const selectedCount = form.querySelectorAll('input[name="selectedRounds"]:checked').length;
+        if (roundCounter) {
+          roundCounter.textContent = `${selectedCount} selected`;
+        }
+      });
+    });
+    
     // Handle team selection counter
     const teamCheckboxes = form.querySelectorAll('input[name="selectedTeams"]');
-    const counter = document.getElementById('teamSelectionCounter');
+    const teamCounter = document.getElementById('teamSelectionCounter');
     
     teamCheckboxes.forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         const selectedCount = form.querySelectorAll('input[name="selectedTeams"]:checked').length;
-        if (counter) {
-          counter.textContent = `${selectedCount} selected`;
+        if (teamCounter) {
+          teamCounter.textContent = `${selectedCount} selected`;
         }
       });
     });
@@ -4895,25 +5056,51 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         submitButton.textContent = 'Generating...';
       }
       
-      const roundNumber = parseInt(formData.get('roundNumber'));
+      const selectedRoundNumbers = formData.getAll('selectedRounds').map(r => parseInt(r));
       const selectedTeamIds = formData.getAll('selectedTeams');
       
       // Validate input
-      if (!roundNumber || roundNumber < 1 || roundNumber > this.currentEvent.totalRounds) {
-        this.ui.showError('Validation Error', 'Please select a valid round');
+      if (selectedRoundNumbers.length === 0) {
+        alert('Validation Error: Please select at least 1 round');
+        this.ui.showError('Validation Error', 'Please select at least 1 round');
         return;
       }
       
       if (selectedTeamIds.length < 2) {
+        alert('Validation Error: Please select at least 2 teams for Round Robin');
         this.ui.showError('Validation Error', 'Please select at least 2 teams for Round Robin');
+        return;
+      }
+      
+      // Check if any selected rounds already have matches
+      const roundsWithMatches = [];
+      for (const roundNumber of selectedRoundNumbers) {
+        const existingMatches = this.matches.filter(m => m.roundNumber === roundNumber);
+        if (existingMatches.length > 0) {
+          roundsWithMatches.push(roundNumber);
+        }
+      }
+      
+      if (roundsWithMatches.length > 0) {
+        const roundsList = roundsWithMatches.join(', ');
+        console.log('Found rounds with existing matches:', roundsWithMatches);
+        
+        // Show error alert first for immediate feedback
+        alert(`Cannot Generate Matches: The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`);
+        
+        // Also show UI error message
+        this.ui.showError(
+          'Cannot Generate Matches', 
+          `The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`
+        );
         return;
       }
       
       // Get selected teams
       const selectedTeams = this.teams.filter(team => selectedTeamIds.includes(team.id));
       
-      // Generate Round Robin matches
-      await this.generateRoundRobinForRound(roundNumber, selectedTeams);
+      // Generate Round Robin matches for multiple rounds
+      await this.generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams);
       
       // Close modal
       this.closeModal('roundRobinModal');
@@ -5028,6 +5215,114 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     
     // Use the new method with all teams for Round 1
     await this.generateRoundRobinForRound(1, this.teams);
+  }
+
+  /**
+   * Generate Round Robin matches across multiple rounds
+   * Each round has independent random pairings with same number of matches
+   */
+  async generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams) {
+    try {
+      // Handle odd number of teams - remove one team randomly for each round
+      let availableTeams = [...selectedTeams];
+      let excludedTeams = [];
+      
+      if (availableTeams.length % 2 === 1) {
+        // Remove one team randomly for odd numbers
+        const randomIndex = Math.floor(Math.random() * availableTeams.length);
+        const excludedTeam = availableTeams.splice(randomIndex, 1)[0];
+        excludedTeams.push(excludedTeam.name);
+        console.log(`Odd number of teams: excluding ${excludedTeam.name} from all rounds`);
+      }
+      
+      const matchesPerRound = Math.floor(availableTeams.length / 2);
+      console.log(`Will create ${matchesPerRound} matches per round using ${availableTeams.length} teams`);
+      
+      let totalCreatedCount = 0;
+      const roundDistribution = {};
+      
+      // Generate independent random pairings for each round
+      for (const roundNumber of selectedRoundNumbers) {
+        roundDistribution[roundNumber] = [];
+        
+        // Generate random pairings for this specific round
+        const roundPairings = this.generateRandomPairings(availableTeams);
+        
+        // Create matches for this round
+        for (const pairing of roundPairings) {
+          // Skip bye matches (when teamB is null)
+          if (!pairing.teamB) {
+            console.log(`Team ${pairing.teamA.name} has a bye in Round ${roundNumber}`);
+            continue;
+          }
+          
+          try {
+            const matchData = {
+              roundNumber: roundNumber,
+              teamAId: pairing.teamA.id,
+              teamBId: pairing.teamB.id,
+              status: 'draft',
+              scheduledTime: null,
+              room: null
+            };
+
+            await this.matchService.createEventMatch(this.currentEventId, matchData);
+            roundDistribution[roundNumber].push(`${pairing.teamA.name} vs ${pairing.teamB.name}`);
+            totalCreatedCount++;
+          } catch (error) {
+            console.error('Error creating match:', error);
+          }
+        }
+        
+        console.log(`Round ${roundNumber}: created ${roundDistribution[roundNumber].length} matches`);
+      }
+
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render the workspace
+      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      
+      // Create detailed success message
+      let message = `Successfully generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds (${matchesPerRound} matches per round).\n\nDistribution:`;
+      
+      for (const [round, matches] of Object.entries(roundDistribution)) {
+        message += `\n\nRound ${round} (${matches.length} matches):`;
+        matches.forEach(match => {
+          message += `\n• ${match}`;
+        });
+      }
+      
+      if (excludedTeams.length > 0) {
+        message += `\n\nExcluded teams (odd number): ${excludedTeams.join(', ')}`;
+      }
+      
+      this.ui.showSuccess('Random Matches Generated', message);
+      
+    } catch (error) {
+      console.error('Error generating random matches for multiple rounds:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate complete Round Robin pairings where each team plays every other team exactly once
+   */
+  generateCompleteRoundRobinPairings(teams) {
+    const pairings = [];
+    
+    // Generate all possible pairings (every team vs every other team)
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        pairings.push({
+          teamA: teams[i],
+          teamB: teams[j]
+        });
+      }
+    }
+    
+    console.log(`Generated ${pairings.length} complete Round Robin pairings for ${teams.length} teams`);
+    return pairings;
   }
 
   /**

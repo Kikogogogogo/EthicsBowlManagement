@@ -54,6 +54,15 @@ class EventsPage {
         this.handleEventFormSubmit(e);
       });
     }
+    
+    // Listen for total rounds changes to update round names fields
+    const totalRoundsInput = document.getElementById('event-total-rounds');
+    if (totalRoundsInput) {
+      totalRoundsInput.addEventListener('input', (e) => {
+        const totalRounds = parseInt(e.target.value) || 3;
+        this.populateRoundNames(totalRounds, null);
+      });
+    }
   }
 
   /**
@@ -584,6 +593,11 @@ class EventsPage {
       this.ui.elements.eventCurrentRound.value = '1';
     }
     
+    // Generate default round names fields for new events
+    if (!this.currentEventId) {
+      this.populateRoundNames(3, null);
+    }
+    
     // Clean up status help text if it exists
     const statusHelp = document.getElementById('event-status-help');
     if (statusHelp && !this.currentEventId) {
@@ -625,6 +639,68 @@ class EventsPage {
     if (this.ui.elements.eventCurrentRound) {
       this.ui.elements.eventCurrentRound.value = event.currentRound || '1';
     }
+    
+    // Populate round names
+    this.populateRoundNames(event.totalRounds || 3, event.roundNames);
+  }
+
+  /**
+   * Populate round names input fields
+   */
+  populateRoundNames(totalRounds, roundNamesJson) {
+    const container = document.getElementById('round-names-container');
+    if (!container) return;
+    
+    // Parse existing round names
+    let roundNames = {};
+    if (roundNamesJson) {
+      try {
+        roundNames = JSON.parse(roundNamesJson);
+      } catch (e) {
+        console.warn('Failed to parse round names JSON:', e);
+      }
+    }
+    
+    // Clear existing inputs
+    container.innerHTML = '';
+    
+    // Generate input fields for each round
+    for (let i = 1; i <= totalRounds; i++) {
+      const roundDiv = document.createElement('div');
+      roundDiv.className = 'flex items-center space-x-3';
+      
+      roundDiv.innerHTML = `
+        <label class="w-20 text-sm font-medium text-gray-700">Round ${i}:</label>
+        <input 
+          type="text" 
+          id="round-name-${i}" 
+          name="roundName${i}" 
+          value="${roundNames[i.toString()] || ''}"
+          placeholder="e.g., First Round, Semi Finals, Finals"
+          class="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-black focus:border-black sm:text-sm"
+        >
+      `;
+      
+      container.appendChild(roundDiv);
+    }
+  }
+
+  /**
+   * Collect round names from form data
+   */
+  collectRoundNames(formData) {
+    const roundNames = {};
+    const totalRounds = parseInt(formData.get('totalRounds')) || 3;
+    
+    for (let i = 1; i <= totalRounds; i++) {
+      const roundName = formData.get(`roundName${i}`);
+      if (roundName && roundName.trim()) {
+        roundNames[i.toString()] = roundName.trim();
+      }
+    }
+    
+    // Return JSON string if there are any round names, otherwise null
+    return Object.keys(roundNames).length > 0 ? JSON.stringify(roundNames) : null;
   }
 
   /**
@@ -705,7 +781,8 @@ class EventsPage {
         maxTeams: parseInt(formData.get('maxTeams')),
         status: formData.get('status'),
         totalRounds: parseInt(formData.get('totalRounds')) || 3,
-        currentRound: parseInt(formData.get('currentRound')) || 1
+        currentRound: parseInt(formData.get('currentRound')) || 1,
+        roundNames: this.collectRoundNames(formData)
       };
 
       // Validate status transition for existing events

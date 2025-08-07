@@ -32,6 +32,7 @@ class EventService {
       return events.map(event => ({
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundNames: event.roundNames || null,
         stats: {
           teamsCount: event._count.teams,
           matchesCount: event._count.matches,
@@ -85,6 +86,7 @@ class EventService {
       return {
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundNames: event.roundNames || null,
         stats: {
           teamsCount: event.teams.length,
           matchesCount: event._count.matches,
@@ -116,6 +118,7 @@ class EventService {
         maxTeams,
         status = 'draft',
         scoringCriteria,
+        roundNames,
       } = eventData;
 
       // Validate required fields
@@ -154,6 +157,7 @@ class EventService {
           location: location || null,
           maxTeams: maxTeams ? parseInt(maxTeams) : null,
           scoringCriteria: scoringCriteria ? JSON.stringify(scoringCriteria) : null,
+          roundNames: roundNames || null,
           createdBy: creatorId,
         },
         include: {
@@ -233,6 +237,7 @@ class EventService {
         maxTeams,
         status,
         scoringCriteria,
+        roundNames,
       } = updateData;
 
       // Validate data if provided
@@ -271,6 +276,9 @@ class EventService {
       if (status !== undefined) updatePayload.status = status;
       if (scoringCriteria !== undefined) {
         updatePayload.scoringCriteria = scoringCriteria ? JSON.stringify(scoringCriteria) : null;
+      }
+      if (roundNames !== undefined) {
+        updatePayload.roundNames = roundNames || null;
       }
 
       const updatedEvent = await prisma.event.update({

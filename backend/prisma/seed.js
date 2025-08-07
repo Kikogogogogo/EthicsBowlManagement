@@ -230,6 +230,12 @@ async function main() {
         location: 'University Convention Center',
         maxTeams: 32,
         scoringCriteria: basicScoringCriteria,
+        roundNames: JSON.stringify({
+          "1": "Opening Round",
+          "2": "Quarterfinals", 
+          "3": "Semifinals",
+          "4": "Championship Final"
+        }),
       },
       {
         id: 'event-active-spring',
@@ -244,6 +250,11 @@ async function main() {
         location: 'College Auditorium',
         maxTeams: 16,
         scoringCriteria: advancedScoringCriteria,
+        roundNames: JSON.stringify({
+          "1": "Preliminary Round",
+          "2": "Semi Finals",
+          "3": "Grand Finals"
+        }),
       },
       {
         id: 'event-completed-fall',
@@ -258,6 +269,13 @@ async function main() {
         location: 'High School Gymnasium',
         maxTeams: 24,
         scoringCriteria: basicScoringCriteria,
+        roundNames: JSON.stringify({
+          "1": "First Round",
+          "2": "Second Round", 
+          "3": "Third Round",
+          "4": "Semi Finals",
+          "5": "Championship"
+        }),
       },
       {
         id: 'event-national-prep',
@@ -272,6 +290,14 @@ async function main() {
         location: 'National Conference Center',
         maxTeams: 48,
         scoringCriteria: advancedScoringCriteria,
+        roundNames: JSON.stringify({
+          "1": "Round of 64",
+          "2": "Round of 32",
+          "3": "Round of 16", 
+          "4": "Quarterfinals",
+          "5": "Semifinals",
+          "6": "National Final"
+        }),
       },
       {
         id: 'event-mini-tournament',
@@ -293,6 +319,10 @@ async function main() {
             presentation: { maxScore: 40, description: 'Overall presentation quality' },
             understanding: { maxScore: 40, description: 'Understanding of ethical issues' }
           }
+        }),
+        roundNames: JSON.stringify({
+          "1": "Practice Round",
+          "2": "Final Round"
         }),
       }
     ];
