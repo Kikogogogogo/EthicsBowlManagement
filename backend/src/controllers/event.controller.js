@@ -85,6 +85,8 @@ class EventController {
         endDate,
         scoringCriteria,
         roundNames,
+        allowedJudges,
+        allowedModerators,
       } = req.body;
 
       // Validate required fields
@@ -104,6 +106,8 @@ class EventController {
         endDate,
         scoringCriteria,
         roundNames,
+        allowedJudges,
+        allowedModerators,
       };
 
       const event = await this.eventService.createEvent(eventData, req.user.id);

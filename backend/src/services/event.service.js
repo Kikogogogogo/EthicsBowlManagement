@@ -33,6 +33,8 @@ class EventService {
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
         roundNames: event.roundNames || null,
+        allowedJudges: event.allowedJudges ? JSON.parse(event.allowedJudges) : null,
+        allowedModerators: event.allowedModerators ? JSON.parse(event.allowedModerators) : null,
         stats: {
           teamsCount: event._count.teams,
           matchesCount: event._count.matches,
@@ -87,6 +89,8 @@ class EventService {
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
         roundNames: event.roundNames || null,
+        allowedJudges: event.allowedJudges ? JSON.parse(event.allowedJudges) : null,
+        allowedModerators: event.allowedModerators ? JSON.parse(event.allowedModerators) : null,
         stats: {
           teamsCount: event.teams.length,
           matchesCount: event._count.matches,
@@ -119,6 +123,8 @@ class EventService {
         status = 'draft',
         scoringCriteria,
         roundNames,
+        allowedJudges,
+        allowedModerators,
       } = eventData;
 
       // Validate required fields
@@ -158,6 +164,8 @@ class EventService {
           maxTeams: maxTeams ? parseInt(maxTeams) : null,
           scoringCriteria: scoringCriteria ? JSON.stringify(scoringCriteria) : null,
           roundNames: roundNames || null,
+          allowedJudges: allowedJudges ? JSON.stringify(allowedJudges) : null,
+          allowedModerators: allowedModerators ? JSON.stringify(allowedModerators) : null,
           createdBy: creatorId,
         },
         include: {
@@ -238,6 +246,8 @@ class EventService {
         status,
         scoringCriteria,
         roundNames,
+        allowedJudges,
+        allowedModerators,
       } = updateData;
 
       // Validate data if provided
@@ -279,6 +289,12 @@ class EventService {
       }
       if (roundNames !== undefined) {
         updatePayload.roundNames = roundNames || null;
+      }
+      if (allowedJudges !== undefined) {
+        updatePayload.allowedJudges = allowedJudges ? JSON.stringify(allowedJudges) : null;
+      }
+      if (allowedModerators !== undefined) {
+        updatePayload.allowedModerators = allowedModerators ? JSON.stringify(allowedModerators) : null;
       }
 
       const updatedEvent = await prisma.event.update({

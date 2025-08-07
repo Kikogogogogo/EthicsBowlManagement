@@ -9,8 +9,10 @@ class EventsPage {
     this.currentEventId = null;
     this.isOperationInProgress = false;
     this.events = []; // Initialize events array
+    this.users = []; // Store all users for judge/moderator selection
     this.eventService = null; // Will be set from global
     this.authManager = null; // Will be set from global
+    this.userService = null; // Will be set from global
     this.initializeEventListeners();
     
     // Add window resize listener for responsive layout
@@ -24,14 +26,14 @@ class EventsPage {
   initializeEventListeners() {
     // Event management buttons
     if (this.ui.elements.createEventBtn) {
-      this.ui.elements.createEventBtn.addEventListener('click', () => {
-        this.showCreateEventModal();
+      this.ui.elements.createEventBtn.addEventListener('click', async () => {
+        await this.showCreateEventModal();
       });
     }
     
     if (this.ui.elements.createEventEmptyBtn) {
-      this.ui.elements.createEventEmptyBtn.addEventListener('click', () => {
-        this.showCreateEventModal();
+      this.ui.elements.createEventEmptyBtn.addEventListener('click', async () => {
+        await this.showCreateEventModal();
       });
     }
 
@@ -72,6 +74,11 @@ class EventsPage {
     // Initialize services from global
     this.eventService = window.eventService;
     this.authManager = window.authManager;
+    this.userService = window.userService;
+    
+    // Test user loading immediately when page shows
+    console.log('🧪 [EventsPage] Testing user loading on page show...');
+    await this.testUserLoading();
     
     console.log('EventsPage.show() called');
     console.log('AuthManager:', this.authManager);
@@ -104,7 +111,13 @@ class EventsPage {
   async loadEvents() {
     try {
       this.showEventsLoading();
-      const events = await this.eventService.getAllEvents();
+      
+      // Load events and users in parallel
+      const [events, users] = await Promise.all([
+        this.eventService.getAllEvents(),
+        this.loadUsers()
+      ]);
+      
       this.events = events; // Store events for later reference
       this.displayEvents(events);
     } catch (error) {
@@ -112,6 +125,97 @@ class EventsPage {
       this.hideEventsLoading();
       this.ui.showError('Error', 'Failed to load events: ' + error.message);
     }
+  }
+
+  /**
+   * Load users for judge/moderator selection
+   */
+  async loadUsers() {
+    try {
+      console.log('🔄 [EventsPage] Starting to load users...');
+      console.log('🔍 [EventsPage] Checking global userService:', window.userService);
+      console.log('🔍 [EventsPage] Instance userService:', this.userService);
+      
+      // Try both global and instance userService
+      const userService = this.userService || window.userService;
+      
+      if (userService) {
+        console.log('✅ [EventsPage] UserService is available');
+        
+        // Test the API call directly
+        try {
+          const usersResponse = await userService.getAllUsers();
+          console.log('📡 [EventsPage] API response received:', usersResponse);
+          
+          const users = usersResponse.data?.users || usersResponse.users || usersResponse || [];
+          console.log('📋 [EventsPage] Extracted users array:', users);
+          
+          // Ensure users is an array
+          this.users = Array.isArray(users) ? users : [];
+          console.log('✅ [EventsPage] Final users array length:', this.users.length);
+          console.log('👥 [EventsPage] Users loaded:', this.users);
+          return this.users;
+        } catch (apiError) {
+          console.error('❌ [EventsPage] API call failed:', apiError);
+          
+          // Try to get error details
+          if (apiError.response) {
+            console.error('📄 [EventsPage] Error response:', apiError.response);
+          }
+          if (apiError.message) {
+            console.error('💬 [EventsPage] Error message:', apiError.message);
+          }
+          
+          this.users = [];
+          return [];
+        }
+      } else {
+        console.warn('⚠️ [EventsPage] No UserService available (neither instance nor global)');
+        this.users = [];
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ [EventsPage] Failed to load users:', error);
+      this.users = [];
+      return [];
+    }
+  }
+
+  /**
+   * Test user loading for debugging
+   */
+  async testUserLoading() {
+    console.log('🧪 [EventsPage] === USER LOADING TEST START ===');
+    console.log('🧪 [EventsPage] Current user:', this.authManager?.currentUser);
+    console.log('🧪 [EventsPage] User role:', this.authManager?.currentUser?.role);
+    
+    if (this.userService) {
+      try {
+        console.log('🧪 [EventsPage] Making direct API call...');
+        const response = await this.userService.getAllUsers();
+        console.log('🧪 [EventsPage] API Response:', response);
+        
+        const users = response.data?.users || response.users || response || [];
+        console.log('🧪 [EventsPage] Extracted users:', users);
+        console.log('🧪 [EventsPage] Users count:', users.length);
+        
+        if (users.length > 0) {
+          console.log('🧪 [EventsPage] First user sample:', users[0]);
+          console.log('🧪 [EventsPage] User roles found:', [...new Set(users.map(u => u.role))]);
+        }
+      } catch (error) {
+        console.error('🧪 [EventsPage] Test API call failed:', error);
+        if (error.status) {
+          console.error('🧪 [EventsPage] HTTP Status:', error.status);
+        }
+        if (error.message) {
+          console.error('🧪 [EventsPage] Error message:', error.message);
+        }
+      }
+    } else {
+      console.error('🧪 [EventsPage] UserService not available!');
+    }
+    console.log('🧪 [EventsPage] === USER LOADING TEST END ===');
   }
 
   /**
@@ -473,7 +577,7 @@ class EventsPage {
   /**
    * Show create event modal
    */
-  showCreateEventModal() {
+  async showCreateEventModal() {
     this.currentEventId = null;
     this.ui.elements.eventModalTitle.textContent = 'Create Event';
     this.ui.elements.saveEventBtn.textContent = 'Create Event';
@@ -481,6 +585,9 @@ class EventsPage {
     
     // For new events, set up the status selector with all options available
     this.updateStatusOptions('draft');
+    
+    // Populate judge and moderator selection
+    await this.populateJudgeModeratorSelection();
     
     this.showEventModal();
   }
@@ -500,7 +607,7 @@ class EventsPage {
       this.currentEventId = eventId;
       this.ui.elements.eventModalTitle.textContent = 'Edit Event';
       this.ui.elements.saveEventBtn.textContent = 'Update Event';
-      this.populateEventForm(event);
+      await this.populateEventForm(event);
       this.showEventModal();
     } catch (error) {
       console.error('Failed to load event:', error);
@@ -611,7 +718,7 @@ class EventsPage {
   /**
    * Populate event form with data
    */
-  populateEventForm(event) {
+  async populateEventForm(event) {
     if (this.ui.elements.eventName) {
       this.ui.elements.eventName.value = event.name || '';
     }
@@ -642,6 +749,9 @@ class EventsPage {
     
     // Populate round names
     this.populateRoundNames(event.totalRounds || 3, event.roundNames);
+    
+    // Populate judge and moderator selection
+    await this.populateJudgeModeratorSelection(event.allowedJudges, event.allowedModerators);
   }
 
   /**
@@ -686,6 +796,97 @@ class EventsPage {
   }
 
   /**
+   * Populate judge and moderator selection checkboxes
+   */
+  async populateJudgeModeratorSelection(eventAllowedJudges = null, eventAllowedModerators = null) {
+    // Ensure users are loaded before populating
+    if (!Array.isArray(this.users) || this.users.length === 0) {
+      console.log('Users not loaded yet, loading now...');
+      await this.loadUsers();
+    }
+    
+    this.populateUserSelection('judges', eventAllowedJudges);
+    this.populateUserSelection('moderators', eventAllowedModerators);
+  }
+
+  /**
+   * Populate user selection for judges or moderators
+   */
+  populateUserSelection(userType, allowedUserIds = null) {
+    const containerId = userType === 'judges' ? 'allowed-judges-container' : 'allowed-moderators-container';
+    const loadingId = userType === 'judges' ? 'judges-loading' : 'moderators-loading';
+    const roleFilter = userType === 'judges' ? 'judge' : 'moderator';
+    
+    console.log(`🔍 [EventsPage] populateUserSelection called for ${userType}`);
+    console.log(`🔍 [EventsPage] Total users available:`, this.users?.length || 0);
+    console.log(`🔍 [EventsPage] Users data:`, this.users);
+    
+    const container = document.getElementById(containerId);
+    const loadingDiv = document.getElementById(loadingId);
+    
+    if (!container) {
+      console.warn(`Container ${containerId} not found`);
+      return;
+    }
+    
+    // Ensure users is an array before filtering
+    if (!Array.isArray(this.users)) {
+      console.warn('Users is not an array:', this.users);
+      this.users = [];
+    }
+    
+    // Filter users by role (judge/moderator as requested)
+    const filteredUsers = this.users.filter(user => user.role === roleFilter);
+    
+    console.log(`🔍 [EventsPage] Filtered ${roleFilter}s (${filteredUsers.length} total):`, filteredUsers);
+    
+    if (filteredUsers.length === 0) {
+      container.innerHTML = `<div class="text-sm text-gray-500">No ${roleFilter}s found in the system</div>`;
+      return;
+    }
+    
+    // Hide loading indicator
+    if (loadingDiv) {
+      loadingDiv.style.display = 'none';
+    }
+    
+    // Parse allowed user IDs if provided
+    let allowedIds = [];
+    if (allowedUserIds) {
+      try {
+        allowedIds = Array.isArray(allowedUserIds) ? allowedUserIds : JSON.parse(allowedUserIds);
+      } catch (e) {
+        console.warn(`Failed to parse allowed ${userType}:`, e);
+      }
+    }
+    
+    // Generate checkboxes
+    const checkboxesHtml = filteredUsers.map(user => {
+      const isChecked = allowedIds.length === 0 || allowedIds.includes(user.id) ? 'checked' : '';
+      const isInactive = !user.isActive;
+      return `
+        <div class="flex items-center ${isInactive ? 'opacity-60' : ''}">
+          <input 
+            type="checkbox" 
+            id="${userType}-${user.id}" 
+            name="allowed${userType.charAt(0).toUpperCase() + userType.slice(1)}" 
+            value="${user.id}" 
+            ${isChecked}
+            ${isInactive ? 'disabled' : ''}
+            class="h-4 w-4 text-black focus:ring-black border-gray-300 rounded"
+          >
+          <label for="${userType}-${user.id}" class="ml-2 text-sm ${isInactive ? 'text-gray-400' : 'text-gray-700'}">
+            ${user.firstName} ${user.lastName} (${user.email}) - Role: ${user.role}
+            ${isInactive ? '<span class="text-red-500 text-xs ml-1">(Inactive)</span>' : '<span class="text-green-500 text-xs ml-1">(Active)</span>'}
+          </label>
+        </div>
+      `;
+    }).join('');
+    
+    container.innerHTML = checkboxesHtml;
+  }
+
+  /**
    * Collect round names from form data
    */
   collectRoundNames(formData) {
@@ -701,6 +902,24 @@ class EventsPage {
     
     // Return JSON string if there are any round names, otherwise null
     return Object.keys(roundNames).length > 0 ? JSON.stringify(roundNames) : null;
+  }
+
+  /**
+   * Collect selected judges from form
+   */
+  collectSelectedJudges() {
+    const judgeCheckboxes = document.querySelectorAll('input[name="allowedJudges"]:checked');
+    const selectedJudges = Array.from(judgeCheckboxes).map(checkbox => checkbox.value);
+    return selectedJudges.length > 0 ? selectedJudges : null;
+  }
+
+  /**
+   * Collect selected moderators from form
+   */
+  collectSelectedModerators() {
+    const moderatorCheckboxes = document.querySelectorAll('input[name="allowedModerators"]:checked');
+    const selectedModerators = Array.from(moderatorCheckboxes).map(checkbox => checkbox.value);
+    return selectedModerators.length > 0 ? selectedModerators : null;
   }
 
   /**
@@ -782,7 +1001,9 @@ class EventsPage {
         status: formData.get('status'),
         totalRounds: parseInt(formData.get('totalRounds')) || 3,
         currentRound: parseInt(formData.get('currentRound')) || 1,
-        roundNames: this.collectRoundNames(formData)
+        roundNames: this.collectRoundNames(formData),
+        allowedJudges: this.collectSelectedJudges(),
+        allowedModerators: this.collectSelectedModerators()
       };
 
       // Validate status transition for existing events
