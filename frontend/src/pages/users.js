@@ -1148,14 +1148,36 @@ class UsersPage {
         document.getElementById('preapproved-email').value = email.email || '';
         document.getElementById('preapproved-role').value = email.role || 'judge';
         document.getElementById('preapproved-notes').value = email.notes || '';
-        document.getElementById('preapproved-email').disabled = true; // Don't allow email change when editing
+        
+        // Make email field readonly when editing (with visual indication)
+        const emailField = document.getElementById('preapproved-email');
+        emailField.disabled = true;
+        emailField.classList.add('bg-gray-100', 'cursor-not-allowed');
+        emailField.title = 'Email address cannot be changed when editing';
+        
+        // Show help text for editing mode
+        const emailHelpText = emailField.parentNode.querySelector('.email-help-text');
+        if (emailHelpText) {
+          emailHelpText.textContent = 'Email address cannot be changed when editing. Only role and notes can be updated.';
+          emailHelpText.classList.remove('hidden');
+        }
       }
     } else {
       // Ensure we're in add mode
       this.editingEmailId = null;
-      document.getElementById('preapproved-email').disabled = false;
+      const emailField = document.getElementById('preapproved-email');
+      emailField.disabled = false;
+      emailField.classList.remove('bg-gray-100', 'cursor-not-allowed');
+      emailField.title = '';
       document.getElementById('preapproved-role').value = 'judge';
       document.getElementById('preapproved-notes').value = '';
+      
+      // Hide help text for add mode
+      const emailHelpText = emailField.parentNode.querySelector('.email-help-text');
+      if (emailHelpText) {
+        emailHelpText.textContent = 'Enter the email address that should be pre-approved for registration.';
+        emailHelpText.classList.remove('hidden');
+      }
     }
     
     modal.classList.remove('hidden');
@@ -1171,6 +1193,14 @@ class UsersPage {
   hidePreApprovedEmailModal() {
     const modal = document.getElementById('preapproved-email-modal');
     if (!modal) return;
+    
+    // Reset email field state
+    const emailField = document.getElementById('preapproved-email');
+    if (emailField) {
+      emailField.disabled = false;
+      emailField.classList.remove('bg-gray-100', 'cursor-not-allowed');
+      emailField.title = '';
+    }
     
     modal.classList.add('hidden');
     document.body.style.overflow = 'auto';
@@ -1216,8 +1246,14 @@ class UsersPage {
       notes: formData.get('notes')
     };
 
-    if (!emailData.email) {
+    // Validate required fields
+    if (!emailData.email && !this.editingEmailId) {
       this.showError('Email is required');
+      return;
+    }
+    
+    if (!emailData.role) {
+      this.showError('Role is required');
       return;
     }
 
@@ -1229,12 +1265,18 @@ class UsersPage {
 
     try {
       if (this.editingEmailId) {
-        await this.preApprovedEmailService.updatePreApprovedEmail(this.editingEmailId, {
+        // When editing, only update role and notes (email cannot be changed)
+        const updateData = {
           role: emailData.role,
-          notes: emailData.notes
-        });
+          notes: emailData.notes || ''
+        };
+        
+        console.log('Updating pre-approved email with data:', updateData); // Debug log
+        
+        await this.preApprovedEmailService.updatePreApprovedEmail(this.editingEmailId, updateData);
         this.showSuccess('Pre-approved email updated successfully');
       } else {
+        // When adding new, include email
         await this.preApprovedEmailService.addPreApprovedEmails([emailData]);
         this.showSuccess('Pre-approved email added successfully');
       }

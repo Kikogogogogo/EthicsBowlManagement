@@ -362,16 +362,28 @@ class TeamsPage {
     submitBtn.disabled = true;
 
     try {
+      let teamResult;
       if (this.editingTeamId) {
-        await this.teamService.updateEventTeam(this.currentEventId, this.editingTeamId, teamData);
+        teamResult = await this.teamService.updateEventTeam(this.currentEventId, this.editingTeamId, teamData);
         this.showSuccess('Team updated successfully');
       } else {
-        await this.teamService.createEventTeam(this.currentEventId, teamData);
+        teamResult = await this.teamService.createEventTeam(this.currentEventId, teamData);
         this.showSuccess('Team created successfully');
       }
       
       this.hideTeamModal();
       await this.loadTeams(this.currentEventId);
+      
+      // Emit team data changed event for cross-page synchronization
+      if (window.eventEmitter) {
+        console.log('🔄 [Teams] Emitting team data changed event for event:', this.currentEventId);
+        window.eventEmitter.emit('teamDataChanged', {
+          eventId: this.currentEventId,
+          action: this.editingTeamId ? 'updated' : 'created',
+          teamId: this.editingTeamId || teamResult?.id,
+          teamData: teamData
+        });
+      }
     } catch (error) {
       console.error('Team operation failed:', error);
       this.showError(error.message || 'Operation failed');
@@ -416,6 +428,17 @@ class TeamsPage {
       await this.teamService.deleteEventTeam(this.currentEventId, teamId);
       this.showSuccess('Team deleted successfully');
       await this.loadTeams(this.currentEventId);
+      
+      // Emit team data changed event for cross-page synchronization
+      if (window.eventEmitter) {
+        console.log('🔄 [Teams] Emitting team data changed event for deleted team:', teamId);
+        window.eventEmitter.emit('teamDataChanged', {
+          eventId: this.currentEventId,
+          action: 'deleted',
+          teamId: teamId,
+          teamData: team
+        });
+      }
     } catch (error) {
       console.error('Delete team failed:', error);
       let errorMessage = 'Failed to delete team';

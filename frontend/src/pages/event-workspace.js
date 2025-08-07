@@ -43,6 +43,9 @@ class EventWorkspacePage {
     // Cleanup state flag
     this.isCleaningUp = false;
     
+    // Team data change handler for cross-page synchronization
+    this.teamDataChangeHandler = null;
+    
     this.initializeEventListeners();
   }
 
@@ -309,6 +312,9 @@ class EventWorkspacePage {
       this.unloadHandlers = null;
     }
     
+    // Remove team data change listener
+    this.removeTeamDataChangeListener();
+    
     // Clear cleanup flag
     this.isCleaningUp = false;
     
@@ -545,6 +551,9 @@ class EventWorkspacePage {
       // Add page visibility listener to clean up when leaving
       this.addPageVisibilityListener();
       
+      // Setup team data change listener for real-time updates
+      this.setupTeamDataChangeListener();
+      
       return true;
     } catch (error) {
       console.error('Failed to load event workspace:', error);
@@ -611,6 +620,75 @@ class EventWorkspacePage {
       
       workspacePage.innerHTML = errorHTML;
       return false;
+    }
+  }
+
+  /**
+   * Setup team data change listener for real-time updates
+   */
+  setupTeamDataChangeListener() {
+    if (!window.eventEmitter || this.teamDataChangeHandler) {
+      return; // Already setup or not available
+    }
+
+    console.log('👂 [EventWorkspace] Setting up team data change listener for event:', this.currentEventId);
+    
+    this.teamDataChangeHandler = (eventData) => {
+      console.log('📢 [EventWorkspace] Received team data change event:', eventData);
+      
+      // Only handle changes for the current event
+      if (eventData.eventId !== this.currentEventId) {
+        console.log('🚫 [EventWorkspace] Ignoring team change for different event:', eventData.eventId);
+        return;
+      }
+      
+      console.log('🔄 [EventWorkspace] Processing team change for current event:', eventData.action);
+      
+      // Refresh team data for current event
+      this.refreshTeamData();
+    };
+    
+    window.eventEmitter.on('teamDataChanged', this.teamDataChangeHandler);
+    console.log('✅ [EventWorkspace] Team data change listener setup complete');
+  }
+
+  /**
+   * Remove team data change listener
+   */
+  removeTeamDataChangeListener() {
+    if (window.eventEmitter && this.teamDataChangeHandler) {
+      console.log('🔇 [EventWorkspace] Removing team data change listener');
+      window.eventEmitter.off('teamDataChanged', this.teamDataChangeHandler);
+      this.teamDataChangeHandler = null;
+    }
+  }
+
+  /**
+   * Refresh team data for current event
+   */
+  async refreshTeamData() {
+    try {
+      console.log('🔄 [EventWorkspace] Refreshing team data...');
+      
+      const teamsResponse = await this.teamService.getEventTeams(this.currentEventId);
+      this.teams = teamsResponse.data || teamsResponse || [];
+      
+      console.log('✅ [EventWorkspace] Team data refreshed, teams count:', this.teams.length);
+      
+      // Re-render current tab content if it contains team data
+      if (this.currentTab === 'matches' || this.currentTab === 'teams' || this.currentTab === 'overview') {
+        console.log('🎨 [EventWorkspace] Re-rendering', this.currentTab, 'tab with updated team data');
+        this.switchTab(this.currentTab);
+      }
+      
+      // If create match modal is open, update its team dropdowns
+      const createMatchModal = document.getElementById('createMatchModal');
+      if (createMatchModal && !createMatchModal.classList.contains('hidden')) {
+        console.log('🎯 [EventWorkspace] Create match modal is open, updating team dropdowns');
+        this.updateCreateMatchTeamDropdowns();
+      }
+    } catch (error) {
+      console.error('❌ [EventWorkspace] Failed to refresh team data:', error);
     }
   }
 
@@ -885,6 +963,11 @@ class EventWorkspacePage {
       } else if (tabName === 'matches') {
         // Reset match filters when switching to matches tab
         setTimeout(() => this.resetMatchFilters(), 100);
+        // Refresh team data to ensure latest teams are available for match creation
+        setTimeout(() => {
+          console.log('🔄 [EventWorkspace] Refreshing team data for matches tab');
+          this.refreshTeamData();
+        }, 200);
       }
 
       return true;
@@ -3414,11 +3497,52 @@ class EventWorkspacePage {
   showModal(modalId) {
     document.getElementById(modalId).classList.remove('hidden');
     document.getElementById(modalId).classList.add('flex');
+    
+    // Update team dropdown when opening create match modal
+    if (modalId === 'createMatchModal') {
+      this.updateCreateMatchTeamDropdowns();
+    }
   }
 
   closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
     document.getElementById(modalId).classList.remove('flex');
+  }
+
+  /**
+   * Update team dropdowns in create match modal with latest team data
+   */
+  updateCreateMatchTeamDropdowns() {
+    console.log('🔄 [EventWorkspace] Updating create match team dropdowns with latest teams:', this.teams.length);
+    
+    const teamASelect = document.querySelector('#createMatchModal select[name="teamAId"]');
+    const teamBSelect = document.querySelector('#createMatchModal select[name="teamBId"]');
+    
+    if (!teamASelect || !teamBSelect) {
+      console.error('❌ [EventWorkspace] Team dropdowns not found in create match modal');
+      return;
+    }
+    
+    // Generate team options HTML
+    const teamOptionsHTML = this.teams.map(team => 
+      `<option value="${team.id}">${team.name}</option>`
+    ).join('');
+    
+    // Update Team A dropdown
+    const currentTeamAValue = teamASelect.value;
+    teamASelect.innerHTML = `<option value="">Select Team A</option>${teamOptionsHTML}`;
+    if (currentTeamAValue && this.teams.find(t => t.id === currentTeamAValue)) {
+      teamASelect.value = currentTeamAValue;
+    }
+    
+    // Update Team B dropdown
+    const currentTeamBValue = teamBSelect.value;
+    teamBSelect.innerHTML = `<option value="">Select Team B</option>${teamOptionsHTML}`;
+    if (currentTeamBValue && this.teams.find(t => t.id === currentTeamBValue)) {
+      teamBSelect.value = currentTeamBValue;
+    }
+    
+    console.log('✅ [EventWorkspace] Team dropdowns updated successfully');
   }
 
   /**
