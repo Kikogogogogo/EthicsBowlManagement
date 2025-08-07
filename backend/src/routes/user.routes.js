@@ -7,7 +7,7 @@ const { rateLimit } = require('express-rate-limit');
 // Rate limiting for user operations
 const userLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // limit each IP to 500 requests per windowMs
+  max: 2000, // limit each IP to 2000 requests per windowMs (increased from 500)
   message: {
     success: false,
     message: 'Too many user requests, please try again later',
@@ -23,12 +23,12 @@ router.use(userLimit);
 
 // All user routes require authentication and admin role
 router.use(authenticateToken);
-router.use(requireRole(USER_ROLES.ADMIN));
+// Note: Only admin role required for most operations, but getAllUsers allows judge/moderator access
 
 /**
  * @route GET /users
  * @desc Get all users with filtering
- * @access Admin only
+ * @access Admin, Judge, Moderator (for event configuration)
  */
 router.get('/users', userController.getAllUsers);
 

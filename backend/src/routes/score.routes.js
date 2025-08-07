@@ -7,7 +7,7 @@ const { rateLimit } = require('express-rate-limit');
 // Rate limiting for score operations
 const scoreLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // limit each IP to 200 requests per windowMs
+  max: 2000, // limit each IP to 2000 requests per windowMs (increased from 200)
   message: {
     success: false,
     message: 'Too many score requests, please try again later',

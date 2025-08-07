@@ -43,6 +43,9 @@ class EventWorkspacePage {
     // Cleanup state flag
     this.isCleaningUp = false;
     
+    // Team data change handler for cross-page synchronization
+    this.teamDataChangeHandler = null;
+    
     this.initializeEventListeners();
   }
 
@@ -240,9 +243,59 @@ class EventWorkspacePage {
       if (e.target.matches('#role-switcher')) {
         this.handleRoleSwitch(e.target.value);
       }
+      
+      // Match filters
+      if (e.target.matches('#roundFilter') || e.target.matches('#statusFilter')) {
+        this.applyMatchFilters();
+      }
     };
     document.addEventListener('change', changeHandler);
     this.eventListeners.push({ type: 'change', handler: changeHandler });
+  }
+
+  /**
+   * Get round display name with custom alias if available
+   */
+  getRoundDisplayName(roundNumber) {
+    if (!this.currentEvent || !this.currentEvent.roundNames) {
+      return `Round ${roundNumber}`;
+    }
+    
+    try {
+      const roundNames = JSON.parse(this.currentEvent.roundNames);
+      const customName = roundNames[roundNumber.toString()];
+      return customName ? `Round ${roundNumber} (${customName})` : `Round ${roundNumber}`;
+    } catch (e) {
+      console.warn('Failed to parse round names:', e);
+      return `Round ${roundNumber}`;
+    }
+  }
+
+  /**
+   * Get filtered users based on role and event restrictions
+   */
+  getFilteredUsers(roleType) {
+    if (!this.users || this.users.length === 0) {
+      return [];
+    }
+
+    // First filter by role (judge/moderator)
+    const roleFilter = roleType === 'judge' ? 'judge' : 'moderator';
+    let filteredUsers = this.users.filter(u => u.role === roleFilter || u.role === 'admin');
+    
+    // Apply event-specific restrictions if available
+    if (this.currentEvent) {
+      const allowedField = roleType === 'judge' ? 'allowedJudges' : 'allowedModerators';
+      const allowedUsers = this.currentEvent[allowedField];
+      
+      if (allowedUsers && allowedUsers.length > 0) {
+        // If there are specific allowed users, filter to only include them
+        filteredUsers = filteredUsers.filter(user => allowedUsers.includes(user.id));
+      }
+      // If allowedUsers is null or empty, show all users with the appropriate role (no restriction)
+    }
+
+    return filteredUsers;
   }
 
   /**
@@ -285,6 +338,9 @@ class EventWorkspacePage {
       });
       this.unloadHandlers = null;
     }
+    
+    // Remove team data change listener
+    this.removeTeamDataChangeListener();
     
     // Clear cleanup flag
     this.isCleaningUp = false;
@@ -522,6 +578,9 @@ class EventWorkspacePage {
       // Add page visibility listener to clean up when leaving
       this.addPageVisibilityListener();
       
+      // Setup team data change listener for real-time updates
+      this.setupTeamDataChangeListener();
+      
       return true;
     } catch (error) {
       console.error('Failed to load event workspace:', error);
@@ -589,6 +648,232 @@ class EventWorkspacePage {
       workspacePage.innerHTML = errorHTML;
       return false;
     }
+  }
+
+  /**
+   * Setup team data change listener for real-time updates
+   */
+  setupTeamDataChangeListener() {
+    if (!window.eventEmitter || this.teamDataChangeHandler) {
+      return; // Already setup or not available
+    }
+
+    console.log('👂 [EventWorkspace] Setting up team data change listener for event:', this.currentEventId);
+    
+    this.teamDataChangeHandler = (eventData) => {
+      console.log('📢 [EventWorkspace] Received team data change event:', eventData);
+      
+      // Only handle changes for the current event
+      if (eventData.eventId !== this.currentEventId) {
+        console.log('🚫 [EventWorkspace] Ignoring team change for different event:', eventData.eventId);
+        return;
+      }
+      
+      console.log('🔄 [EventWorkspace] Processing team change for current event:', eventData.action);
+      
+      // Refresh team data for current event
+      this.refreshTeamData();
+    };
+    
+    window.eventEmitter.on('teamDataChanged', this.teamDataChangeHandler);
+    console.log('✅ [EventWorkspace] Team data change listener setup complete');
+  }
+
+  /**
+   * Remove team data change listener
+   */
+  removeTeamDataChangeListener() {
+    if (window.eventEmitter && this.teamDataChangeHandler) {
+      console.log('🔇 [EventWorkspace] Removing team data change listener');
+      window.eventEmitter.off('teamDataChanged', this.teamDataChangeHandler);
+      this.teamDataChangeHandler = null;
+    }
+  }
+
+  /**
+   * Refresh team data for current event
+   */
+  async refreshTeamData() {
+    try {
+      console.log('🔄 [EventWorkspace] Refreshing team data...');
+      
+      if (!this.currentEventId) {
+        console.warn('⚠️ [EventWorkspace] No current event ID, skipping team refresh');
+        return;
+      }
+      
+      const teamsResponse = await this.teamService.getEventTeams(this.currentEventId);
+      this.teams = teamsResponse.data || teamsResponse || [];
+      
+      console.log('✅ [EventWorkspace] Team data refreshed, teams count:', this.teams.length);
+      
+      // Re-render current tab content if it contains team data (but don't re-switch tab to avoid infinite loop)
+      if (this.currentTab === 'matches' || this.currentTab === 'teams' || this.currentTab === 'overview') {
+        console.log('🎨 [EventWorkspace] Re-rendering', this.currentTab, 'tab content with updated team data');
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
+      
+      // If create match modal is open, update its team dropdowns
+      const createMatchModal = document.getElementById('createMatchModal');
+      if (createMatchModal && !createMatchModal.classList.contains('hidden')) {
+        console.log('🎯 [EventWorkspace] Create match modal is open, updating team dropdowns');
+        this.updateCreateMatchTeamDropdowns();
+      }
+    } catch (error) {
+      console.error('❌ [EventWorkspace] Failed to refresh team data:', error);
+    }
+  }
+
+  /**
+   * Check for duplicate judge assignments in the same round
+   */
+  checkDuplicateJudgeAssignments() {
+    const duplicateWarnings = [];
+    const roundJudgeMap = new Map(); // roundNumber -> Set of judgeIds
+    
+    // Group judges by round
+    this.matches.forEach(match => {
+      if (!match.assignments || match.assignments.length === 0) return;
+      
+      const roundNumber = match.roundNumber;
+      if (!roundJudgeMap.has(roundNumber)) {
+        roundJudgeMap.set(roundNumber, new Map()); // judgeId -> array of match info
+      }
+      
+      const roundJudges = roundJudgeMap.get(roundNumber);
+      
+      match.assignments.forEach(assignment => {
+        const judgeId = assignment.judge.id;
+        const judgeName = `${assignment.judge.firstName} ${assignment.judge.lastName}`;
+        
+        if (!roundJudges.has(judgeId)) {
+          roundJudges.set(judgeId, []);
+        }
+        
+        roundJudges.get(judgeId).push({
+          matchId: match.id,
+          matchTitle: `${this.teams.find(t => t.id === match.teamAId)?.name || 'TBD'} vs ${this.teams.find(t => t.id === match.teamBId)?.name || 'TBD'}`,
+          room: match.room || 'No room',
+          judgeName: judgeName
+        });
+      });
+    });
+    
+    // Check for duplicates
+    roundJudgeMap.forEach((roundJudges, roundNumber) => {
+      roundJudges.forEach((matchInfos, judgeId) => {
+        if (matchInfos.length > 1) {
+          duplicateWarnings.push({
+            roundNumber: roundNumber,
+            judgeName: matchInfos[0].judgeName,
+            matches: matchInfos,
+            count: matchInfos.length
+          });
+        }
+      });
+    });
+    
+    return duplicateWarnings;
+  }
+
+  /**
+   * Display duplicate judge assignment warnings
+   */
+  displayDuplicateJudgeWarnings() {
+    const warnings = this.checkDuplicateJudgeAssignments();
+    
+    if (warnings.length === 0) {
+      return; // No warnings to display
+    }
+    
+    console.warn('⚠️ [EventWorkspace] Found duplicate judge assignments:', warnings);
+    
+    // Create warning messages
+    const warningMessages = warnings.map(warning => {
+      const roundName = this.getRoundDisplayName(warning.roundNumber);
+      const matchList = warning.matches.map(m => `• ${m.matchTitle} (${m.room})`).join('\n');
+      return `${roundName}:\n${warning.judgeName} is assigned to ${warning.count} matches:\n${matchList}`;
+    });
+    
+    // Show warning notification
+    const fullMessage = `⚠️ Judge Assignment Conflicts Detected!\n\n${warningMessages.join('\n\n')}\n\nPlease review and reassign judges to avoid conflicts.`;
+    
+    // Use a more prominent warning display
+    this.showDuplicateJudgeWarningModal(warnings);
+  }
+
+  /**
+   * Show duplicate judge warning modal
+   */
+  showDuplicateJudgeWarningModal(warnings) {
+    const warningHTML = warnings.map(warning => {
+      const roundName = this.getRoundDisplayName(warning.roundNumber);
+      const matchList = warning.matches.map(m => 
+        `<li class="text-sm text-gray-700">• ${m.matchTitle} <span class="text-gray-500">(${m.room})</span></li>`
+      ).join('');
+      
+      return `
+        <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+            </div>
+            <div class="ml-3 flex-1">
+              <h4 class="text-sm font-medium text-yellow-800">
+                ${roundName}: ${warning.judgeName} is assigned to ${warning.count} matches
+              </h4>
+              <div class="mt-2">
+                <ul class="space-y-1">
+                  ${matchList}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Create and show warning modal
+    const modalHTML = `
+      <div id="duplicateJudgeWarningModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center">
+              <svg class="h-6 w-6 text-yellow-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+              <h3 class="text-lg font-medium text-gray-900">Judge Assignment Conflicts Detected</h3>
+            </div>
+          </div>
+          <div class="px-6 py-4">
+            <p class="text-sm text-gray-600 mb-4">
+              The following judges are assigned to multiple matches in the same round. This may cause scheduling conflicts.
+            </p>
+            ${warningHTML}
+          </div>
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <button type="button" onclick="document.getElementById('duplicateJudgeWarningModal').remove()" 
+                    class="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors">
+              I Understand
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Remove existing warning modal if any
+    const existingModal = document.getElementById('duplicateJudgeWarningModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+    
+    // Add new modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
   }
 
   /**
@@ -669,6 +954,15 @@ class EventWorkspacePage {
         await this.preloadJudgeScoresStatus();
         console.log('✅ [EventWorkspace] Judge scores status preloaded');
       }
+      
+      // Check for duplicate judge assignments if user is admin
+      if (effectiveRole === 'admin') {
+        console.log('🔍 [EventWorkspace] Checking for duplicate judge assignments...');
+        // Use a small delay to ensure UI rendering is complete
+        setTimeout(() => {
+          this.displayDuplicateJudgeWarnings();
+        }, 500);
+      }
     } catch (error) {
       console.error('Error loading event data:', error);
       throw error;
@@ -688,22 +982,56 @@ class EventWorkspacePage {
       
       const judgeId = currentUser.id;
       
-      for (const match of this.matches) {
-        try {
-          const response = await this.scoreService.getMatchScores(match.id);
-          const scores = response.data?.scores || response.scores || response.data || response || [];
-          
-          // Check if current judge has submitted scores
-          const hasSubmitted = scores.some(
-            score => score.judgeId === judgeId && score.isSubmitted
-          );
-          
-          this.judgeScoresCache.set(match.id, hasSubmitted);
-        } catch (error) {
-          console.error(`Error loading scores for match ${match.id}:`, error);
-          this.judgeScoresCache.set(match.id, false);
+      // Process matches in smaller batches with delays to avoid rate limiting
+      const batchSize = 3; // Process 3 matches at a time to be conservative
+      const delay = 1000; // 1 second delay between batches
+      
+      console.log(`🔄 [EventWorkspace] Preloading scores status for ${this.matches.length} matches in batches of ${batchSize}`);
+      
+      for (let i = 0; i < this.matches.length; i += batchSize) {
+        const batch = this.matches.slice(i, i + batchSize);
+        
+        // Process current batch sequentially to be extra safe with rate limiting
+        for (const match of batch) {
+          try {
+            const response = await this.scoreService.getMatchScores(match.id);
+            const scores = response.data?.scores || response.scores || response.data || response || [];
+            
+            // Check if current judge has submitted scores
+            const hasSubmitted = scores.some(
+              score => score.judgeId === judgeId && score.isSubmitted
+            );
+            
+            this.judgeScoresCache.set(match.id, hasSubmitted);
+            
+            // Small delay between individual requests within a batch
+            await new Promise(resolve => setTimeout(resolve, 200));
+          } catch (error) {
+            console.error(`⚠️ [EventWorkspace] Failed to load scores for match ${match.id}:`, error);
+            
+            // If we hit rate limit, skip remaining matches in this session
+            if (error.message && error.message.includes('Too many')) {
+              console.warn('⚠️ [EventWorkspace] Rate limit hit, skipping remaining score preloads');
+              // Set remaining matches to false
+              for (let j = i; j < this.matches.length; j++) {
+                this.judgeScoresCache.set(this.matches[j].id, false);
+              }
+              return;
+            }
+            
+            // Set as false if failed to load for other reasons
+            this.judgeScoresCache.set(match.id, false);
+          }
+        }
+        
+        // Add delay before next batch (except for the last batch)
+        if (i + batchSize < this.matches.length) {
+          console.log(`⏱️ [EventWorkspace] Waiting ${delay}ms before next batch...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
+      
+      console.log(`✅ [EventWorkspace] Completed preloading scores status for ${this.matches.length} matches`);
     } catch (error) {
       console.error('Error preloading judge scores status:', error);
     }
@@ -737,7 +1065,7 @@ class EventWorkspacePage {
                 <div class="border-l border-gray-300 pl-4">
                   <h1 class="text-2xl font-bold text-gray-900">${this.currentEvent.name}</h1>
                   <div class="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                    <span class="font-medium">Round ${this.currentEvent.currentRound} of ${this.currentEvent.totalRounds}</span>
+                    <span class="font-medium">${this.getRoundDisplayName(this.currentEvent.currentRound)} of ${this.currentEvent.totalRounds}</span>
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getStatusBadgeClasses(this.currentEvent.status)}">
                       ${this.getStatusText(this.currentEvent.status)}
                     </span>
@@ -857,8 +1185,12 @@ class EventWorkspacePage {
       if (tabName === 'settings') {
         setTimeout(() => this.updateScoreCalculation(), 100);
       } else if (tabName === 'overview') {
-              // Load standings data asynchronously when switching to overview tab
-      setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+        // Load standings data asynchronously when switching to overview tab
+        setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+      } else if (tabName === 'matches') {
+        // Reset match filters when switching to matches tab
+        setTimeout(() => this.resetMatchFilters(), 100);
+        // Note: Team data refreshing is handled by teamDataChanged events, no need to refresh on tab switch
       }
 
       return true;
@@ -903,6 +1235,10 @@ class EventWorkspacePage {
       m.status !== 'draft' && m.status !== 'completed'
     ).length;
     const draftMatches = this.matches.filter(m => m.status === 'draft').length;
+    
+    // Check for judge assignment conflicts
+    const duplicateWarnings = this.checkDuplicateJudgeAssignments();
+    const conflictedMatches = this.matches.filter(match => this.hasJudgeConflicts(match));
 
     // Check if admin is assigned as judge or moderator to any matches
     const adminAssignedAsJudge = isAdmin ? this.matches.filter(match => 
@@ -1031,6 +1367,15 @@ class EventWorkspacePage {
               <div class="text-2xl font-bold text-gray-900">${completedMatches}</div>
                 <div class="text-gray-600">Completed</div>
             </div>
+            ${isAdmin && duplicateWarnings.length > 0 ? `
+              <div class="bg-white border border-yellow-300 p-6 rounded-lg border-l-4 border-l-yellow-400">
+                <div class="text-2xl font-bold text-yellow-600">${duplicateWarnings.length}</div>
+                <div class="text-yellow-700 text-sm">Judge Conflicts</div>
+                <div class="text-xs text-yellow-600 mt-1">
+                  ${conflictedMatches.length} matches affected
+                </div>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -1063,7 +1408,7 @@ class EventWorkspacePage {
               ${Object.keys(matchesByRound).map(round => `
                 <div class="mb-4 last:mb-0">
                   <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium text-gray-900">Round ${round}</span>
+                    <span class="font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</span>
                     <span class="text-sm text-gray-500">${matchesByRound[round].filter(m => m.status === 'completed').length}/${matchesByRound[round].length} completed</span>
               </div>
                   <div class="w-full bg-gray-200 rounded-full h-2">
@@ -1084,7 +1429,7 @@ class EventWorkspacePage {
                 <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
                   <div>
                     <div class="font-medium text-sm">${this.teams.find(t => t.id === match.teamAId)?.name || 'TBD'} vs ${this.teams.find(t => t.id === match.teamBId)?.name || 'TBD'}</div>
-                    <div class="text-xs text-gray-500">Round ${match.roundNumber} • ${match.room || 'No room'}</div>
+                    <div class="text-xs text-gray-500">${this.getRoundDisplayName(match.roundNumber)} • ${match.room || 'No room'}</div>
                   </div>
                   <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
                     ${this.getMatchStatusText(match.status)}
@@ -1116,6 +1461,99 @@ class EventWorkspacePage {
   }
 
   /**
+   * Reset match filters to default values
+   */
+  resetMatchFilters() {
+    const roundFilter = document.getElementById('roundFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    
+    if (roundFilter) roundFilter.value = '';
+    if (statusFilter) statusFilter.value = '';
+    
+    // Clear filtered matches
+    this.filteredMatches = null;
+  }
+
+  /**
+   * Apply match filters and re-render matches content
+   */
+  applyMatchFilters() {
+    // Get filter values
+    const roundFilter = document.getElementById('roundFilter')?.value || '';
+    const statusFilter = document.getElementById('statusFilter')?.value || '';
+    
+    // Get all matches
+    let filteredMatches = [...this.allMatches || this.matches];
+    
+    // Apply round filter
+    if (roundFilter) {
+      filteredMatches = filteredMatches.filter(match => 
+        match.roundNumber.toString() === roundFilter
+      );
+    }
+    
+    // Apply status filter  
+    if (statusFilter) {
+      filteredMatches = filteredMatches.filter(match => 
+        match.status === statusFilter
+      );
+    }
+    
+    // Store filtered matches
+    this.filteredMatches = filteredMatches;
+    
+    // Re-render matches content only
+    this.renderMatchesContent();
+  }
+
+  /**
+   * Render only the matches content (without filters)
+   */
+  renderMatchesContent() {
+    const matchesContentContainer = document.getElementById('matches-content');
+    if (!matchesContentContainer) return;
+    
+    const currentUser = this.authManager.currentUser;
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    
+    // Use filtered matches if available, otherwise use all matches
+    const displayMatches = this.filteredMatches || this.matches;
+    
+    const matchesByRound = {};
+    displayMatches.forEach(match => {
+      const roundNum = match.roundNumber;
+      if (!matchesByRound[roundNum]) {
+        matchesByRound[roundNum] = [];
+      }
+      matchesByRound[roundNum].push(match);
+    });
+
+    const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
+      <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
+        </div>
+        <div class="divide-y divide-gray-200">
+          ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    const noMatchesHTML = `
+      <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
+        <div class="text-gray-500">
+          ${displayMatches.length === 0 && this.filteredMatches ? 'No matches found for the selected filters.' : 
+            (isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
+            'No matches assigned to you yet.')}
+        </div>
+      </div>
+    `;
+
+    matchesContentContainer.innerHTML = displayMatches.length === 0 ? noMatchesHTML : matchesHTML;
+  }
+
+  /**
    * Render matches tab
    */
   renderMatchesTab() {
@@ -1124,6 +1562,9 @@ class EventWorkspacePage {
     const isAdmin = effectiveRole === 'admin';
     const isModerator = effectiveRole === 'moderator';
     const isJudge = effectiveRole === 'judge';
+    
+    // Store all matches for filtering
+    this.allMatches = [...this.matches];
     
     // Use already filtered matches from loadEventData
     let displayMatches = this.matches;
@@ -1182,17 +1623,20 @@ class EventWorkspacePage {
           </div>
         </div>
 
+        <!-- Matches Content Container -->
+        <div id="matches-content">
         <!-- Matches by Round -->
         ${Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
-          <div class="bg-white border border-gray-300 rounded-lg">
+          <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
             <div class="px-6 py-4 border-b border-gray-300">
-              <h3 class="text-lg font-medium text-gray-900">Round ${round}</h3>
+              <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
             </div>
             <div class="divide-y divide-gray-200">
               ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
             </div>
           </div>
         `).join('')}
+        </div>
 
         ${displayMatches.length === 0 ? `
           <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
@@ -1221,6 +1665,29 @@ class EventWorkspacePage {
   }
 
   /**
+   * Check if a match has judge assignment conflicts
+   */
+  hasJudgeConflicts(match) {
+    if (!match.assignments || match.assignments.length === 0) return false;
+    
+    // Find all other matches in the same round
+    const sameRoundMatches = this.matches.filter(m => 
+      m.roundNumber === match.roundNumber && m.id !== match.id
+    );
+    
+    // Check if any judge in this match is also assigned to other matches in the same round
+    for (const assignment of match.assignments) {
+      for (const otherMatch of sameRoundMatches) {
+        if (otherMatch.assignments && otherMatch.assignments.some(a => a.judge.id === assignment.judge.id)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * Render individual match card
    */
   renderMatchCard(match) {
@@ -1243,9 +1710,10 @@ class EventWorkspacePage {
 
     // Check if judge has submitted scores
     const hasSubmittedScores = this.judgeScoresCache.get(match.id);
+    const hasConflicts = this.hasJudgeConflicts(match);
 
     return `
-      <div class="p-6">
+      <div class="p-6 ${hasConflicts ? 'border-l-4 border-yellow-400' : ''}">
         <div class="flex justify-between items-start">
           <div class="flex-1">
             <div class="flex items-center space-x-4">
@@ -1255,6 +1723,14 @@ class EventWorkspacePage {
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
                 ${this.getMatchStatusText(match.status)}
               </span>
+              ${hasConflicts && isAdmin ? `
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200" title="Judge assignment conflict detected">
+                  <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                  </svg>
+                  Conflict
+                </span>
+              ` : ''}
             </div>
             <div class="mt-2 text-sm text-gray-600 space-y-1">
               <div>Room: ${match.room || 'Not assigned'}</div>
@@ -1690,7 +2166,7 @@ class EventWorkspacePage {
                 <select name="moderatorId" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
                   <option value="">Select Moderator</option>
                   ${this.users && this.users.length > 0 ? 
-                    this.users.filter(u => u.role === 'moderator' || u.role === 'admin').map(user => 
+                    this.getFilteredUsers('moderator').map(user => 
                       `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`
                     ).join('') : 
                     '<option disabled>No moderators available</option>'
@@ -1708,7 +2184,7 @@ class EventWorkspacePage {
               <label class="block text-sm font-medium text-gray-700 mb-2">Judges <span class="text-red-500">*</span></label>
               <select name="judgeIds" multiple required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 h-32 overflow-y-auto bg-white text-sm" style="min-height: 8rem;">
                 ${this.users && this.users.length > 0 ? 
-                  this.users.filter(u => u.role === 'judge' || u.role === 'admin').map(user => `
+                  this.getFilteredUsers('judge').map(user => `
                     <option value="${user.id}" class="py-2 px-3">${user.firstName} ${user.lastName} (${user.email})</option>
                   `).join('') : 
                   '<option disabled>No judges available</option>'
@@ -1784,7 +2260,7 @@ class EventWorkspacePage {
                 <select name="moderatorId" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" id="editModeratorId">
                   <option value="">Select Moderator</option>
                   ${this.users && this.users.length > 0 ? 
-                    this.users.filter(u => u.role === 'moderator' || u.role === 'admin').map(user => 
+                    this.getFilteredUsers('moderator').map(user => 
                       `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`
                     ).join('') : 
                     '<option disabled>No moderators available</option>'
@@ -1968,12 +2444,26 @@ class EventWorkspacePage {
           </div>
           <form id="roundRobinForm" class="p-6 space-y-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Round <span class="text-red-500">*</span></label>
-              <select name="roundNumber" required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
-                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
-                  `<option value="${round}" ${round === 1 ? 'selected' : ''}>Round ${round}</option>`
-                ).join('')}
-              </select>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Select Rounds <span class="text-red-500">*</span></label>
+              <div class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto bg-gray-50">
+                <div class="space-y-2">
+                  ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => `
+                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                      <input type="checkbox" name="selectedRounds" value="${round}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                      <div class="text-sm font-medium text-gray-900">Round ${round}</div>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between items-center">
+                <p class="text-xs text-gray-500">
+                  <span class="text-red-600 font-medium">Required:</span> Select at least 1 round
+                </p>
+                <span id="roundSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
+              </div>
+              <div id="roundValidationError" class="mt-1 text-xs text-red-600 hidden">
+                Please select at least 1 round for Round Robin
+              </div>
             </div>
             
             <div>
@@ -2008,11 +2498,12 @@ class EventWorkspacePage {
                   <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                  <h5 class="text-sm font-medium text-blue-900">Round Robin Information</h5>
+                  <h5 class="text-sm font-medium text-blue-900">Random Tournament Information</h5>
                   <p class="text-sm text-blue-700 mt-1">
-                    Round Robin ensures each selected team plays against every other selected team exactly once.
-                    <span class="font-medium text-red-600">Cannot generate matches for rounds with completed matches.</span>
-                    If the selected round has draft/pending matches, they will be replaced with new Round Robin matches.
+                    Generates random matches for each selected round independently. Each round will have the same number of matches.
+                    If odd number of teams, one team will be randomly excluded from all rounds.
+                    <span class="font-medium text-red-600">Cannot generate matches for rounds that already have existing matches.</span>
+                    Please delete existing matches before generating new matches.
                   </p>
                 </div>
               </div>
@@ -2381,6 +2872,8 @@ class EventWorkspacePage {
    * Handle create match form submission
    */
   async handleCreateMatch(event) {
+    event.preventDefault();
+    
     // Prevent multiple submissions
     const submitButton = event.target.querySelector('button[type="submit"]');
     if (submitButton && submitButton.disabled) {
@@ -2400,13 +2893,51 @@ class EventWorkspacePage {
       
       const formData = new FormData(event.target);
       
+      // Comprehensive validation
+      const errors = [];
+      
+      // Validate round number
+      const roundNumber = parseInt(formData.get('roundNumber'));
+      if (!roundNumber || roundNumber < 1) {
+        errors.push('Please select a valid round number');
+      }
+      
+      // Validate team selection
+      const teamAId = formData.get('teamAId');
+      const teamBId = formData.get('teamBId');
+      
+      if (!teamAId) {
+        errors.push('Please select Team A');
+      }
+      if (!teamBId) {
+        errors.push('Please select Team B');
+      }
+      if (teamAId && teamBId && teamAId === teamBId) {
+        errors.push('Team A and Team B cannot be the same team');
+      }
+      
+      // Validate room
+      const room = formData.get('room')?.trim();
+      if (!room) {
+        errors.push('Please enter a room/location for the match');
+      }
+      
       // Get selected judge IDs from multiple select
       const judgeSelect = event.target.querySelector('select[name="judgeIds"]');
       const selectedJudgeIds = Array.from(judgeSelect.selectedOptions).map(option => option.value);
       
       // Validate judge selection (must be 2-3 judges)
-      if (selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
-        if (errorDiv) {
+      if (selectedJudgeIds.length < 2) {
+        errors.push('Please select at least 2 judges for the match');
+      } else if (selectedJudgeIds.length > 3) {
+        errors.push('Please select no more than 3 judges for the match');
+      }
+      
+      // Show validation errors if any
+      if (errors.length > 0) {
+        const errorMessage = errors.join('\n• ');
+        this.showCreateMatchError(`Validation Error:\n• ${errorMessage}`);
+        if (errorDiv && selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
           errorDiv.textContent = `Please select 2-3 judges. Currently selected: ${selectedJudgeIds.length}`;
           errorDiv.classList.remove('hidden');
         }
@@ -2415,58 +2946,117 @@ class EventWorkspacePage {
       }
       
       const matchData = {
-        roundNumber: parseInt(formData.get('roundNumber')),
-        teamAId: formData.get('teamAId'),
-        teamBId: formData.get('teamBId'),
+        roundNumber: roundNumber,
+        teamAId: teamAId,
+        teamBId: teamBId,
         moderatorId: formData.get('moderatorId') || null,
-        room: formData.get('room'),
+        room: room,
         scheduledTime: formData.get('scheduledTime') || null
       };
 
-      // Validate team selection (Team A and Team B cannot be the same)
-      if (matchData.teamAId === matchData.teamBId) {
-        this.ui.showError('Validation Error', 'Team A and Team B cannot be the same team');
-        return;
-      }
+      console.log('Creating match with data:', matchData);
 
       // Create the match first
-      const response = await this.matchService.createEventMatch(this.currentEventId, matchData);
-      const createdMatch = response.data || response;
+      let response;
+      let createdMatch;
+      
+      try {
+        response = await this.matchService.createEventMatch(this.currentEventId, matchData);
+        createdMatch = response.data || response;
+        
+        if (!createdMatch || !createdMatch.id) {
+          throw new Error('Invalid response from server - match creation failed');
+        }
+        
+        console.log('✅ Match created successfully:', createdMatch.id);
+      } catch (matchError) {
+        console.error('❌ Failed to create match:', matchError);
+        let errorMessage = 'Failed to create match';
+        
+        if (matchError.status === 400) {
+          errorMessage = 'Invalid match data provided. Please check all fields and try again.';
+        } else if (matchError.status === 403) {
+          errorMessage = 'You do not have permission to create matches for this event.';
+        } else if (matchError.status === 404) {
+          errorMessage = 'Event not found. Please refresh the page and try again.';
+        } else if (matchError.status === 409) {
+          errorMessage = 'A match with these teams already exists in this round.';
+        } else if (matchError.status === 500) {
+          errorMessage = 'Server error occurred while creating the match. Please try again later.';
+        } else if (matchError.message) {
+          errorMessage = `Failed to create match: ${matchError.message}`;
+        }
+        
+        this.showCreateMatchError(errorMessage);
+        return;
+      }
       
       // Assign judges (guaranteed to have 2-3 judges at this point)
-      console.log(`Assigning ${selectedJudgeIds.length} judges to match ${createdMatch.id}`);
+      console.log(`🎯 Assigning ${selectedJudgeIds.length} judges to match ${createdMatch.id}`);
       
       let successfulAssignments = 0;
+      let failedAssignments = [];
+      
       for (const judgeId of selectedJudgeIds) {
         try {
           await this.matchService.assignJudge(createdMatch.id, judgeId);
-          console.log(`Successfully assigned judge ${judgeId} to match`);
+          console.log(`✅ Successfully assigned judge ${judgeId} to match`);
           successfulAssignments++;
         } catch (judgeError) {
-          console.error(`Failed to assign judge ${judgeId}:`, judgeError);
+          console.error(`❌ Failed to assign judge ${judgeId}:`, judgeError);
+          failedAssignments.push(judgeId);
           // Continue with other judges even if one fails
         }
       }
       
+      // Close modal and show success/warning message
       this.closeModal('createMatchModal');
-      this.ui.showSuccess('Success', `Match created successfully! ${successfulAssignments} judges assigned.`);
+      
+      if (successfulAssignments === selectedJudgeIds.length) {
+        this.ui.showSuccess('Match Created', `Match created successfully with ${successfulAssignments} judges assigned.`);
+      } else if (successfulAssignments > 0) {
+        this.ui.showSuccess('Match Created with Warnings', 
+          `Match created successfully but only ${successfulAssignments} out of ${selectedJudgeIds.length} judges were assigned. ` +
+          `Please check judge assignments in the match details.`);
+      } else {
+        this.ui.showError('Match Created with Errors', 
+          'Match was created but no judges could be assigned. Please manually assign judges to this match.');
+      }
       
       // Reset form
       event.target.reset();
       
-      // Add the new match to local array to avoid full reload
-      this.matches.push(createdMatch);
-      
-      // Reload matches to get latest data and assignments
-      const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
-      this.matches = matchesResponse.data?.matches || [];
-      
-      // Re-render only the content, not the full workspace
-      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      try {
+        // Reload matches to get latest data and assignments
+        const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
+        this.matches = matchesResponse.data?.matches || [];
+        
+        // Re-render only the content, not the full workspace
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+        
+        // Check for duplicate judge assignments after creating match
+        setTimeout(() => {
+          this.displayDuplicateJudgeWarnings();
+        }, 500);
+        
+      } catch (reloadError) {
+        console.error('❌ Failed to reload matches after creation:', reloadError);
+        // Don't show error to user since match was created successfully
+      }
       
     } catch (error) {
-      console.error('Failed to create match:', error);
-      this.ui.showError('Error', 'Failed to create match: ' + error.message);
+      console.error('❌ Unexpected error during match creation:', error);
+      
+      let errorMessage = 'An unexpected error occurred while creating the match';
+      if (error.message) {
+        errorMessage += `: ${error.message}`;
+      }
+      errorMessage += '. Please try again or contact support if the problem persists.';
+      
+      this.showCreateMatchError(errorMessage);
     } finally {
       // Re-enable submit button
       const submitButton = event.target.querySelector('button[type="submit"]');
@@ -3274,11 +3864,52 @@ class EventWorkspacePage {
   showModal(modalId) {
     document.getElementById(modalId).classList.remove('hidden');
     document.getElementById(modalId).classList.add('flex');
+    
+    // Update team dropdown when opening create match modal
+    if (modalId === 'createMatchModal') {
+      this.updateCreateMatchTeamDropdowns();
+    }
   }
 
   closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
     document.getElementById(modalId).classList.remove('flex');
+  }
+
+  /**
+   * Update team dropdowns in create match modal with latest team data
+   */
+  updateCreateMatchTeamDropdowns() {
+    console.log('🔄 [EventWorkspace] Updating create match team dropdowns with latest teams:', this.teams.length);
+    
+    const teamASelect = document.querySelector('#createMatchModal select[name="teamAId"]');
+    const teamBSelect = document.querySelector('#createMatchModal select[name="teamBId"]');
+    
+    if (!teamASelect || !teamBSelect) {
+      console.error('❌ [EventWorkspace] Team dropdowns not found in create match modal');
+      return;
+    }
+    
+    // Generate team options HTML
+    const teamOptionsHTML = this.teams.map(team => 
+      `<option value="${team.id}">${team.name}</option>`
+    ).join('');
+    
+    // Update Team A dropdown
+    const currentTeamAValue = teamASelect.value;
+    teamASelect.innerHTML = `<option value="">Select Team A</option>${teamOptionsHTML}`;
+    if (currentTeamAValue && this.teams.find(t => t.id === currentTeamAValue)) {
+      teamASelect.value = currentTeamAValue;
+    }
+    
+    // Update Team B dropdown
+    const currentTeamBValue = teamBSelect.value;
+    teamBSelect.innerHTML = `<option value="">Select Team B</option>${teamOptionsHTML}`;
+    if (currentTeamBValue && this.teams.find(t => t.id === currentTeamBValue)) {
+      teamBSelect.value = currentTeamBValue;
+    }
+    
+    console.log('✅ [EventWorkspace] Team dropdowns updated successfully');
   }
 
   /**
@@ -4824,24 +5455,32 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const form = document.getElementById('roundRobinForm');
     if (form) {
       form.reset();
-      // Set default round to 1
-      const roundSelect = form.querySelector('select[name="roundNumber"]');
-      if (roundSelect) {
-        roundSelect.value = '1';
+      
+      // Clear round selection counter
+      const roundCounter = document.getElementById('roundSelectionCounter');
+      if (roundCounter) {
+        roundCounter.textContent = '0 selected';
       }
+      
       // Clear team selection counter
-      const counter = document.getElementById('teamSelectionCounter');
-      if (counter) {
-        counter.textContent = '0 selected';
+      const teamCounter = document.getElementById('teamSelectionCounter');
+      if (teamCounter) {
+        teamCounter.textContent = '0 selected';
       }
+      
       // Hide validation errors
-      const errorDiv = document.getElementById('teamValidationError');
-      if (errorDiv) {
-        errorDiv.classList.add('hidden');
+      const roundErrorDiv = document.getElementById('roundValidationError');
+      if (roundErrorDiv) {
+        roundErrorDiv.classList.add('hidden');
+      }
+      
+      const teamErrorDiv = document.getElementById('teamValidationError');
+      if (teamErrorDiv) {
+        teamErrorDiv.classList.add('hidden');
       }
     }
     
-    // Add event listeners for team selection
+    // Add event listeners for round and team selection
     this.addRoundRobinEventListeners();
   }
 
@@ -4862,15 +5501,28 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     form.removeEventListener('submit', submitHandler);
     form.addEventListener('submit', submitHandler);
     
+    // Handle round selection counter
+    const roundCheckboxes = form.querySelectorAll('input[name="selectedRounds"]');
+    const roundCounter = document.getElementById('roundSelectionCounter');
+    
+    roundCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const selectedCount = form.querySelectorAll('input[name="selectedRounds"]:checked').length;
+        if (roundCounter) {
+          roundCounter.textContent = `${selectedCount} selected`;
+        }
+      });
+    });
+    
     // Handle team selection counter
     const teamCheckboxes = form.querySelectorAll('input[name="selectedTeams"]');
-    const counter = document.getElementById('teamSelectionCounter');
+    const teamCounter = document.getElementById('teamSelectionCounter');
     
     teamCheckboxes.forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         const selectedCount = form.querySelectorAll('input[name="selectedTeams"]:checked').length;
-        if (counter) {
-          counter.textContent = `${selectedCount} selected`;
+        if (teamCounter) {
+          teamCounter.textContent = `${selectedCount} selected`;
         }
       });
     });
@@ -4895,25 +5547,51 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         submitButton.textContent = 'Generating...';
       }
       
-      const roundNumber = parseInt(formData.get('roundNumber'));
+      const selectedRoundNumbers = formData.getAll('selectedRounds').map(r => parseInt(r));
       const selectedTeamIds = formData.getAll('selectedTeams');
       
       // Validate input
-      if (!roundNumber || roundNumber < 1 || roundNumber > this.currentEvent.totalRounds) {
-        this.ui.showError('Validation Error', 'Please select a valid round');
+      if (selectedRoundNumbers.length === 0) {
+        alert('Validation Error: Please select at least 1 round');
+        this.ui.showError('Validation Error', 'Please select at least 1 round');
         return;
       }
       
       if (selectedTeamIds.length < 2) {
+        alert('Validation Error: Please select at least 2 teams for Round Robin');
         this.ui.showError('Validation Error', 'Please select at least 2 teams for Round Robin');
+        return;
+      }
+      
+      // Check if any selected rounds already have matches
+      const roundsWithMatches = [];
+      for (const roundNumber of selectedRoundNumbers) {
+        const existingMatches = this.matches.filter(m => m.roundNumber === roundNumber);
+        if (existingMatches.length > 0) {
+          roundsWithMatches.push(roundNumber);
+        }
+      }
+      
+      if (roundsWithMatches.length > 0) {
+        const roundsList = roundsWithMatches.join(', ');
+        console.log('Found rounds with existing matches:', roundsWithMatches);
+        
+        // Show error alert first for immediate feedback
+        alert(`Cannot Generate Matches: The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`);
+        
+        // Also show UI error message
+        this.ui.showError(
+          'Cannot Generate Matches', 
+          `The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`
+        );
         return;
       }
       
       // Get selected teams
       const selectedTeams = this.teams.filter(team => selectedTeamIds.includes(team.id));
       
-      // Generate Round Robin matches
-      await this.generateRoundRobinForRound(roundNumber, selectedTeams);
+      // Generate Round Robin matches for multiple rounds
+      await this.generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams);
       
       // Close modal
       this.closeModal('roundRobinModal');
@@ -5028,6 +5706,114 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     
     // Use the new method with all teams for Round 1
     await this.generateRoundRobinForRound(1, this.teams);
+  }
+
+  /**
+   * Generate Round Robin matches across multiple rounds
+   * Each round has independent random pairings with same number of matches
+   */
+  async generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams) {
+    try {
+      // Handle odd number of teams - remove one team randomly for each round
+      let availableTeams = [...selectedTeams];
+      let excludedTeams = [];
+      
+      if (availableTeams.length % 2 === 1) {
+        // Remove one team randomly for odd numbers
+        const randomIndex = Math.floor(Math.random() * availableTeams.length);
+        const excludedTeam = availableTeams.splice(randomIndex, 1)[0];
+        excludedTeams.push(excludedTeam.name);
+        console.log(`Odd number of teams: excluding ${excludedTeam.name} from all rounds`);
+      }
+      
+      const matchesPerRound = Math.floor(availableTeams.length / 2);
+      console.log(`Will create ${matchesPerRound} matches per round using ${availableTeams.length} teams`);
+      
+      let totalCreatedCount = 0;
+      const roundDistribution = {};
+      
+      // Generate independent random pairings for each round
+      for (const roundNumber of selectedRoundNumbers) {
+        roundDistribution[roundNumber] = [];
+        
+        // Generate random pairings for this specific round
+        const roundPairings = this.generateRandomPairings(availableTeams);
+        
+        // Create matches for this round
+        for (const pairing of roundPairings) {
+          // Skip bye matches (when teamB is null)
+          if (!pairing.teamB) {
+            console.log(`Team ${pairing.teamA.name} has a bye in Round ${roundNumber}`);
+            continue;
+          }
+          
+          try {
+            const matchData = {
+              roundNumber: roundNumber,
+              teamAId: pairing.teamA.id,
+              teamBId: pairing.teamB.id,
+              status: 'draft',
+              scheduledTime: null,
+              room: null
+            };
+
+            await this.matchService.createEventMatch(this.currentEventId, matchData);
+            roundDistribution[roundNumber].push(`${pairing.teamA.name} vs ${pairing.teamB.name}`);
+            totalCreatedCount++;
+          } catch (error) {
+            console.error('Error creating match:', error);
+          }
+        }
+        
+        console.log(`Round ${roundNumber}: created ${roundDistribution[roundNumber].length} matches`);
+      }
+
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render the workspace
+      document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+      
+      // Create detailed success message
+      let message = `Successfully generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds (${matchesPerRound} matches per round).\n\nDistribution:`;
+      
+      for (const [round, matches] of Object.entries(roundDistribution)) {
+        message += `\n\nRound ${round} (${matches.length} matches):`;
+        matches.forEach(match => {
+          message += `\n• ${match}`;
+        });
+      }
+      
+      if (excludedTeams.length > 0) {
+        message += `\n\nExcluded teams (odd number): ${excludedTeams.join(', ')}`;
+      }
+      
+      this.ui.showSuccess('Random Matches Generated', message);
+      
+    } catch (error) {
+      console.error('Error generating random matches for multiple rounds:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate complete Round Robin pairings where each team plays every other team exactly once
+   */
+  generateCompleteRoundRobinPairings(teams) {
+    const pairings = [];
+    
+    // Generate all possible pairings (every team vs every other team)
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        pairings.push({
+          teamA: teams[i],
+          teamB: teams[j]
+        });
+      }
+    }
+    
+    console.log(`Generated ${pairings.length} complete Round Robin pairings for ${teams.length} teams`);
+    return pairings;
   }
 
   /**

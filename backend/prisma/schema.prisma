@@ -42,6 +42,9 @@ model Event {
   location        String?
   maxTeams        Int?      @map("max_teams")
   scoringCriteria String?   @map("scoring_criteria")
+  roundNames      String?   @map("round_names") // JSON string storing round aliases like {"1": "First Round", "2": "Semi Finals"}
+  allowedJudges   String?   @map("allowed_judges") // JSON array of user IDs allowed to judge this event
+  allowedModerators String? @map("allowed_moderators") // JSON array of user IDs allowed to moderate this event
   createdBy       String    @map("created_by")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")

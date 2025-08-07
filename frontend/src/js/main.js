@@ -3,6 +3,40 @@
  * Ethics Bowl Scoring Platform Frontend
  */
 
+// Global event emitter for cross-component communication
+class EventEmitter {
+  constructor() {
+    this.events = {};
+  }
+
+  on(event, callback) {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(callback);
+  }
+
+  off(event, callback) {
+    if (!this.events[event]) return;
+    this.events[event] = this.events[event].filter(cb => cb !== callback);
+  }
+
+  emit(event, data) {
+    if (!this.events[event]) return;
+    console.log(`🔔 Emitting event: ${event}`, data); // Debug log
+    this.events[event].forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error('Error in event callback:', error);
+      }
+    });
+  }
+}
+
+// Create global event emitter instance
+window.eventEmitter = new EventEmitter();
+
 import { authManager, OAuthCallbackHandler, ApiError } from './auth.js';
 import { authService, healthService, eventService, teamService, userService, preApprovedEmailService, matchService, scoreService, statisticsService } from './api.js';
 import { initWebSocket, getWebSocketClient, destroyWebSocket } from './websocket.js';
