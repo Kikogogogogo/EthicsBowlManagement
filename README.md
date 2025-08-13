@@ -67,7 +67,7 @@ A comprehensive web application for managing Ethics Bowl tournaments, providing 
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd EthicsBowlManagement2
+   cd EthicsBowlManagement
    ```
 
 2. **Install dependencies**
@@ -113,7 +113,7 @@ A comprehensive web application for managing Ethics Bowl tournaments, providing 
    ```
 
 6. **Access the Application**
-   - Frontend: http://localhost:5173
+   - Frontend: http://localhost:80000
    - Backend API: http://localhost:3000
 
 ## Usage Guide
@@ -171,7 +171,7 @@ A comprehensive web application for managing Ethics Bowl tournaments, providing 
 
 ### Project Structure
 ```
-EthicsBowlManagement2/
+EthicsBowlManagement/
 ├── backend/                 # Node.js/Express API server
 │   ├── src/
 │   │   ├── controllers/     # Request handlers
@@ -233,12 +233,12 @@ npm start
 
 ## Deployment
 
-### Frontend (Vercel/Netlify)
+### Frontend (Vercel)
 1. Build the frontend: `npm run build` in frontend directory
 2. Deploy the `dist` folder to your hosting service
 3. Configure environment variables for API endpoints
 
-### Backend (Railway/Heroku/DigitalOcean)
+### Backend (Render)
 1. Set up PostgreSQL database
 2. Configure environment variables
 3. Deploy backend code
