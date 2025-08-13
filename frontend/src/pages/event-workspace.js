@@ -722,6 +722,20 @@ class EventWorkspacePage {
         console.log('🎯 [EventWorkspace] Create match modal is open, updating team dropdowns');
         this.updateCreateMatchTeamDropdowns();
       }
+      
+      // Update Round Robin modal team list if open
+      const roundRobinModal = document.getElementById('roundRobinModal');
+      if (roundRobinModal && !roundRobinModal.classList.contains('hidden')) {
+        console.log('🎯 [EventWorkspace] Round Robin modal is open, updating team list');
+        this.updateRoundRobinTeamList();
+      }
+      
+      // Update Swiss modal team list if open
+      const swissModal = document.getElementById('swissModal');
+      if (swissModal && !swissModal.classList.contains('hidden')) {
+        console.log('🎯 [EventWorkspace] Swiss modal is open, updating team list');
+        this.updateSwissTeamList();
+      }
     } catch (error) {
       console.error('❌ [EventWorkspace] Failed to refresh team data:', error);
     }
@@ -2498,10 +2512,11 @@ class EventWorkspacePage {
                   <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                  <h5 class="text-sm font-medium text-blue-900">Random Tournament Information</h5>
+                  <h5 class="text-sm font-medium text-blue-900">Round Robin Tournament Information</h5>
                   <p class="text-sm text-blue-700 mt-1">
-                    Generates random matches for each selected round independently. Each round will have the same number of matches.
-                    If odd number of teams, one team will be randomly excluded from all rounds.
+                    Generates matches with the same number per round, where each team plays exactly once per round. 
+                    For example: 4 teams = 2 matches per round, 5 teams = 2 matches per round (1 team sits out each round).
+                    Each round has independent random pairings.
                     <span class="font-medium text-red-600">Cannot generate matches for rounds that already have existing matches.</span>
                     Please delete existing matches before generating new matches.
                   </p>
@@ -2936,7 +2951,7 @@ class EventWorkspacePage {
       // Show validation errors if any
       if (errors.length > 0) {
         const errorMessage = errors.join('\n• ');
-        this.showCreateMatchError(`Validation Error:\n• ${errorMessage}`);
+        this.ui.showError('Validation Error', `• ${errorMessage}`);
         if (errorDiv && selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
           errorDiv.textContent = `Please select 2-3 judges. Currently selected: ${selectedJudgeIds.length}`;
           errorDiv.classList.remove('hidden');
@@ -2971,23 +2986,40 @@ class EventWorkspacePage {
         console.log('✅ Match created successfully:', createdMatch.id);
       } catch (matchError) {
         console.error('❌ Failed to create match:', matchError);
+        console.log('🔍 Error details:', { 
+          status: matchError.status, 
+          message: matchError.message,
+          response: matchError.response 
+        });
         let errorMessage = 'Failed to create match';
+        let errorTitle = 'Error';
         
         if (matchError.status === 400) {
+          errorTitle = 'Invalid Data';
           errorMessage = 'Invalid match data provided. Please check all fields and try again.';
         } else if (matchError.status === 403) {
+          errorTitle = 'Permission Denied';
           errorMessage = 'You do not have permission to create matches for this event.';
         } else if (matchError.status === 404) {
+          errorTitle = 'Event Not Found';
           errorMessage = 'Event not found. Please refresh the page and try again.';
         } else if (matchError.status === 409) {
-          errorMessage = 'A match with these teams already exists in this round.';
+          errorTitle = 'Error';
+          errorMessage = 'Cannot create repeated match';
         } else if (matchError.status === 500) {
+          errorTitle = 'Server Error';
           errorMessage = 'Server error occurred while creating the match. Please try again later.';
         } else if (matchError.message) {
-          errorMessage = `Failed to create match: ${matchError.message}`;
+          // Use the backend error message directly
+          errorMessage = matchError.message;
         }
         
-        this.showCreateMatchError(errorMessage);
+        console.log('🚨 About to show error:', { errorTitle, errorMessage });
+        
+        // Close the create match modal first
+        this.closeModal('createMatchModal');
+        
+        this.ui.showError(errorTitle, errorMessage);
         return;
       }
       
@@ -3051,12 +3083,15 @@ class EventWorkspacePage {
       console.error('❌ Unexpected error during match creation:', error);
       
       let errorMessage = 'An unexpected error occurred while creating the match';
-      if (error.message) {
-        errorMessage += `: ${error.message}`;
-      }
-      errorMessage += '. Please try again or contact support if the problem persists.';
+      let errorTitle = 'Unexpected Error';
       
-      this.showCreateMatchError(errorMessage);
+      if (error.message) {
+        errorMessage = `${error.message}. Please try again or contact support if the problem persists.`;
+      } else {
+        errorMessage += '. Please try again or contact support if the problem persists.';
+      }
+      
+      this.ui.showError(errorTitle, errorMessage);
     } finally {
       // Re-enable submit button
       const submitButton = event.target.querySelector('button[type="submit"]');
@@ -5446,10 +5481,36 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Update team list in Round Robin modal
+   */
+  updateRoundRobinTeamList() {
+    // Find the parent container of team checkboxes by looking for selectedTeams inputs
+    const firstTeamCheckbox = document.querySelector('#roundRobinModal input[name="selectedTeams"]');
+    const teamContainer = firstTeamCheckbox?.closest('.space-y-2');
+    if (!teamContainer) return;
+
+    teamContainer.innerHTML = this.teams.map(team => `
+      <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+        <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+        <div>
+          <div class="text-sm font-medium text-gray-900">${team.name}</div>
+          <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+        </div>
+      </label>
+    `).join('');
+
+    // Re-setup event listeners for the new checkboxes
+    this.addRoundRobinEventListeners();
+  }
+
+  /**
    * Show Round Robin modal
    */
   showRoundRobinModal() {
     this.showModal('roundRobinModal');
+    
+    // Update team list with latest data
+    this.updateRoundRobinTeamList();
     
     // Reset form when opening
     const form = document.getElementById('roundRobinForm');
@@ -5710,40 +5771,43 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
   /**
    * Generate Round Robin matches across multiple rounds
-   * Each round has independent random pairings with same number of matches
+   * Each round has the same number of matches, each team plays once per round
    */
   async generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams) {
     try {
-      // Handle odd number of teams - remove one team randomly for each round
-      let availableTeams = [...selectedTeams];
-      let excludedTeams = [];
+      // Calculate matches per round (each team plays once per round)
+      const teamCount = selectedTeams.length;
+      const matchesPerRound = Math.floor(teamCount / 2);
+      let excludedTeamsPerRound = [];
       
-      if (availableTeams.length % 2 === 1) {
-        // Remove one team randomly for odd numbers
-        const randomIndex = Math.floor(Math.random() * availableTeams.length);
-        const excludedTeam = availableTeams.splice(randomIndex, 1)[0];
-        excludedTeams.push(excludedTeam.name);
-        console.log(`Odd number of teams: excluding ${excludedTeam.name} from all rounds`);
+      // Handle odd number of teams - one team sits out each round
+      if (teamCount % 2 === 1) {
+        console.log(`Odd number of teams (${teamCount}): one team will sit out each round`);
       }
       
-      const matchesPerRound = Math.floor(availableTeams.length / 2);
-      console.log(`Will create ${matchesPerRound} matches per round using ${availableTeams.length} teams`);
+      console.log(`🔄 Generating Round Robin: ${matchesPerRound} matches per round for ${teamCount} teams`);
+      console.log(`Teams: ${selectedTeams.map(t => t.name).join(', ')}`);
       
       let totalCreatedCount = 0;
       const roundDistribution = {};
       
-      // Generate independent random pairings for each round
       for (const roundNumber of selectedRoundNumbers) {
         roundDistribution[roundNumber] = [];
         
-        // Generate random pairings for this specific round
-        const roundPairings = this.generateRandomPairings(availableTeams);
+        // Generate random pairings for this round (each team plays once)
+        const roundPairings = this.generateRandomPairings([...selectedTeams]);
+        
+        console.log(`\n🔄 Round ${roundNumber}: generating ${roundPairings.length} pairings`);
+        
+        // Track excluded team for this round
+        let excludedTeam = null;
         
         // Create matches for this round
         for (const pairing of roundPairings) {
-          // Skip bye matches (when teamB is null)
+          // Handle bye (when odd number of teams)
           if (!pairing.teamB) {
-            console.log(`Team ${pairing.teamA.name} has a bye in Round ${roundNumber}`);
+            excludedTeam = pairing.teamA.name;
+            console.log(`${pairing.teamA.name} sits out Round ${roundNumber}`);
             continue;
           }
           
@@ -5760,9 +5824,15 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             await this.matchService.createEventMatch(this.currentEventId, matchData);
             roundDistribution[roundNumber].push(`${pairing.teamA.name} vs ${pairing.teamB.name}`);
             totalCreatedCount++;
+            
+            console.log(`✅ Created: ${pairing.teamA.name} vs ${pairing.teamB.name}`);
           } catch (error) {
-            console.error('Error creating match:', error);
+            console.error(`❌ Failed to create match ${pairing.teamA.name} vs ${pairing.teamB.name}:`, error);
           }
+        }
+        
+        if (excludedTeam) {
+          excludedTeamsPerRound.push(`Round ${roundNumber}: ${excludedTeam}`);
         }
         
         console.log(`Round ${roundNumber}: created ${roundDistribution[roundNumber].length} matches`);
@@ -5775,7 +5845,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
       
       // Create detailed success message
-      let message = `Successfully generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds (${matchesPerRound} matches per round).\n\nDistribution:`;
+      let message = `Successfully generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds (${matchesPerRound} matches per round).\n\nEach team plays exactly once per round.\n\nDistribution:`;
       
       for (const [round, matches] of Object.entries(roundDistribution)) {
         message += `\n\nRound ${round} (${matches.length} matches):`;
@@ -5784,14 +5854,17 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         });
       }
       
-      if (excludedTeams.length > 0) {
-        message += `\n\nExcluded teams (odd number): ${excludedTeams.join(', ')}`;
+      if (excludedTeamsPerRound.length > 0) {
+        message += `\n\nTeams sitting out:`;
+        excludedTeamsPerRound.forEach(exclusion => {
+          message += `\n• ${exclusion}`;
+        });
       }
       
-      this.ui.showSuccess('Random Matches Generated', message);
+      this.ui.showSuccess('Round Robin Generated', message);
       
     } catch (error) {
-      console.error('Error generating random matches for multiple rounds:', error);
+      console.error('Error generating Round Robin matches:', error);
       throw error;
     }
   }
@@ -5817,10 +5890,36 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Update team list in Swiss modal
+   */
+  updateSwissTeamList() {
+    // Find the parent container of team checkboxes by looking for selectedTeams inputs
+    const firstTeamCheckbox = document.querySelector('#swissModal input[name="selectedTeams"]');
+    const teamContainer = firstTeamCheckbox?.closest('.space-y-2');
+    if (!teamContainer) return;
+
+    teamContainer.innerHTML = this.teams.map(team => `
+      <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+        <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+        <div>
+          <div class="text-sm font-medium text-gray-900">${team.name}</div>
+          <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+        </div>
+      </label>
+    `).join('');
+
+    // Re-setup event listeners for the new checkboxes
+    this.addSwissEventListeners();
+  }
+
+  /**
    * Show Swiss Tournament modal
    */
   showSwissModal() {
     this.showModal('swissModal');
+    
+    // Update team list with latest data
+    this.updateSwissTeamList();
     
     // Reset form when opening
     const form = document.getElementById('swissForm');
@@ -6489,6 +6588,14 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         ` : ''}
       </div>
     `;
+  }
+
+  /**
+   * Test error modal - for debugging purposes
+   */
+  testErrorModal() {
+    console.log('🧪 Testing error modal...');
+    this.ui.showError('Error', 'Cannot create repeated match');
   }
 }
 

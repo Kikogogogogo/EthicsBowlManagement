@@ -242,6 +242,12 @@ class UserService {
         throw new Error('Invalid role provided');
       }
 
+      // Prevent admin users from being downgraded to non-admin roles
+      if (role && existingUser.role === USER_ROLES.ADMIN && role !== USER_ROLES.ADMIN) {
+        console.log('Attempt to downgrade admin user:', { userId, currentRole: existingUser.role, newRole: role });
+        throw new Error('Admin users cannot be downgraded to moderator or judge roles');
+      }
+
       const updatePayload = {};
       if (firstName !== undefined) updatePayload.firstName = firstName;
       if (lastName !== undefined) updatePayload.lastName = lastName;

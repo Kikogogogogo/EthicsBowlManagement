@@ -179,6 +179,9 @@ class UserController {
       } else if (error.message.includes('Invalid role')) {
         statusCode = 400;
         errorCode = 'INVALID_ROLE';
+      } else if (error.message.includes('cannot be downgraded')) {
+        statusCode = 403;
+        errorCode = 'ADMIN_DOWNGRADE_FORBIDDEN';
       }
       
       res.status(statusCode).json({

@@ -1003,9 +1003,34 @@ class UsersPage {
       document.getElementById('user-last-name').value = user.lastName || '';
       document.getElementById('user-role').value = user.role || '';
       document.getElementById('user-is-active').checked = user.isActive;
+      
+      // Protect admin users from being downgraded
+      const roleSelect = document.getElementById('user-role');
+      if (user.role === 'admin') {
+        // Disable role selection for admin users
+        roleSelect.disabled = true;
+        roleSelect.title = 'Admin users cannot be downgraded to other roles';
+        
+        // Add visual indication
+        roleSelect.style.backgroundColor = '#f9fafb';
+        roleSelect.style.cursor = 'not-allowed';
+      } else {
+        // Enable role selection for non-admin users
+        roleSelect.disabled = false;
+        roleSelect.title = '';
+        roleSelect.style.backgroundColor = '';
+        roleSelect.style.cursor = '';
+      }
     } else {
       this.editingUserId = null;
       document.getElementById('user-is-active').checked = true;
+      
+      // Enable role selection for new users
+      const roleSelect = document.getElementById('user-role');
+      roleSelect.disabled = false;
+      roleSelect.title = '';
+      roleSelect.style.backgroundColor = '';
+      roleSelect.style.cursor = '';
     }
     
     modal.classList.remove('hidden');
@@ -1053,6 +1078,15 @@ class UsersPage {
       return;
     }
 
+    // Prevent admin users from being downgraded (client-side validation)
+    if (this.editingUserId) {
+      const currentUser = this.users.find(u => u.id === this.editingUserId);
+      if (currentUser && currentUser.role === 'admin' && userData.role !== 'admin') {
+        this.showError('Admin users cannot be downgraded to moderator or judge roles');
+        return;
+      }
+    }
+
     this.isOperationInProgress = true;
     const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
@@ -1079,7 +1113,12 @@ class UsersPage {
         data: error.data
       }); // Debug log
       
-      this.showError(error.message || 'Failed to update user');
+      // Check for specific admin downgrade error
+      if (error.message && error.message.includes('cannot be downgraded')) {
+        this.showError('Admin users cannot be downgraded to moderator or judge roles');
+      } else {
+        this.showError(error.message || 'Failed to update user');
+      }
     } finally {
       this.isOperationInProgress = false;
       submitBtn.textContent = originalText;
