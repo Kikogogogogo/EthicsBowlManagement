@@ -1,6 +1,13 @@
 # Ethics Bowl Management System
 
 A comprehensive web application for managing Ethics Bowl tournaments, providing tools for event organization, team management, match scheduling, scoring, and real-time updates.
+<img width="936" height="737" alt="5ffcea5abd3c083668ad30ebb5fa7f5" src="https://github.com/user-attachments/assets/734c5c6f-596a-421e-b8b4-79614323efc5" />
+
+<img width="940" height="745" alt="24e7683457b2699384145e21d313a58" src="https://github.com/user-attachments/assets/038cfb3c-da1c-4d6a-ad5d-ce2e3d60a833" />
+
+<img width="938" height="650" alt="4b70e57bef599d736756bd675aeecce" src="https://github.com/user-attachments/assets/5565b1f9-29c9-4080-ab77-cab64c4a0f62" />
+
+
 
 ## Features
 
