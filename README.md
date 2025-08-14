@@ -278,6 +278,16 @@ We welcome contributions! Please follow these guidelines:
 - Test new features thoroughly
 - Update documentation as needed
 
+### Suggested Improvement
+- **Restrict access for judges and moderators** – Each moderator or judge should only be able to access the event space(s) they are specifically assigned to.  
+- **Allow judge management in ongoing events** – Admin users should be able to modify an ongoing match, such as adding a fourth judge or replacing an existing judge, and removing previously submitted scores if needed.  
+- **Provide a predefined room list** – When creating a match for an event, allow selection from a predefined list of rooms.  
+- **Prevent duplicate team assignments** – Display an error if the same team is assigned more than once in a single round, regardless of whether they compete against the same or a different team.  
+- **Enable round-specific scheduling** – Allow setting a specific start time for each round, ensuring all matches in that round begin within the same time window.  
+- **Moderator scoring access** – Allow moderators to view the scoring results for the matches they are assigned to.  
+- **Expand login options** – Support username/password authentication in addition to Google sign-in.  
+- **Stage-based scoring** – Allow judges to assign scores to different questions in different stages, based on the stage set by the moderator.  
+  
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
