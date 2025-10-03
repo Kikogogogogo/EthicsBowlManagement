@@ -47,7 +47,103 @@ class EventWorkspacePage {
     // Team data change handler for cross-page synchronization
     this.teamDataChangeHandler = null;
     
+    // Auto-refresh functionality
+    this.autoRefreshInterval = null;
+    this.autoRefreshEnabled = false;
+    this.refreshInterval = 30000; // 30 seconds default
+    this.lastRefreshTime = null;
+    
     this.initializeEventListeners();
+  }
+
+  /**
+   * Start auto-refresh functionality
+   */
+  startAutoRefresh() {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+    }
+    
+    this.autoRefreshInterval = setInterval(async () => {
+      if (this.autoRefreshEnabled && !this.isOperationInProgress) {
+        console.log('🔄 Auto-refreshing event data...');
+        await this.refreshEventData();
+      }
+    }, this.refreshInterval);
+    
+    console.log(`🔄 Auto-refresh started with ${this.refreshInterval/1000}s interval`);
+  }
+
+  /**
+   * Stop auto-refresh functionality
+   */
+  stopAutoRefresh() {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
+      console.log('🔄 Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Refresh event data and update UI
+   */
+  async refreshEventData() {
+    try {
+      console.log('🔄 Refreshing event data...');
+      
+      // Reload event data
+      await this.loadEventData();
+      
+      // Update last refresh time
+      this.lastRefreshTime = Date.now();
+      
+      // Update the last refresh time display
+      const lastRefreshElement = document.getElementById('last-refresh-time');
+      if (lastRefreshElement) {
+        lastRefreshElement.textContent = `Last: ${new Date(this.lastRefreshTime).toLocaleTimeString()}`;
+      }
+      
+      // Re-render current tab content
+      const workspaceContent = document.getElementById('workspace-content');
+      if (workspaceContent) {
+        workspaceContent.innerHTML = this.renderTabContent();
+      }
+      
+      console.log('✅ Event data refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to refresh event data:', error);
+    }
+  }
+
+  /**
+   * Handle manual refresh button click
+   */
+  async handleManualRefresh() {
+    const refreshBtn = document.getElementById('manual-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = `
+        <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Refreshing...</span>
+      `;
+    }
+    
+    try {
+      await this.refreshEventData();
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          <span>Refresh</span>
+        `;
+      }
+    }
   }
 
   /**
@@ -280,6 +376,53 @@ class EventWorkspacePage {
     document.addEventListener('click', criteriaClickHandler);
     this.eventListeners.push({ type: 'click', handler: criteriaClickHandler });
 
+    // Refresh controls - only for workspace elements
+    const refreshClickHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle clicks within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
+      if (e.target.matches('#manual-refresh-btn') || e.target.closest('#manual-refresh-btn')) {
+        e.preventDefault();
+        this.handleManualRefresh();
+      }
+    };
+    document.addEventListener('click', refreshClickHandler);
+    this.eventListeners.push({ type: 'click', handler: refreshClickHandler });
+
+    // Auto-refresh toggle and interval change
+    const refreshChangeHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      // Only handle changes within the workspace page
+      if (!e.target.closest('#event-workspace-page')) return;
+      
+      if (e.target.matches('#auto-refresh-toggle')) {
+        this.autoRefreshEnabled = e.target.checked;
+        if (this.autoRefreshEnabled) {
+          this.startAutoRefresh();
+        } else {
+          this.stopAutoRefresh();
+        }
+        console.log('🔄 Auto-refresh', this.autoRefreshEnabled ? 'enabled' : 'disabled');
+      }
+      
+      if (e.target.matches('#refresh-interval')) {
+        this.refreshInterval = parseInt(e.target.value);
+        if (this.autoRefreshEnabled) {
+          this.startAutoRefresh(); // Restart with new interval
+        }
+        console.log('🔄 Refresh interval changed to', this.refreshInterval/1000 + 's');
+      }
+    };
+    document.addEventListener('change', refreshChangeHandler);
+    this.eventListeners.push({ type: 'change', handler: refreshChangeHandler });
+
     // Update score calculation when input changes - only for workspace inputs
     const inputChangeHandler = (e) => {
       // Check if workspace page is currently visible
@@ -450,6 +593,9 @@ class EventWorkspacePage {
     
     // Remove team data change listener
     this.removeTeamDataChangeListener();
+    
+    // Stop auto-refresh
+    this.stopAutoRefresh();
     
     // Clear cleanup flag
     this.isCleaningUp = false;
@@ -1379,6 +1525,21 @@ class EventWorkspacePage {
       `;
     } else if (isJudge) {
       const isAdminInJudgeView = currentUser.role === 'admin' && effectiveRole === 'judge';
+      
+      // Get judge number from first match assignment
+      let judgeNumber = null;
+      if (this.matches.length > 0) {
+        const firstMatch = this.matches[0];
+        if (firstMatch.assignments) {
+          const userAssignment = firstMatch.assignments.find(a => a.judge?.id === currentUser.id);
+          if (userAssignment && userAssignment.judgeNumber) {
+            judgeNumber = userAssignment.judgeNumber;
+          }
+        }
+      }
+      
+      const judgeNumberText = judgeNumber ? ` (Judge ${judgeNumber})` : '';
+      
       roleInfo = `
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div class="flex items-center">
@@ -1389,10 +1550,19 @@ class EventWorkspacePage {
             </div>
             <div class="ml-3">
               <h3 class="text-sm font-medium text-blue-800">
-                ${isAdminInJudgeView ? 'Admin - Judge View' : `Welcome, Judge ${currentUser.firstName}!`}
+                ${isAdminInJudgeView ? `Admin - Judge View${judgeNumberText}` : `Welcome, Judge ${currentUser.firstName}${judgeNumberText}!`}
               </h3>
               <div class="mt-2 text-sm text-blue-700">
-                <p>You are assigned to ${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in this event.</p>
+                <p>You are assigned to ${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in this event${judgeNumberText}.</p>
+                ${judgeNumber ? `
+                  <div class="mt-3 p-3 bg-blue-100 border border-blue-300 rounded-md">
+                    <p class="font-medium text-blue-900">📋 Scoring Rules:</p>
+                    <ul class="mt-1 text-blue-800 text-xs space-y-1">
+                      <li>• You can score questions at any time</li>
+                      <li>• You can only <strong>submit scores</strong> during the final scoring stage</li>
+                    </ul>
+                  </div>
+                ` : ''}
                 ${isAdminInJudgeView && totalMatches === 0 ? `
                   <p class="mt-1 text-blue-600">
                     💡 You're not assigned as a judge to any matches. Switch to Admin View to assign yourself to matches.
@@ -1673,8 +1843,41 @@ class EventWorkspacePage {
       matchesByRound[roundNum].push(match);
     });
 
+    // Get judge number for judge view
+    let judgeNumber = null;
+    if (isJudge && this.matches.length > 0) {
+      const firstMatch = this.matches[0];
+      if (firstMatch.assignments) {
+        const userAssignment = firstMatch.assignments.find(a => a.judge?.id === currentUser.id);
+        if (userAssignment && userAssignment.judgeNumber) {
+          judgeNumber = userAssignment.judgeNumber;
+        }
+      }
+    }
+
     return `
       <div class="space-y-6">
+        <!-- Judge Assignment Notice -->
+        ${isJudge && judgeNumber ? `
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-900">
+                  You have been assigned as Judge ${judgeNumber}
+                </h3>
+                <div class="mt-2 text-sm text-blue-700">
+                  <p>You can score questions at any time, but can only submit scores during the final scoring stage.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Admin Actions -->
         ${isAdmin ? `
           <div class="bg-white border border-gray-300 p-4 rounded-lg">
@@ -1696,21 +1899,50 @@ class EventWorkspacePage {
           </div>
         ` : ''}
 
-        <!-- Filters -->
+        <!-- Filters and Refresh Controls -->
         <div class="bg-white border border-gray-300 p-4 rounded-lg">
-          <div class="flex space-x-4">
-            <select id="roundFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
-              <option value="">All Rounds</option>
-              ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
-                `<option value="${round}">Round ${round}</option>`
-              ).join('')}
-            </select>
-            <select id="statusFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
-              <option value="">All Status</option>
-              ${this.generateMatchStatusOptions(3).map(option => 
-                `<option value="${option.value}">${option.text}</option>`
-              ).join('')}
-            </select>
+          <div class="flex items-center justify-between">
+            <div class="flex space-x-4">
+              <select id="roundFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                <option value="">All Rounds</option>
+                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
+                  `<option value="${round}">Round ${round}</option>`
+                ).join('')}
+              </select>
+              <select id="statusFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                <option value="">All Status</option>
+                ${this.generateMatchStatusOptions(3).map(option => 
+                  `<option value="${option.value}">${option.text}</option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <!-- Refresh Controls -->
+            <div class="flex items-center space-x-3">
+              <button id="manual-refresh-btn" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <span>Refresh</span>
+              </button>
+              
+              <div class="flex items-center space-x-2">
+                <label class="flex items-center space-x-2 text-sm">
+                  <input type="checkbox" id="auto-refresh-toggle" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${this.autoRefreshEnabled ? 'checked' : ''}>
+                  <span>Auto-refresh</span>
+                </label>
+                <select id="refresh-interval" class="text-xs border-gray-300 rounded focus:border-gray-500 focus:ring-gray-500">
+                  <option value="10000" ${this.refreshInterval === 10000 ? 'selected' : ''}>10s</option>
+                  <option value="30000" ${this.refreshInterval === 30000 ? 'selected' : ''}>30s</option>
+                  <option value="60000" ${this.refreshInterval === 60000 ? 'selected' : ''}>1m</option>
+                  <option value="120000" ${this.refreshInterval === 120000 ? 'selected' : ''}>2m</option>
+                </select>
+              </div>
+              
+              <div id="last-refresh-time" class="text-xs text-gray-500">
+                ${this.lastRefreshTime ? `Last: ${new Date(this.lastRefreshTime).toLocaleTimeString()}` : ''}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -4210,9 +4442,11 @@ class EventWorkspacePage {
           // Get scores for the match
           const scoresResponse = await this.scoreService.getMatchScores(matchId);
           const scores = scoresResponse.data?.scores || scoresResponse.scores || scoresResponse.data || scoresResponse || [];
+          const voteScores = scoresResponse.data?.voteScores || scoresResponse.voteScores || null;
           
           console.log('Scores response for match', matchId, ':', scoresResponse);
           console.log('Parsed scores:', scores);
+          console.log('Vote scores:', voteScores);
 
           // Ensure scores is an array
           const scoresArray = Array.isArray(scores) ? scores : [];
@@ -4220,10 +4454,10 @@ class EventWorkspacePage {
           // Update the modal content if it exists and is for the correct match
           const modal = document.getElementById('viewScoresModal');
           if (modal && modal.style.display === 'flex' && this.currentViewingMatchId === matchId) {
-            this.updateScoresModalContent(match, scoresArray);
+            this.updateScoresModalContent(match, scoresArray, voteScores);
           }
 
-          return scoresArray;
+          return { scores: scoresArray, voteScores };
         } catch (error) {
           console.error('Error fetching scores for match', matchId, ':', error);
           return [];
@@ -4277,10 +4511,12 @@ class EventWorkspacePage {
       modal.style.display = 'flex';
 
       // Initial fetch and display
-      const scoresArray = await fetchAndDisplayScores();
+      const result = await fetchAndDisplayScores();
+      const scoresArray = result.scores || result;
+      const voteScores = result.voteScores || null;
       
       // Use the consistent updateScoresModalContent method for initial display
-      this.updateScoresModalContent(match, scoresArray);
+      this.updateScoresModalContent(match, scoresArray, voteScores);
 
       // Set up auto-refresh with proper cleanup
       this.currentScoresInterval = setInterval(async () => {
@@ -5133,7 +5369,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   /**
    * Update scores modal content
    */
-  updateScoresModalContent(match, scoresArray) {
+  updateScoresModalContent(match, scoresArray, voteScores = null) {
+    // Save current scroll position before updating content
+    const existingModal = document.getElementById('viewScoresModal');
+    const scrollContainer = existingModal?.querySelector('.overflow-y-auto');
+    const currentScrollTop = scrollContainer?.scrollTop || 0;
+    
     // Get team names
     const teamA = this.teams.find(t => t.id === match.teamAId);
     const teamB = this.teams.find(t => t.id === match.teamBId);
@@ -5302,6 +5543,26 @@ Note: Judges typically score each question individually (First, Second, Third Qu
               `;
             }).join('')}
             
+            ${voteScores ? `
+              <div class="mt-6 pt-4 border-t border-gray-200">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 class="text-lg font-medium text-blue-900 mb-3">Match Vote Results</h3>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                      <div class="text-sm text-blue-700 mb-1">${teamA?.name || 'Team A'}</div>
+                      <div class="text-2xl font-bold text-blue-900">${voteScores.teamA?.votes || 0}</div>
+                      <div class="text-xs text-blue-600">votes</div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-sm text-blue-700 mb-1">${teamB?.name || 'Team B'}</div>
+                      <div class="text-2xl font-bold text-blue-900">${voteScores.teamB?.votes || 0}</div>
+                      <div class="text-xs text-blue-600">votes</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+            
           </div>
         </div>
       </div>
@@ -5311,6 +5572,17 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const modal = document.getElementById('viewScoresModal');
     if (modal) {
       modal.innerHTML = modalContent;
+      
+      // Restore scroll position after content update
+      if (currentScrollTop > 0) {
+        const newScrollContainer = modal.querySelector('.overflow-y-auto');
+        if (newScrollContainer) {
+          // Use setTimeout to ensure DOM is fully updated
+          setTimeout(() => {
+            newScrollContainer.scrollTop = currentScrollTop;
+          }, 0);
+        }
+      }
     }
   }
 
@@ -5520,7 +5792,30 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
   renderWideStandingRow(standing, index) {
     const teamId = standing.team.id;
-    const winRate = standing.totalMatches > 0 ? ((standing.wins / standing.totalMatches) * 100).toFixed(1) : 0;
+    
+    // Calculate actual wins, losses, and draws from match results
+    const teamMatches = this.matches.filter(m => 
+      (m.teamAId === teamId || m.teamBId === teamId) && m.status === 'completed'
+    );
+    
+    let actualWins = 0;
+    let actualLosses = 0;
+    let actualDraws = 0;
+    
+    teamMatches.forEach(match => {
+      const matchResult = this.calculateMatchResultForTeam(match, teamId);
+      if (matchResult.isWinner) {
+        actualWins++;
+      } else if (matchResult.isDraw) {
+        actualDraws++;
+      } else {
+        actualLosses++;
+      }
+    });
+    
+    // Calculate win rate based on actual results (including draws as 0.5)
+    const winRate = teamMatches.length > 0 ? 
+      ((actualWins + actualDraws * 0.5) / teamMatches.length * 100).toFixed(1) : 0;
     
     return `
       <tr class="hover:bg-gray-50 transition-colors ${index < 3 ? 'bg-yellow-50' : ''}">
@@ -5544,8 +5839,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           </div>
         </td>
         <td class="px-6 py-4 whitespace-nowrap text-center">
-          <div class="text-sm font-medium text-gray-900">${standing.wins}-${standing.totalMatches - standing.wins}</div>
-          <div class="text-xs text-gray-500">${standing.totalMatches} matches</div>
+          <div class="text-sm font-medium text-gray-900">${actualWins}-${actualLosses}</div>
+          <div class="text-xs text-gray-500">${teamMatches.length} matches</div>
         </td>
         <td class="px-6 py-4 whitespace-nowrap text-center">
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -5869,6 +6164,88 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Calculate match result for a team (simplified version of backend logic)
+   */
+  calculateMatchResultForTeam(match, teamId) {
+    const isTeamA = match.teamAId === teamId;
+    const opponentId = isTeamA ? match.teamBId : match.teamAId;
+    
+    // Get scores for this team and opponent
+    const teamScores = match.scores?.filter(score => score.teamId === teamId) || [];
+    const opponentScores = match.scores?.filter(score => score.teamId === opponentId) || [];
+    
+    if (teamScores.length === 0 || opponentScores.length === 0) {
+      // No scores available, use simple winner logic
+      const isWinner = match.winnerId === teamId;
+      return {
+        result: isWinner ? 'W' : 'L',
+        isWinner,
+        isDraw: false
+      };
+    }
+    
+    // Calculate total scores using the same formula as backend
+    const teamTotal = teamScores.reduce((sum, score) => {
+      let total = 0;
+      
+      // Add criteria scores
+      if (score.criteriaScores) {
+        const criteriaScores = typeof score.criteriaScores === 'string' 
+          ? JSON.parse(score.criteriaScores) 
+          : score.criteriaScores;
+        total += Object.values(criteriaScores).reduce((s, value) => s + (value || 0), 0);
+      }
+      
+      // Add average of comment scores
+      if (score.commentScores) {
+        const commentScores = typeof score.commentScores === 'string' 
+          ? JSON.parse(score.commentScores) 
+          : score.commentScores;
+        if (Array.isArray(commentScores) && commentScores.length > 0) {
+          const commentAverage = commentScores.reduce((s, value) => s + (value || 0), 0) / commentScores.length;
+          total += commentAverage;
+        }
+      }
+      
+      return sum + total;
+    }, 0);
+    
+    const opponentTotal = opponentScores.reduce((sum, score) => {
+      let total = 0;
+      
+      // Add criteria scores
+      if (score.criteriaScores) {
+        const criteriaScores = typeof score.criteriaScores === 'string' 
+          ? JSON.parse(score.criteriaScores) 
+          : score.criteriaScores;
+        total += Object.values(criteriaScores).reduce((s, value) => s + (value || 0), 0);
+      }
+      
+      // Add average of comment scores
+      if (score.commentScores) {
+        const commentScores = typeof score.commentScores === 'string' 
+          ? JSON.parse(score.commentScores) 
+          : score.commentScores;
+        if (Array.isArray(commentScores) && commentScores.length > 0) {
+          const commentAverage = commentScores.reduce((s, value) => s + (value || 0), 0) / commentScores.length;
+          total += commentAverage;
+        }
+      }
+      
+      return sum + total;
+    }, 0);
+    
+    // Determine result
+    if (teamTotal > opponentTotal) {
+      return { result: 'W', isWinner: true, isDraw: false };
+    } else if (teamTotal < opponentTotal) {
+      return { result: 'L', isWinner: false, isDraw: false };
+    } else {
+      return { result: 'D', isWinner: false, isDraw: true };
+    }
+  }
+
+  /**
    * Toggle team details in wide table
    */
   toggleTeamDetails(teamId) {
@@ -5908,14 +6285,15 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         this.teams.find(t => t.id === match.teamBId) :
         this.teams.find(t => t.id === match.teamAId);
       
-      const isWinner = match.winnerId === teamId;
-      const result = isWinner ? 'W' : 'L';
+      // Calculate match result using the same logic as backend
+      const matchResult = this.calculateMatchResultForTeam(match, teamId);
       
       return {
         match,
         opponent: opponent || { name: 'Unknown Team', school: '' },
-        result,
-        isWinner,
+        result: matchResult.result,
+        isWinner: matchResult.isWinner,
+        isDraw: matchResult.isDraw,
         round: match.roundNumber,
         room: match.location || 'No location assigned'
       };
@@ -5938,7 +6316,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               ${matchDetails.map(detail => `
-                <tr class="${detail.isWinner ? 'bg-green-50' : 'bg-red-50'}">
+                <tr class="${detail.isWinner ? 'bg-green-50' : detail.isDraw ? 'bg-yellow-50' : 'bg-red-50'}">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900">Round ${detail.round}</td>
                   <td class="px-4 py-3">
                     <div class="text-sm font-medium text-gray-900">${detail.opponent.name}</div>
@@ -5946,7 +6324,9 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                   </td>
                   <td class="px-4 py-3 text-center">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      detail.isWinner ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      detail.isWinner ? 'bg-green-100 text-green-800' : 
+                      detail.isDraw ? 'bg-yellow-100 text-yellow-800' : 
+                      'bg-red-100 text-red-800'
                     }">
                       ${detail.result}
                     </span>
@@ -5965,15 +6345,15 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             <div class="text-xs text-gray-500">Wins</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-red-600">${matchDetails.filter(d => !d.isWinner).length}</div>
+            <div class="text-xl font-bold text-red-600">${matchDetails.filter(d => !d.isWinner && !d.isDraw).length}</div>
             <div class="text-xs text-gray-500">Losses</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-gray-900">${matchDetails.length}</div>
-            <div class="text-xs text-gray-500">Total</div>
+            <div class="text-xl font-bold text-yellow-600">${matchDetails.filter(d => d.isDraw).length}</div>
+            <div class="text-xs text-gray-500">Draws</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-blue-600">${matchDetails.length > 0 ? ((matchDetails.filter(d => d.isWinner).length / matchDetails.length) * 100).toFixed(1) : 0}%</div>
+            <div class="text-xl font-bold text-blue-600">${matchDetails.length > 0 ? ((matchDetails.filter(d => d.isWinner).length + matchDetails.filter(d => d.isDraw).length * 0.5) / matchDetails.length * 100).toFixed(1) : 0}%</div>
             <div class="text-xs text-gray-500">Win Rate</div>
           </div>
         </div>

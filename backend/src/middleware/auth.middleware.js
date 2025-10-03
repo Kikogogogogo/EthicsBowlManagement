@@ -10,10 +10,14 @@ const { USER_ROLES } = require('../constants/enums');
  */
 async function authenticateToken(req, res, next) {
   try {
+    console.log('🔍 [Auth] authenticateToken called for:', req.path);
     const authHeader = req.headers.authorization;
+    console.log('🔍 [Auth] Authorization header:', authHeader ? 'Present' : 'Missing');
     const token = JWTUtil.extractTokenFromHeader(authHeader);
+    console.log('🔍 [Auth] Extracted token:', token ? 'Present' : 'Missing');
     
     if (!token) {
+      console.log('❌ [Auth] No token found');
       return res.status(401).json({
         success: false,
         message: 'Access token is required',
@@ -60,6 +64,12 @@ async function authenticateToken(req, res, next) {
     // Attach user to request object
     req.user = user;
     req.token = decoded;
+    
+    console.log('✅ [Auth] User authenticated:', {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
     
     next();
   } catch (error) {
@@ -232,6 +242,55 @@ function requireOwnershipOrAdmin(resourceParam = 'id', ownerField = 'id') {
 }
 
 /**
+ * Middleware to allow virtual test users or admin access
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+function requireVirtualTestUserOrAdmin(req, res, next) {
+  console.log('🔍 [Auth] requireVirtualTestUserOrAdmin called for:', req.path);
+  console.log('🔍 [Auth] req.user:', req.user ? {
+    id: req.user.id,
+    email: req.user.email,
+    role: req.user.role
+  } : 'null');
+  
+  if (!req.user) {
+    console.log('❌ [Auth] No user found in request');
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required',
+      error: 'NOT_AUTHENTICATED'
+    });
+  }
+  
+  // Admin can access
+  if (req.user.role === USER_ROLES.ADMIN) {
+    console.log('✅ [Auth] Admin user granted access');
+    return next();
+  }
+  
+  // Virtual test users can access
+  if (req.user.email && req.user.email.includes('@virtual.test')) {
+    console.log('✅ [Auth] Virtual test user granted access');
+    return next();
+  }
+  
+  console.log('❌ [Auth] Access denied for user:', {
+    role: req.user.role,
+    email: req.user.email,
+    expectedRole: USER_ROLES.ADMIN
+  });
+  
+  return res.status(403).json({
+    success: false,
+    message: 'Insufficient permissions. Only admins and virtual test users can access this resource.',
+    error: 'INSUFFICIENT_PERMISSIONS',
+    current: req.user.role
+  });
+}
+
+/**
  * Middleware to check if user has access to a specific event
  * @param {string} eventIdParam - Parameter name containing event ID (default: 'eventId')
  * @returns {Function} Express middleware function
@@ -376,5 +435,6 @@ module.exports = {
   requireAuthenticated,
   optionalAuth,
   requireOwnershipOrAdmin,
+  requireVirtualTestUserOrAdmin,
   requireEventAccess
 }; 

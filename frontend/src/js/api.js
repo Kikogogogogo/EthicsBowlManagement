@@ -745,6 +745,16 @@ class ScoreService {
   }
 
   /**
+   * Save multiple draft scores
+   */
+  async saveDraftScores(matchId, scoresData) {
+    const promises = scoresData.map(scoreData => 
+      this.api.post(ENDPOINTS.scores.saveDraft(matchId), scoreData)
+    );
+    return Promise.all(promises);
+  }
+
+  /**
    * Update a score before submission
    */
   async updateScore(matchId, scoreId, scoreData) {

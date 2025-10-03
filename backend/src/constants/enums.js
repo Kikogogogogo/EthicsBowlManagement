@@ -222,19 +222,9 @@ function canModeratorAdvance(status) {
  * @param {number} judgeCount - Total number of judges
  * @returns {boolean} Whether the judge can submit scores
  */
-function isJudgeInScoringStage(matchStatus, judgePosition, judgeCount) {
-  // Check if it's a judge question status
-  const judgeMatch = matchStatus.match(/^judge_(\d+)_(\d+)$/);
-  if (judgeMatch) {
-    const period = parseInt(judgeMatch[1]);
-    const questionNum = parseInt(judgeMatch[2]);
-    
-    // Judge can submit if it's their specific question
-    return questionNum === judgePosition;
-  }
-  
-  // For non-judge stages, judges can only save drafts
-  return false;
+function isJudgeInScoringStage(matchStatus, judgeNumber, judgeCount) {
+  // Judges can only submit scores during final_scoring stage
+  return matchStatus === MATCH_STATUSES.FINAL_SCORING;
 }
 
 /**
@@ -243,7 +233,7 @@ function isJudgeInScoringStage(matchStatus, judgePosition, judgeCount) {
  * @returns {boolean} Whether the judge can save draft scores
  */
 function canJudgeSaveDraft(matchStatus) {
-  // Judges can save drafts from moderator_period_1 onwards
+  // Judges can save drafts from moderator_period_1 onwards until final_scoring
   const draftSavingStatuses = [
     MATCH_STATUSES.MODERATOR_PERIOD_1,
     MATCH_STATUSES.TEAM_A_CONFERRAL_1_1,
@@ -258,8 +248,7 @@ function canJudgeSaveDraft(matchStatus) {
     MATCH_STATUSES.TEAM_A_CONFERRAL_2_1,
     MATCH_STATUSES.TEAM_A_COMMENTARY,
     MATCH_STATUSES.TEAM_B_CONFERRAL_2_2,
-    MATCH_STATUSES.TEAM_B_RESPONSE,
-    MATCH_STATUSES.FINAL_SCORING
+    MATCH_STATUSES.TEAM_B_RESPONSE
   ];
 
   // Check if it's a judge question status

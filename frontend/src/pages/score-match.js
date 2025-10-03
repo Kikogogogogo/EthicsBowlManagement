@@ -16,6 +16,7 @@ class ScoreMatchPage {
     this.scores = [];
     this.scoresSubmitted = false;
     this.isSubmitting = false;
+    this.isSaving = false;
   }
 
   /**
@@ -242,6 +243,12 @@ class ScoreMatchPage {
     const submitButton = document.querySelector('#submitScoresBtn');
     if (submitButton) {
       submitButton.addEventListener('click', (e) => this.handleSubmitScores(e));
+    }
+
+    // Save draft button
+    const saveDraftButton = document.querySelector('#saveDraftBtn');
+    if (saveDraftButton) {
+      saveDraftButton.addEventListener('click', (e) => this.handleSaveDraft(e));
     }
   }
 
@@ -695,10 +702,19 @@ class ScoreMatchPage {
     const commentMaxScore = this.currentEvent.scoringCriteria?.commentMaxScore || 20;
     const commentInstructions = this.currentEvent.scoringCriteria?.commentInstructions || '';
     
+    // Get judge number from match assignment
+    let judgeNumber = null;
+    if (this.currentMatch.assignments) {
+      const userAssignment = this.currentMatch.assignments.find(a => a.judge?.id === currentUser.id);
+      if (userAssignment && userAssignment.judgeNumber) {
+        judgeNumber = userAssignment.judgeNumber;
+      }
+    }
+    
     // Calculate total possible score
     const totalCriteriaScore = Object.values(criteria).reduce((sum, c) => sum + (c.maxScore || 0), 0);
-    const totalJudgeQuestionsScore = commentQuestionsCount * commentMaxScore;
-    const maxPossibleScore = totalCriteriaScore + totalJudgeQuestionsScore;
+    const averageJudgeQuestionsScore = commentMaxScore; // Average of judge questions (max score per question)
+    const maxPossibleScore = totalCriteriaScore + averageJudgeQuestionsScore;
 
     return `
       <div class="min-h-screen bg-gray-50">
@@ -728,6 +744,27 @@ class ScoreMatchPage {
 
         <!-- Scoring Interface -->
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <!-- Judge Assignment Notice -->
+          ${judgeNumber ? `
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <h3 class="text-sm font-medium text-orange-900">
+                    You are being assigned as Judge ${judgeNumber}
+                  </h3>
+                  <div class="mt-2 text-sm text-orange-800">
+                    <p>You can only submit your score during the final scoring stage</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+          
           <!-- Scoring Information -->
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
             <div class="flex items-start">
@@ -740,9 +777,9 @@ class ScoreMatchPage {
                 <h3 class="text-sm font-medium text-blue-800">Scoring Guidelines</h3>
                 <div class="mt-2 text-sm text-blue-700">
                   <p><strong>Criteria Scores:</strong> ${totalCriteriaScore} points total</p>
-                  <p><strong>Judge Questions:</strong> ${commentQuestionsCount} questions × ${commentMaxScore} points each = ${totalJudgeQuestionsScore} points total</p>
+                  <p><strong>Judge Questions:</strong> ${commentQuestionsCount} questions × ${commentMaxScore} points each = ${commentQuestionsCount * commentMaxScore} points total (average: ${commentMaxScore} points)</p>
                   <p><strong>Maximum Total Score:</strong> ${maxPossibleScore} points</p>
-                  <p class="mt-1 text-xs">Formula: Sum of Criteria Scores + Sum of Judge Question Scores</p>
+                  <p class="mt-1 text-xs">Formula: Sum of Criteria Scores + Average of Judge Question Scores</p>
                 </div>
               </div>
             </div>
@@ -814,9 +851,17 @@ class ScoreMatchPage {
                   Scores Submitted
                 </button>
               ` : `
-                <button type="button" id="submitScoresBtn" disabled class="bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed" title="Please fill in all required fields">
-                  Submit Scores
-                </button>
+                <div class="flex space-x-3">
+                  <button type="button" id="saveDraftBtn" class="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 transition-colors">
+                    <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"/>
+                    </svg>
+                    Save Draft
+                  </button>
+                  <button type="button" id="submitScoresBtn" disabled class="bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed" title="Please fill in all required fields">
+                    Submit Scores
+                  </button>
+                </div>
               `}
             </div>
           </form>
@@ -962,6 +1007,98 @@ class ScoreMatchPage {
   }
 
   /**
+   * Handle save draft button click
+   */
+  async handleSaveDraft(e) {
+    e.preventDefault();
+    
+    const saveButton = document.getElementById('saveDraftBtn');
+    if (!saveButton) {
+      console.error('Save draft button not found');
+      return;
+    }
+    
+    const originalText = saveButton.textContent;
+    const originalClasses = Array.from(saveButton.classList);
+    
+    // Set saving state
+    this.isSaving = true;
+    
+    try {
+      // Update button to loading state
+      saveButton.disabled = true;
+      saveButton.textContent = 'Saving...';
+      saveButton.className = 'bg-gray-600 text-white px-6 py-2 rounded-md cursor-not-allowed';
+
+      // Collect scores for each team
+      const allScores = [];
+      
+      for (const team of this.teams) {
+        if (!team?.id) continue;
+
+        // Collect criteria scores
+        const criteriaScores = {};
+        const criteriaInputs = document.querySelectorAll(`[name^="criteriaScore_${team.id}_"]`);
+        
+        criteriaInputs.forEach(input => {
+          const criteriaKey = input.dataset.criteriaKey;
+          criteriaScores[criteriaKey] = parseFloat(input.value) || 0;
+        });
+
+        // Collect comment scores
+        const commentScores = [];
+        const commentQuestionsCount = this.currentEvent.scoringCriteria?.commentQuestionsCount || 3;
+        
+        for (let i = 0; i < commentQuestionsCount; i++) {
+          const input = document.querySelector(`[name="commentScore_${team.id}_${i}"]`);
+          commentScores.push(parseFloat(input?.value) || 0);
+        }
+
+        // Get notes
+        const notes = document.querySelector(`[name="notes_${team.id}"]`)?.value || '';
+
+        // Create score object
+        const scoreData = {
+          matchId: this.currentMatch.id,
+          teamId: team.id,
+          criteriaScores,
+          commentScores,
+          notes
+        };
+
+        allScores.push(scoreData);
+      }
+
+      // Save all scores as draft
+      const saveResults = await this.scoreService.saveDraftScores(this.currentMatch.id, allScores);
+      console.log('Save draft results:', saveResults);
+      
+      // Check if any save failed
+      const failedResults = saveResults.filter(result => !result?.success);
+      if (failedResults.length > 0) {
+        const errorMessage = failedResults[0]?.message || 'Unknown error';
+        throw new Error('Failed to save draft: ' + errorMessage);
+      }
+
+      // Show success message
+      this.ui.showSuccess('Success', 'Draft scores saved successfully');
+      
+      // Refresh the page to show updated scores
+      await this.refreshScoreData();
+      
+    } catch (error) {
+      console.error('Error saving draft scores:', error);
+      this.ui.showError('Error', 'Failed to save draft scores: ' + error.message);
+    } finally {
+      // Restore button state
+      this.isSaving = false;
+      saveButton.disabled = false;
+      saveButton.textContent = originalText;
+      saveButton.className = originalClasses.join(' ');
+    }
+  }
+
+  /**
    * Update total score calculations
    */
   updateTotalScores() {
@@ -977,17 +1114,21 @@ class ScoreMatchPage {
         criteriaTotal += score;
       });
 
-      // Calculate total judge questions scores (sum, not average)
+      // Calculate average judge questions scores
       const commentInputs = document.querySelectorAll(`[name^="commentScore_${team.id}_"]`);
-      let commentTotal = 0;
+      let commentSum = 0;
+      let commentCount = 0;
       
       commentInputs.forEach(input => {
         const score = parseFloat(input.value) || 0;
-        commentTotal += score;
+        commentSum += score;
+        commentCount++;
       });
       
+      const commentAverage = commentCount > 0 ? commentSum / commentCount : 0;
+      
       // Calculate and display total score
-      const totalScore = criteriaTotal + commentTotal;
+      const totalScore = criteriaTotal + commentAverage;
       const totalDisplay = document.getElementById(`totalScore_${team.id}`);
       
       if (totalDisplay) {

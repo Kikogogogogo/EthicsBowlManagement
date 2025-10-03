@@ -97,7 +97,10 @@ class ScoreService {
         return parsedScore;
       });
 
-      return parsedScores;
+      // Calculate vote scores for each team
+      const voteScores = this.calculateVoteScores(parsedScores, match);
+
+      return { scores: parsedScores, voteScores };
     } catch (error) {
       console.error('Error getting match scores:', error);
       throw error;
@@ -127,7 +130,7 @@ class ScoreService {
       }
 
       // Verify judge is assigned to this match
-      const assignment = await prisma.matchAssignment.findUnique({
+      const judgeAssignment = await prisma.matchAssignment.findUnique({
         where: {
           matchId_judgeId: {
             matchId,
@@ -136,7 +139,7 @@ class ScoreService {
         }
       });
 
-      if (!assignment) {
+      if (!judgeAssignment) {
         // Check if user is admin - admins can score without being assigned
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
@@ -153,17 +156,32 @@ class ScoreService {
         throw new Error('Team does not belong to this match');
       }
 
-      // Get judge position and total judge count
+      // Get judge number from assignment
+      let judgeNumber = null;
+      if (judgeAssignment && judgeAssignment.judgeNumber) {
+        judgeNumber = judgeAssignment.judgeNumber;
+      } else {
+        // For admin users, use position-based numbering
+        const assignments = await prisma.matchAssignment.findMany({
+          where: { matchId },
+          orderBy: { createdAt: 'asc' }
+        });
+        const judgePosition = assignments.findIndex(a => a.judgeId === judgeId) + 1;
+        judgeNumber = judgePosition;
+      }
+
+      if (!judgeNumber) {
+        throw new Error('Judge number not found');
+      }
+
+      // Get total judge count
       const assignments = await prisma.matchAssignment.findMany({
-        where: { matchId },
-        orderBy: { createdAt: 'asc' }
+        where: { matchId }
       });
-      
-      const judgePosition = assignments.findIndex(a => a.judgeId === judgeId) + 1;
       const judgeCount = assignments.length;
       
       // Check if judge is in their scoring stage
-      if (!isJudgeInScoringStage(match.status, judgePosition, judgeCount)) {
+      if (!isJudgeInScoringStage(match.status, judgeNumber, judgeCount)) {
         throw new Error('You can only submit scores during your assigned judge stage');
       }
 
@@ -700,6 +718,92 @@ class ScoreService {
       console.error('Error submitting match scores:', error);
       throw error;
     }
+  }
+
+  /**
+   * Calculate vote scores for each team in a match
+   */
+  calculateVoteScores(scores, match) {
+    const teamAScores = scores.filter(score => score.teamId === match.teamAId);
+    const teamBScores = scores.filter(score => score.teamId === match.teamBId);
+    
+    // Get all judges who have submitted scores for both teams
+    const judgesWithBothScores = [];
+    const allJudgeIds = [...new Set([...teamAScores.map(s => s.judgeId), ...teamBScores.map(s => s.judgeId)])];
+    
+    allJudgeIds.forEach(judgeId => {
+      const teamAScore = teamAScores.find(s => s.judgeId === judgeId);
+      const teamBScore = teamBScores.find(s => s.judgeId === judgeId);
+      
+      if (teamAScore && teamBScore && teamAScore.isSubmitted && teamBScore.isSubmitted) {
+        judgesWithBothScores.push({
+          judgeId,
+          teamAScore,
+          teamBScore
+        });
+      }
+    });
+    
+    // Calculate votes for each team
+    let teamAVotes = 0;
+    let teamBVotes = 0;
+    
+    judgesWithBothScores.forEach(({ teamAScore, teamBScore }) => {
+      const teamATotal = this.calculateTotalScore(teamAScore);
+      const teamBTotal = this.calculateTotalScore(teamBScore);
+      
+      if (teamATotal > teamBTotal) {
+        teamAVotes += 1;
+      } else if (teamBTotal > teamATotal) {
+        teamBVotes += 1;
+      } else {
+        // Equal scores, each gets 0.5 votes
+        teamAVotes += 0.5;
+        teamBVotes += 0.5;
+      }
+    });
+    
+    return {
+      teamA: {
+        teamId: match.teamAId,
+        votes: teamAVotes
+      },
+      teamB: {
+        teamId: match.teamBId,
+        votes: teamBVotes
+      }
+    };
+  }
+
+  /**
+   * Calculate total score from criteria and comment scores
+   */
+  calculateTotalScore(score) {
+    let total = 0;
+    
+    // Parse criteria scores
+    if (score.criteriaScores) {
+      const criteriaScores = typeof score.criteriaScores === 'string' 
+        ? JSON.parse(score.criteriaScores) 
+        : score.criteriaScores;
+      
+      total += Object.values(criteriaScores).reduce((sum, value) => sum + (value || 0), 0);
+    }
+    
+    // Parse comment scores (Judge Questions) - use average
+    if (score.commentScores) {
+      const commentScores = typeof score.commentScores === 'string' 
+        ? JSON.parse(score.commentScores) 
+        : score.commentScores;
+      
+      if (Array.isArray(commentScores) && commentScores.length > 0) {
+        // Calculate average of Judge Questions
+        const commentAverage = commentScores.reduce((sum, value) => sum + (value || 0), 0) / commentScores.length;
+        total += commentAverage;
+      }
+    }
+    
+    return total;
   }
 
   /**

@@ -26,11 +26,11 @@ class ScoreController {
         });
       }
 
-      const scores = await this.scoreService.getMatchScores(matchId, userId, userRole);
+      const result = await this.scoreService.getMatchScores(matchId, userId, userRole);
       
       res.json({
         success: true,
-        data: { scores },
+        data: result,
         message: 'Scores retrieved successfully'
       });
     } catch (error) {

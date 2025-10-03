@@ -117,12 +117,13 @@ model Match {
 }
 
 model MatchAssignment {
-  id        String   @id @default(uuid())
-  matchId   String   @map("match_id")
-  judgeId   String   @map("judge_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  judge     User     @relation(fields: [judgeId], references: [id], onDelete: Cascade)
-  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  matchId     String   @map("match_id")
+  judgeId     String   @map("judge_id")
+  judgeNumber Int?     @map("judge_number") // Judge position number (1, 2, 3)
+  createdAt   DateTime @default(now()) @map("created_at")
+  judge       User     @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, judgeId])
   @@map("match_assignments")

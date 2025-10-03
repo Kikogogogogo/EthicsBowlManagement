@@ -65,7 +65,8 @@ class MatchService {
               judge: {
                 select: { id: true, firstName: true, lastName: true, email: true }
               }
-            }
+            },
+            orderBy: { judgeNumber: 'asc' }
           },
           _count: {
             select: { scores: true }
@@ -423,6 +424,14 @@ class MatchService {
               moderator: {
                 select: { id: true, firstName: true, lastName: true }
               },
+              assignments: {
+                include: {
+                  judge: {
+                    select: { id: true, firstName: true, lastName: true, email: true }
+                  }
+                },
+                orderBy: { judgeNumber: 'asc' }
+              },
               scores: {
                 where: { judgeId: userId },
                 select: { id: true, isSubmitted: true }
@@ -453,6 +462,14 @@ class MatchService {
                   },
                   moderator: {
                     select: { id: true, firstName: true, lastName: true }
+                  },
+                  assignments: {
+                    include: {
+                      judge: {
+                        select: { id: true, firstName: true, lastName: true, email: true }
+                      }
+                    },
+                    orderBy: { judgeNumber: 'asc' }
                   },
                   scores: {
                     where: { judgeId: userId },
@@ -769,11 +786,21 @@ class MatchService {
         throw new Error('Judge does not have access to this event');
       }
 
-      // Add judge assignment
+      // Get current assignments to determine judge number
+      const currentAssignments = await prisma.matchAssignment.findMany({
+        where: { matchId },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      // Determine judge number (1, 2, 3)
+      const judgeNumber = currentAssignments.length + 1;
+
+      // Add judge assignment with judge number
       const assignment = await prisma.matchAssignment.create({
         data: {
           matchId,
-          judgeId
+          judgeId,
+          judgeNumber
         },
         include: {
           judge: {
