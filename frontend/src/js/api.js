@@ -21,7 +21,9 @@ const ENDPOINTS = {
     create: `${API_BASE_URL}/events`,
     get: (id) => `${API_BASE_URL}/events/${id}`,
     update: (id) => `${API_BASE_URL}/events/${id}`,
-    delete: (id) => `${API_BASE_URL}/events/${id}`
+    delete: (id) => `${API_BASE_URL}/events/${id}`,
+    updateRoundSchedules: (id) => `${API_BASE_URL}/events/${id}/round-schedules`,
+    getRoundSchedule: (id, roundNumber) => `${API_BASE_URL}/events/${id}/round-schedules/${roundNumber}`
   },
   teams: {
     listByEvent: (eventId) => `${API_BASE_URL}/events/${eventId}/teams`,
@@ -39,11 +41,27 @@ const ENDPOINTS = {
     updateStatus: (matchId) => `${API_BASE_URL}/matches/${matchId}/status`,
     statusOptions: (matchId) => `${API_BASE_URL}/matches/${matchId}/status-options`,
     assignJudge: (matchId) => `${API_BASE_URL}/matches/${matchId}/assignments`,
-    removeJudge: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/assignments/${judgeId}`
+    removeJudge: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/assignments/${judgeId}`,
+    // New judge management endpoints
+    addJudge: (matchId) => `${API_BASE_URL}/matches/${matchId}/judges`,
+    replaceJudge: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/judges/${judgeId}`,
+    replaceJudgeFlexible: (matchId) => `${API_BASE_URL}/matches/${matchId}/judges/replace`,
+    removeJudgeFromMatch: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/judges/${judgeId}`,
+    removeJudgeScores: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/judges/${judgeId}/scores`,
+    applyRoundSchedule: (eventId, roundNumber) => `${API_BASE_URL}/events/${eventId}/matches/apply-round-schedule/${roundNumber}`
+  },
+  rooms: {
+    list: `${API_BASE_URL}/rooms`,
+    get: (roomId) => `${API_BASE_URL}/rooms/${roomId}`,
+    create: `${API_BASE_URL}/rooms`,
+    update: (roomId) => `${API_BASE_URL}/rooms/${roomId}`,
+    delete: (roomId) => `${API_BASE_URL}/rooms/${roomId}`,
+    available: `${API_BASE_URL}/rooms/available`
   },
   scores: {
     getByMatch: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores`,
     create: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores`,
+    saveDraft: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores/draft`,
     update: (matchId, scoreId) => `${API_BASE_URL}/matches/${matchId}/scores/${scoreId}`,
     submit: (matchId) => `${API_BASE_URL}/matches/${matchId}/scores/submit`,
     delete: (matchId, scoreId) => `${API_BASE_URL}/matches/${matchId}/scores/${scoreId}`
@@ -339,6 +357,22 @@ class EventService {
   async deleteEvent(id) {
     await this.api.delete(ENDPOINTS.events.delete(id));
   }
+
+  /**
+   * Update round schedules for an event
+   */
+  async updateRoundSchedules(eventId, roundSchedules) {
+    const response = await this.api.put(ENDPOINTS.events.updateRoundSchedules(eventId), { roundSchedules });
+    return response.data;
+  }
+
+  /**
+   * Get round schedule for a specific round
+   */
+  async getRoundSchedule(eventId, roundNumber) {
+    const response = await this.api.get(ENDPOINTS.events.getRoundSchedule(eventId, roundNumber));
+    return response.data.roundSchedule;
+  }
 }
 
 /**
@@ -420,6 +454,67 @@ class UserService {
   async updateUser(userId, userData) {
     const response = await this.api.put(ENDPOINTS.users.update(userId), userData);
     return response.data;
+  }
+}
+
+/**
+ * Room management service
+ */
+class RoomService {
+  constructor(apiClient) {
+    this.api = apiClient;
+  }
+
+  /**
+   * Get all rooms
+   */
+  async getAllRooms(filters = {}) {
+    const params = { ...filters };
+    const response = await this.api.get(ENDPOINTS.rooms.list, params);
+    return response.data.rooms;
+  }
+
+  /**
+   * Get room by ID
+   */
+  async getRoomById(roomId) {
+    const response = await this.api.get(ENDPOINTS.rooms.get(roomId));
+    return response.data.room;
+  }
+
+  /**
+   * Create new room
+   */
+  async createRoom(roomData) {
+    const response = await this.api.post(ENDPOINTS.rooms.create, roomData);
+    return response.data;
+  }
+
+  /**
+   * Update room
+   */
+  async updateRoom(roomId, roomData) {
+    const response = await this.api.put(ENDPOINTS.rooms.update(roomId), roomData);
+    return response.data;
+  }
+
+  /**
+   * Delete room
+   */
+  async deleteRoom(roomId) {
+    await this.api.delete(ENDPOINTS.rooms.delete(roomId));
+  }
+
+  /**
+   * Get available rooms for a specific time slot
+   */
+  async getAvailableRooms(eventId, roundNumber, scheduledTime, excludeMatchId = null) {
+    const params = { eventId, roundNumber };
+    if (scheduledTime) params.scheduledTime = scheduledTime;
+    if (excludeMatchId) params.excludeMatchId = excludeMatchId;
+    
+    const response = await this.api.get(ENDPOINTS.rooms.available, params);
+    return response.data.rooms;
   }
 }
 
@@ -556,8 +651,9 @@ class MatchService {
   /**
    * Remove judge from match (for admins)
    */
-  async removeJudge(matchId, judgeId) {
-    return this.api.delete(ENDPOINTS.matches.removeJudge(matchId, judgeId));
+  async removeJudge(matchId, judgeId, adminId = null) {
+    const url = adminId ? `${ENDPOINTS.matches.removeJudge(matchId, judgeId)}?adminId=${adminId}` : ENDPOINTS.matches.removeJudge(matchId, judgeId);
+    return this.api.delete(url);
   }
 
   /**
@@ -565,6 +661,57 @@ class MatchService {
    */
   async deleteEventMatch(eventId, matchId) {
     return this.api.delete(ENDPOINTS.matches.deleteByEvent(eventId, matchId));
+  }
+
+  /**
+   * Add a judge to an ongoing match (Admin only)
+   */
+  async addJudgeToMatch(matchId, judgeId) {
+    return this.api.post(ENDPOINTS.matches.addJudge(matchId), { judgeId });
+  }
+
+  /**
+   * Replace a judge in an ongoing match (Admin only)
+   */
+  async replaceJudgeInMatch(matchId, oldJudgeId, newJudgeId, removeScores = true) {
+    return this.api.put(ENDPOINTS.matches.replaceJudge(matchId, oldJudgeId), {
+      newJudgeId,
+      removeScores
+    });
+  }
+
+  /**
+   * Replace a judge in an ongoing match (Admin only) - Flexible version that can add or replace
+   */
+  async replaceJudgeInMatchFlexible(matchId, oldJudgeId, newJudgeId, removeScores = true) {
+    return this.api.post(ENDPOINTS.matches.replaceJudgeFlexible(matchId), {
+      oldJudgeId,
+      newJudgeId,
+      removeScores
+    });
+  }
+
+  /**
+   * Remove a judge from an ongoing match (Admin only)
+   */
+  async removeJudgeFromMatch(matchId, judgeId, removeScores = true) {
+    const url = `${ENDPOINTS.matches.removeJudgeFromMatch(matchId, judgeId)}?removeScores=${removeScores}`;
+    return this.api.delete(url);
+  }
+
+  /**
+   * Remove all scores for a specific judge in a match (Admin only)
+   */
+  async removeJudgeScores(matchId, judgeId) {
+    return this.api.delete(ENDPOINTS.matches.removeJudgeScores(matchId, judgeId));
+  }
+
+  /**
+   * Apply round schedule to all matches in a specific round (Admin only)
+   */
+  async applyRoundSchedule(eventId, roundNumber) {
+    const response = await this.api.post(ENDPOINTS.matches.applyRoundSchedule(eventId, roundNumber));
+    return response.data;
   }
 }
 
@@ -588,6 +735,13 @@ class ScoreService {
    */
   async createScore(matchId, scoreData) {
     return this.api.post(ENDPOINTS.scores.create(matchId), scoreData);
+  }
+
+  /**
+   * Save draft score (before judge's scoring stage)
+   */
+  async saveDraftScore(matchId, scoreData) {
+    return this.api.post(ENDPOINTS.scores.saveDraft(matchId), scoreData);
   }
 
   /**
@@ -685,6 +839,7 @@ export const healthService = new HealthService(apiClient);
 export const eventService = new EventService(apiClient);
 export const teamService = new TeamService(apiClient);
 export const userService = new UserService(apiClient);
+export const roomService = new RoomService(apiClient);
 export const preApprovedEmailService = new PreApprovedEmailService(apiClient);
 export const matchService = new MatchService(apiClient);
 export const scoreService = new ScoreService(apiClient);

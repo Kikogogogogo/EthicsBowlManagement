@@ -215,6 +215,61 @@ function canModeratorAdvance(status) {
   return status !== MATCH_STATUSES.DRAFT && status !== MATCH_STATUSES.COMPLETED;
 }
 
+/**
+ * Check if a specific judge is in their scoring stage
+ * @param {string} matchStatus - Current match status
+ * @param {number} judgePosition - Judge position (1-based index)
+ * @param {number} judgeCount - Total number of judges
+ * @returns {boolean} Whether the judge can submit scores
+ */
+function isJudgeInScoringStage(matchStatus, judgePosition, judgeCount) {
+  // Check if it's a judge question status
+  const judgeMatch = matchStatus.match(/^judge_(\d+)_(\d+)$/);
+  if (judgeMatch) {
+    const period = parseInt(judgeMatch[1]);
+    const questionNum = parseInt(judgeMatch[2]);
+    
+    // Judge can submit if it's their specific question
+    return questionNum === judgePosition;
+  }
+  
+  // For non-judge stages, judges can only save drafts
+  return false;
+}
+
+/**
+ * Check if a judge can save draft scores (before their stage)
+ * @param {string} matchStatus - Current match status
+ * @returns {boolean} Whether the judge can save draft scores
+ */
+function canJudgeSaveDraft(matchStatus) {
+  // Judges can save drafts from moderator_period_1 onwards
+  const draftSavingStatuses = [
+    MATCH_STATUSES.MODERATOR_PERIOD_1,
+    MATCH_STATUSES.TEAM_A_CONFERRAL_1_1,
+    MATCH_STATUSES.TEAM_A_PRESENTATION,
+    MATCH_STATUSES.TEAM_B_CONFERRAL_1_1,
+    MATCH_STATUSES.TEAM_B_COMMENTARY,
+    MATCH_STATUSES.TEAM_A_CONFERRAL_1_2,
+    MATCH_STATUSES.TEAM_A_RESPONSE,
+    MATCH_STATUSES.MODERATOR_PERIOD_2,
+    MATCH_STATUSES.TEAM_B_CONFERRAL_2_1,
+    MATCH_STATUSES.TEAM_B_PRESENTATION,
+    MATCH_STATUSES.TEAM_A_CONFERRAL_2_1,
+    MATCH_STATUSES.TEAM_A_COMMENTARY,
+    MATCH_STATUSES.TEAM_B_CONFERRAL_2_2,
+    MATCH_STATUSES.TEAM_B_RESPONSE,
+    MATCH_STATUSES.FINAL_SCORING
+  ];
+
+  // Check if it's a judge question status
+  if (matchStatus.match(/^judge_\d+_\d+$/)) {
+    return true;
+  }
+
+  return draftSavingStatuses.includes(matchStatus);
+}
+
 function getNextStatus(currentStatus, judgeQuestionsCount = 3) {
   const validStatuses = getValidMatchStatuses(judgeQuestionsCount);
   const currentIndex = validStatuses.indexOf(currentStatus);
@@ -266,5 +321,9 @@ module.exports = {
   canJudgesScore,
   canModeratorAdvance,
   getNextStatus,
-  getPreviousStatus
+  getPreviousStatus,
+  
+  // Judge scoring stage functions
+  isJudgeInScoringStage,
+  canJudgeSaveDraft
 }; 

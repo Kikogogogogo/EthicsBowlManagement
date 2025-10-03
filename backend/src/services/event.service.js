@@ -2,7 +2,7 @@ const { prisma } = require('../config/database');
 
 class EventService {
   /**
-   * Get all events with creator information
+   * Get all events with creator information (Admin only - no filtering)
    * @returns {Array} List of events
    */
   async getAllEvents() {
@@ -32,7 +32,9 @@ class EventService {
       return events.map(event => ({
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
         roundNames: event.roundNames || null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
         allowedJudges: event.allowedJudges ? JSON.parse(event.allowedJudges) : null,
         allowedModerators: event.allowedModerators ? JSON.parse(event.allowedModerators) : null,
         stats: {
@@ -44,6 +46,135 @@ class EventService {
     } catch (error) {
       console.error('Error fetching events:', error);
       throw new Error('Failed to fetch events');
+    }
+  }
+
+  /**
+   * Get events accessible to a specific user
+   * @param {string} userId - User ID
+   * @param {string} userRole - User role
+   * @returns {Array} List of accessible events
+   */
+  async getAccessibleEvents(userId, userRole) {
+    try {
+      let events = [];
+      
+      if (userRole === 'admin') {
+        // Admin can see all events
+        events = await prisma.event.findMany({
+          include: {
+            creator: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+            _count: {
+              select: {
+                teams: true,
+                matches: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      } else {
+        // For non-admin users, find events they have access to
+        const accessibleEventIds = new Set();
+        
+        // 1. Events created by the user
+        const createdEvents = await prisma.event.findMany({
+          where: { createdBy: userId },
+          select: { id: true }
+        });
+        createdEvents.forEach(event => accessibleEventIds.add(event.id));
+        
+        // 2. Events where user is in allowedJudges list
+        const judgeEvents = await prisma.event.findMany({
+          where: {
+            allowedJudges: {
+              contains: userId
+            }
+          },
+          select: { id: true }
+        });
+        judgeEvents.forEach(event => accessibleEventIds.add(event.id));
+        
+        // 3. Events where user is in allowedModerators list
+        const moderatorEvents = await prisma.event.findMany({
+          where: {
+            allowedModerators: {
+              contains: userId
+            }
+          },
+          select: { id: true }
+        });
+        moderatorEvents.forEach(event => accessibleEventIds.add(event.id));
+        
+        // 4. Events where user is assigned to matches (for judges/moderators)
+        if (userRole === 'judge' || userRole === 'moderator') {
+          const matchEvents = await prisma.match.findMany({
+            where: {
+              OR: [
+                { assignments: { some: { judgeId: userId } } },
+                { moderatorId: userId }
+              ]
+            },
+            select: { eventId: true }
+          });
+          matchEvents.forEach(match => accessibleEventIds.add(match.eventId));
+        }
+        
+        // Get full event details for accessible events
+        if (accessibleEventIds.size > 0) {
+          events = await prisma.event.findMany({
+            where: {
+              id: { in: Array.from(accessibleEventIds) }
+            },
+            include: {
+              creator: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+              _count: {
+                select: {
+                  teams: true,
+                  matches: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          });
+        }
+      }
+
+      return events.map(event => ({
+        ...event,
+        scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
+        roundNames: event.roundNames || null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
+        allowedJudges: event.allowedJudges ? JSON.parse(event.allowedJudges) : null,
+        allowedModerators: event.allowedModerators ? JSON.parse(event.allowedModerators) : null,
+        stats: {
+          teamsCount: event._count.teams,
+          matchesCount: event._count.matches,
+        },
+        _count: undefined, // Remove the raw count object
+      }));
+    } catch (error) {
+      console.error('Error fetching accessible events:', error);
+      throw new Error('Failed to fetch accessible events');
     }
   }
 
@@ -88,7 +219,9 @@ class EventService {
       return {
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
         roundNames: event.roundNames || null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
         allowedJudges: event.allowedJudges ? JSON.parse(event.allowedJudges) : null,
         allowedModerators: event.allowedModerators ? JSON.parse(event.allowedModerators) : null,
         stats: {
@@ -183,6 +316,7 @@ class EventService {
       return {
         ...event,
         scoringCriteria: event.scoringCriteria ? JSON.parse(event.scoringCriteria) : null,
+        roundSchedules: event.roundSchedules ? JSON.parse(event.roundSchedules) : null,
       };
     } catch (error) {
       console.error('Error creating event:', error);
@@ -246,6 +380,7 @@ class EventService {
         status,
         scoringCriteria,
         roundNames,
+        roundSchedules,
         allowedJudges,
         allowedModerators,
       } = updateData;
@@ -289,6 +424,9 @@ class EventService {
       }
       if (roundNames !== undefined) {
         updatePayload.roundNames = roundNames || null;
+      }
+      if (roundSchedules !== undefined) {
+        updatePayload.roundSchedules = roundSchedules ? JSON.stringify(roundSchedules) : null;
       }
       if (allowedJudges !== undefined) {
         updatePayload.allowedJudges = allowedJudges ? JSON.stringify(allowedJudges) : null;
@@ -473,6 +611,114 @@ class EventService {
         throw error; // Re-throw known errors
       }
       throw new Error('Failed to delete event');
+    }
+  }
+
+  /**
+   * Update round schedules for an event
+   * @param {string} eventId - Event ID
+   * @param {Object} roundSchedules - Round schedules data
+   * @param {string} userId - User ID
+   * @returns {Object} Updated event
+   */
+  async updateRoundSchedules(eventId, roundSchedules, userId) {
+    try {
+      // Check if event exists and user has permission
+      const existingEvent = await prisma.event.findUnique({
+        where: { id: eventId },
+        include: {
+          creator: true,
+        },
+      });
+
+      if (!existingEvent) {
+        throw new Error('Event not found');
+      }
+
+      // Only allow admin or creator to update
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (user.role !== 'admin' && existingEvent.createdBy !== userId) {
+        throw new Error('You do not have permission to update this event');
+      }
+
+      // Validate round schedules format
+      if (roundSchedules && typeof roundSchedules === 'object') {
+        for (const [roundNumber, schedule] of Object.entries(roundSchedules)) {
+          if (schedule.startTime && isNaN(Date.parse(schedule.startTime))) {
+            throw new Error(`Invalid start time for round ${roundNumber}`);
+          }
+          if (schedule.duration && (typeof schedule.duration !== 'number' || schedule.duration <= 0)) {
+            throw new Error(`Invalid duration for round ${roundNumber}. Must be a positive number (minutes)`);
+          }
+        }
+      }
+
+      const updatedEvent = await prisma.event.update({
+        where: { id: eventId },
+        data: {
+          roundSchedules: roundSchedules ? JSON.stringify(roundSchedules) : null,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ...updatedEvent,
+        scoringCriteria: updatedEvent.scoringCriteria ? JSON.parse(updatedEvent.scoringCriteria) : null,
+        roundSchedules: updatedEvent.roundSchedules ? JSON.parse(updatedEvent.roundSchedules) : null,
+      };
+    } catch (error) {
+      console.error('Error updating round schedules:', error);
+      if (error.message.includes('not found') || 
+          error.message.includes('permission') || 
+          error.message.includes('Invalid')) {
+        throw error; // Re-throw known errors
+      }
+      throw new Error('Failed to update round schedules');
+    }
+  }
+
+  /**
+   * Get round schedule for a specific round
+   * @param {string} eventId - Event ID
+   * @param {number} roundNumber - Round number
+   * @returns {Object|null} Round schedule or null
+   */
+  async getRoundSchedule(eventId, roundNumber) {
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { roundSchedules: true },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      if (!event.roundSchedules) {
+        return null;
+      }
+
+      const roundSchedules = JSON.parse(event.roundSchedules);
+      return roundSchedules[roundNumber.toString()] || null;
+    } catch (error) {
+      console.error('Error getting round schedule:', error);
+      throw new Error('Failed to get round schedule');
     }
   }
 }

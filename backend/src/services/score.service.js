@@ -1,5 +1,5 @@
  const { PrismaClient } = require('@prisma/client');
-const { USER_ROLES, MATCH_STATUSES, canJudgesScore } = require('../constants/enums');
+const { USER_ROLES, MATCH_STATUSES, canJudgesScore, isJudgeInScoringStage, canJudgeSaveDraft } = require('../constants/enums');
 
 const prisma = new PrismaClient();
 
@@ -153,9 +153,18 @@ class ScoreService {
         throw new Error('Team does not belong to this match');
       }
 
-      // Validate match status - judges can score from moderator_period_1 onwards
-      if (!canJudgesScore(match.status)) {
-        throw new Error('Judges cannot score at this match stage');
+      // Get judge position and total judge count
+      const assignments = await prisma.matchAssignment.findMany({
+        where: { matchId },
+        orderBy: { createdAt: 'asc' }
+      });
+      
+      const judgePosition = assignments.findIndex(a => a.judgeId === judgeId) + 1;
+      const judgeCount = assignments.length;
+      
+      // Check if judge is in their scoring stage
+      if (!isJudgeInScoringStage(match.status, judgePosition, judgeCount)) {
+        throw new Error('You can only submit scores during your assigned judge stage');
       }
 
       // Check if score already exists for this judge-team-match combination
@@ -243,6 +252,135 @@ class ScoreService {
       return score;
     } catch (error) {
       console.error('Error creating/updating score:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save draft score (before judge's scoring stage)
+   * @param {Object} scoreData - Score data
+   * @returns {Object} Saved score
+   */
+  async saveDraftScore(scoreData) {
+    try {
+      const { matchId, judgeId, teamId, criteriaScores, commentScores, notes } = scoreData;
+
+      // Verify match exists
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          teamA: true,
+          teamB: true,
+          assignments: {
+            where: { judgeId },
+            include: { judge: true }
+          }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      // Verify judge is assigned to this match
+      const assignment = match.assignments[0];
+      if (!assignment) {
+        // Check if user is admin - admins can score without being assigned
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Judge is not assigned to this match');
+        }
+      }
+
+      // Verify team belongs to this match
+      if (teamId !== match.teamAId && teamId !== match.teamBId) {
+        throw new Error('Team does not belong to this match');
+      }
+
+      // Check if judge can save draft at current stage
+      if (!canJudgeSaveDraft(match.status)) {
+        throw new Error('Cannot save draft scores at this match stage');
+      }
+
+      // Check if score already exists for this judge-team-match combination
+      const existingScore = await prisma.score.findUnique({
+        where: {
+          matchId_judgeId_teamId: {
+            matchId,
+            judgeId,
+            teamId
+          }
+        }
+      });
+
+      let score;
+      if (existingScore) {
+        // Update existing score (only if not submitted)
+        if (existingScore.isSubmitted) {
+          throw new Error('Cannot update already submitted scores');
+        }
+
+        score = await prisma.score.update({
+          where: { id: existingScore.id },
+          data: {
+            criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
+            commentScores: commentScores ? JSON.stringify(commentScores) : null,
+            notes,
+            updatedAt: new Date()
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true }
+            },
+            team: {
+              select: { id: true, name: true, school: true }
+            },
+            match: {
+              select: { id: true, roundNumber: true, status: true }
+            }
+          }
+        });
+      } else {
+        // Create new draft score
+        score = await prisma.score.create({
+          data: {
+            matchId,
+            judgeId,
+            teamId,
+            criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
+            commentScores: commentScores ? JSON.stringify(commentScores) : null,
+            notes,
+            isSubmitted: false // Always false for draft
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true }
+            },
+            team: {
+              select: { id: true, name: true, school: true }
+            },
+            match: {
+              select: { id: true, roundNumber: true, status: true }
+            }
+          }
+        });
+      }
+
+      // Parse scores back to objects if they exist
+      if (score.criteriaScores) {
+        score.criteriaScores = JSON.parse(score.criteriaScores);
+      }
+      if (score.commentScores) {
+        score.commentScores = JSON.parse(score.commentScores);
+      }
+
+      return score;
+    } catch (error) {
+      console.error('Error saving draft score:', error);
       throw error;
     }
   }

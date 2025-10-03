@@ -231,6 +231,143 @@ function requireOwnershipOrAdmin(resourceParam = 'id', ownerField = 'id') {
   };
 }
 
+/**
+ * Middleware to check if user has access to a specific event
+ * @param {string} eventIdParam - Parameter name containing event ID (default: 'eventId')
+ * @returns {Function} Express middleware function
+ */
+function requireEventAccess(eventIdParam = 'eventId') {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required',
+          error: 'NOT_AUTHENTICATED'
+        });
+      }
+      
+      // Admin can access any event
+      if (req.user.role === USER_ROLES.ADMIN) {
+        return next();
+      }
+      
+      const eventId = req.params[eventIdParam];
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+      
+      // Get event with allowed users
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: {
+          id: true,
+          name: true,
+          allowedJudges: true,
+          allowedModerators: true,
+          createdBy: true
+        }
+      });
+      
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found',
+          error: 'EVENT_NOT_FOUND'
+        });
+      }
+      
+      // Check if user has access to this event
+      let hasAccess = false;
+      
+      // Check if user is the creator
+      if (event.createdBy === req.user.id) {
+        hasAccess = true;
+      }
+      
+      // Check if user is in allowed judges list
+      if (!hasAccess && event.allowedJudges) {
+        try {
+          const allowedJudges = JSON.parse(event.allowedJudges);
+          if (Array.isArray(allowedJudges) && allowedJudges.includes(req.user.id)) {
+            hasAccess = true;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedJudges:', error);
+        }
+      }
+      
+      // Check if user is in allowed moderators list
+      if (!hasAccess && event.allowedModerators) {
+        try {
+          const allowedModerators = JSON.parse(event.allowedModerators);
+          if (Array.isArray(allowedModerators) && allowedModerators.includes(req.user.id)) {
+            hasAccess = true;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedModerators:', error);
+        }
+      }
+      
+      // Check if user is assigned to any matches in this event (for judges/moderators)
+      if (!hasAccess && (req.user.role === USER_ROLES.JUDGE || req.user.role === USER_ROLES.MODERATOR)) {
+        const matchAssignment = await prisma.matchAssignment.findFirst({
+          where: {
+            judgeId: req.user.id,
+            match: {
+              eventId: eventId
+            }
+          }
+        });
+        
+        if (matchAssignment) {
+          hasAccess = true;
+        }
+        
+        // Also check if user is a moderator for any matches in this event
+        if (!hasAccess) {
+          const moderatedMatch = await prisma.match.findFirst({
+            where: {
+              moderatorId: req.user.id,
+              eventId: eventId
+            }
+          });
+          
+          if (moderatedMatch) {
+            hasAccess = true;
+          }
+        }
+      }
+      
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You do not have permission to access this event.',
+          error: 'EVENT_ACCESS_DENIED',
+          eventId: eventId,
+          eventName: event.name
+        });
+      }
+      
+      // Store event info in request for use in controllers
+      req.event = event;
+      next();
+      
+    } catch (error) {
+      console.error('Event access check error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error during access check',
+        error: 'ACCESS_CHECK_FAILED'
+      });
+    }
+  };
+}
+
 module.exports = {
   authenticateToken,
   requireRole,
@@ -239,4 +376,5 @@ module.exports = {
   requireAuthenticated,
   optionalAuth,
   requireOwnershipOrAdmin,
+  requireEventAccess
 }; 

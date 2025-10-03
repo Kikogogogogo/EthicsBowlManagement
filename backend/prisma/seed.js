@@ -31,6 +31,31 @@ async function main() {
 
     console.log('✅ Admin user created/updated:', adminUser.email);
 
+    // Create additional admin user (Jun Yang)
+    const adminUser2 = await prisma.user.upsert({
+      where: { email: 'nnnnnjun.yang@gmail.com' },
+      update: {
+        isActive: true,
+        role: 'admin',
+        firstName: 'Jun',
+        lastName: 'Yang',
+        isEmailVerified: true,
+        lastLoginAt: new Date(),
+      },
+      create: {
+        email: 'nnnnnjun.yang@gmail.com',
+        firstName: 'Jun',
+        lastName: 'Yang',
+        role: 'admin',
+        googleId: 'seed_google_id_admin2',
+        isEmailVerified: true,
+        isActive: true,
+        lastLoginAt: new Date(),
+      },
+    });
+
+    console.log('✅ Additional admin user created/updated:', adminUser2.email);
+
     // Create sample judge users
     const judgesData = [
       {
@@ -95,6 +120,13 @@ async function main() {
         lastName: 'Ethics',
         role: 'judge',
         googleId: 'seed_google_id_judge9',
+      },
+      {
+        email: 'yjb1344790846@gmail.com',
+        firstName: 'YJB',
+        lastName: 'Judge',
+        role: 'judge',
+        googleId: 'seed_google_id_judge10',
       }
     ];
 
@@ -236,6 +268,8 @@ async function main() {
           "3": "Semifinals",
           "4": "Championship Final"
         }),
+        allowedJudges: JSON.stringify(createdJudges.map(judge => judge.id)),
+        allowedModerators: JSON.stringify([createdModerators[0].id, createdModerators[1].id]),
       },
       {
         id: 'event-active-spring',
@@ -255,6 +289,8 @@ async function main() {
           "2": "Semi Finals",
           "3": "Grand Finals"
         }),
+        allowedJudges: JSON.stringify(createdJudges.map(judge => judge.id)),
+        allowedModerators: JSON.stringify([createdModerators[2].id, createdModerators[3].id]),
       },
       {
         id: 'event-completed-fall',
@@ -276,6 +312,8 @@ async function main() {
           "4": "Semi Finals",
           "5": "Championship"
         }),
+        allowedJudges: JSON.stringify(createdJudges.map(judge => judge.id)),
+        allowedModerators: JSON.stringify(createdModerators.map(moderator => moderator.id)),
       },
       {
         id: 'event-national-prep',
@@ -298,6 +336,8 @@ async function main() {
           "5": "Semifinals",
           "6": "National Final"
         }),
+        allowedJudges: JSON.stringify(createdJudges.map(judge => judge.id)),
+        allowedModerators: JSON.stringify(createdModerators.map(moderator => moderator.id)),
       },
       {
         id: 'event-mini-tournament',
@@ -324,6 +364,8 @@ async function main() {
           "1": "Practice Round",
           "2": "Final Round"
         }),
+        allowedJudges: JSON.stringify(createdJudges.map(judge => judge.id)),
+        allowedModerators: JSON.stringify(createdModerators.map(moderator => moderator.id)),
       }
     ];
 
@@ -564,7 +606,7 @@ async function main() {
         moderatorId: createdModerators[1].id,
         room: 'Room B2',
         scheduledTime: new Date('2024-01-20T10:00:00Z'),
-        status: 'team_a_presentation',
+        status: 'team_a_presentation', // 正在进行Team A展示
       },
       {
         id: 'match-judge-1-2',
@@ -575,7 +617,7 @@ async function main() {
         moderatorId: createdModerators[2].id,
         room: 'Room B3',
         scheduledTime: new Date('2024-01-20T14:00:00Z'),
-        status: 'judge_1_2',
+        status: 'judge_1_2', // 正在进行评委第一轮第2个问题
       },
       {
         id: 'match-final-scoring',
@@ -612,7 +654,7 @@ async function main() {
         moderatorId: createdModerators[0].id,
         room: 'Room D1',
         scheduledTime: new Date('2024-02-05T10:00:00Z'),
-        status: 'team_b_commentary',
+        status: 'team_b_commentary', // 正在进行Team B评论阶段
       },
       {
         id: 'match-mini-2',
@@ -623,7 +665,7 @@ async function main() {
         moderatorId: createdModerators[1].id,
         room: 'Room D2',
         scheduledTime: new Date('2024-02-05T10:00:00Z'),
-        status: 'moderator_period_1',
+        status: 'moderator_period_1', // 正在进行主持人第一轮
       },
       {
         id: 'match-mini-3',
@@ -634,7 +676,7 @@ async function main() {
         moderatorId: createdModerators[2].id,
         room: 'Room D3',
         scheduledTime: new Date('2024-02-05T10:00:00Z'),
-        status: 'draft',
+        status: 'draft', // 草稿状态，尚未开始
       },
       // Mini tournament matches - Round 2
       {

@@ -17,6 +17,7 @@ const teamRoutes = require('./routes/team.routes');
 const userRoutes = require('./routes/user.routes');
 const matchRoutes = require('./routes/match.routes');
 const scoreRoutes = require('./routes/score.routes');
+const roomRoutes = require('./routes/room.routes');
 
 // Validate environment variables
 validateEnv();
@@ -119,6 +120,7 @@ app.use(`${config.api.prefix}/events`, eventRoutes);
 app.use(`${config.api.prefix}/pre-approved-emails`, preApprovedEmailRoutes);
 app.use(`${config.api.prefix}`, teamRoutes);
 app.use(`${config.api.prefix}`, userRoutes);
+app.use(`${config.api.prefix}/rooms`, roomRoutes);
 
 // 404 handler for undefined routes
 app.use('*', (req, res) => {

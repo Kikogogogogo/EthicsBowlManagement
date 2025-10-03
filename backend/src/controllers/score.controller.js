@@ -148,6 +148,56 @@ class ScoreController {
   };
 
   /**
+   * POST /matches/:matchId/scores/draft
+   * Save draft score (Judge only, before their scoring stage)
+   */
+  saveDraftScore = async (req, res) => {
+    try {
+      const { matchId } = req.params;
+      const scoreData = req.body;
+      const judgeId = req.user.id;
+      
+      if (!matchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Match ID is required',
+          error: 'MISSING_MATCH_ID'
+        });
+      }
+
+      // Add judge ID to score data
+      scoreData.judgeId = judgeId;
+
+      const score = await this.scoreService.saveDraftScore(scoreData);
+      
+      res.json({
+        success: true,
+        data: score,
+        message: 'Draft score saved successfully'
+      });
+    } catch (error) {
+      console.error('Save draft score error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'DRAFT_SAVE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'RESOURCE_NOT_FOUND';
+      } else if (error.message.includes('Cannot save draft') || error.message.includes('not assigned')) {
+        statusCode = 400;
+        errorCode = 'VALIDATION_ERROR';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to save draft score',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
    * PUT /matches/:matchId/scores/:scoreId
    * Update score (Judge only, before submission)
    */

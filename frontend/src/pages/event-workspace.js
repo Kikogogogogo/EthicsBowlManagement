@@ -12,6 +12,7 @@ class EventWorkspacePage {
     this.matches = [];
     this.teams = [];
     this.users = [];
+    this.rooms = [];
     this.currentTab = 'overview';
     this.judgeScoresCache = new Map(); // Cache for judge scores status
     
@@ -47,6 +48,82 @@ class EventWorkspacePage {
     this.teamDataChangeHandler = null;
     
     this.initializeEventListeners();
+  }
+
+  /**
+   * Check if current user can edit location (moderator or admin only)
+   */
+  canEditLocation() {
+    const currentUser = window.authManager?.getCurrentUser();
+    return currentUser && (currentUser.role === 'moderator' || currentUser.role === 'admin');
+  }
+
+  /**
+   * Setup location input permissions and edit functionality
+   */
+  setupLocationInputs() {
+    const canEdit = this.canEditLocation();
+    
+    // Create match location input
+    const createLocationInput = document.getElementById('createMatchLocation');
+    const createEditBtn = document.getElementById('createMatchLocationEditBtn');
+    
+    if (createLocationInput) {
+      createLocationInput.disabled = !canEdit;
+      if (!canEdit) {
+        createLocationInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        createLocationInput.placeholder = 'Only moderators and admins can set location';
+      }
+    }
+    
+    // Edit match location input
+    const editLocationInput = document.getElementById('editMatchLocation');
+    const editEditBtn = document.getElementById('editMatchLocationEditBtn');
+    
+    if (editLocationInput) {
+      editLocationInput.disabled = !canEdit;
+      if (!canEdit) {
+        editLocationInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        editLocationInput.placeholder = 'Only moderators and admins can edit location';
+      }
+    }
+    
+    // Setup edit button functionality
+    if (createEditBtn && canEdit) {
+      createEditBtn.addEventListener('click', () => {
+        createLocationInput.focus();
+        createLocationInput.select();
+      });
+    }
+    
+    if (editEditBtn && canEdit) {
+      editEditBtn.addEventListener('click', () => {
+        editLocationInput.focus();
+        editLocationInput.select();
+      });
+    }
+  }
+
+  /**
+   * Show/hide edit button based on whether location has been set
+   */
+  updateLocationEditButton(inputId, editBtnId, hasLocation) {
+    const editBtn = document.getElementById(editBtnId);
+    if (editBtn && this.canEditLocation()) {
+      if (hasLocation) {
+        editBtn.classList.remove('hidden');
+      } else {
+        editBtn.classList.add('hidden');
+      }
+    }
+  }
+
+  /**
+   * Populate room select options in forms (deprecated - now using location input)
+   */
+  populateRoomSelects() {
+    // This function is now deprecated as we're using location input instead of room select
+    // Keeping for backward compatibility
   }
 
   /**
@@ -269,6 +346,38 @@ class EventWorkspacePage {
       console.warn('Failed to parse round names:', e);
       return `Round ${roundNumber}`;
     }
+  }
+
+  /**
+   * Get round display name with start time for all users
+   */
+  getRoundDisplayNameWithTime(roundNumber) {
+    const baseName = this.getRoundDisplayName(roundNumber);
+    console.log(`🔍 [EventWorkspace] getRoundDisplayNameWithTime called for Round ${roundNumber}`);
+    console.log(`📋 [EventWorkspace] Current event exists:`, !!this.currentEvent);
+    console.log(`📅 [EventWorkspace] Round schedules exist:`, !!this.currentEvent?.roundSchedules);
+    
+    // Show start time for all users if round schedule is available
+    if (this.currentEvent && this.currentEvent.roundSchedules) {
+      const schedule = this.currentEvent.roundSchedules[roundNumber.toString()];
+      console.log(`🕒 [EventWorkspace] Round ${roundNumber} schedule:`, schedule);
+      
+      if (schedule && schedule.startTime) {
+        const startTime = new Date(schedule.startTime);
+        const timeString = startTime.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        console.log(`⏰ [EventWorkspace] Round ${roundNumber} time string:`, timeString);
+        return `${baseName} (${timeString})`;
+      }
+    }
+    
+    console.log(`📅 [EventWorkspace] Round ${roundNumber} - no schedule found, returning base name:`, baseName);
+    return baseName;
   }
 
   /**
@@ -741,88 +850,18 @@ class EventWorkspacePage {
     }
   }
 
-  /**
-   * Check for duplicate judge assignments in the same round
-   */
-  checkDuplicateJudgeAssignments() {
-    const duplicateWarnings = [];
-    const roundJudgeMap = new Map(); // roundNumber -> Set of judgeIds
-    
-    // Group judges by round
-    this.matches.forEach(match => {
-      if (!match.assignments || match.assignments.length === 0) return;
-      
-      const roundNumber = match.roundNumber;
-      if (!roundJudgeMap.has(roundNumber)) {
-        roundJudgeMap.set(roundNumber, new Map()); // judgeId -> array of match info
-      }
-      
-      const roundJudges = roundJudgeMap.get(roundNumber);
-      
-      match.assignments.forEach(assignment => {
-        const judgeId = assignment.judge.id;
-        const judgeName = `${assignment.judge.firstName} ${assignment.judge.lastName}`;
-        
-        if (!roundJudges.has(judgeId)) {
-          roundJudges.set(judgeId, []);
-        }
-        
-        roundJudges.get(judgeId).push({
-          matchId: match.id,
-          matchTitle: `${this.teams.find(t => t.id === match.teamAId)?.name || 'TBD'} vs ${this.teams.find(t => t.id === match.teamBId)?.name || 'TBD'}`,
-          room: match.room || 'No room',
-          judgeName: judgeName
-        });
-      });
-    });
-    
-    // Check for duplicates
-    roundJudgeMap.forEach((roundJudges, roundNumber) => {
-      roundJudges.forEach((matchInfos, judgeId) => {
-        if (matchInfos.length > 1) {
-          duplicateWarnings.push({
-            roundNumber: roundNumber,
-            judgeName: matchInfos[0].judgeName,
-            matches: matchInfos,
-            count: matchInfos.length
-          });
-        }
-      });
-    });
-    
-    return duplicateWarnings;
-  }
+
 
   /**
-   * Display duplicate judge assignment warnings
-   */
-  displayDuplicateJudgeWarnings() {
-    const warnings = this.checkDuplicateJudgeAssignments();
-    
-    if (warnings.length === 0) {
-      return; // No warnings to display
-    }
-    
-    console.warn('⚠️ [EventWorkspace] Found duplicate judge assignments:', warnings);
-    
-    // Create warning messages
-    const warningMessages = warnings.map(warning => {
-      const roundName = this.getRoundDisplayName(warning.roundNumber);
-      const matchList = warning.matches.map(m => `• ${m.matchTitle} (${m.room})`).join('\n');
-      return `${roundName}:\n${warning.judgeName} is assigned to ${warning.count} matches:\n${matchList}`;
-    });
-    
-    // Show warning notification
-    const fullMessage = `⚠️ Judge Assignment Conflicts Detected!\n\n${warningMessages.join('\n\n')}\n\nPlease review and reassign judges to avoid conflicts.`;
-    
-    // Use a more prominent warning display
-    this.showDuplicateJudgeWarningModal(warnings);
-  }
-
-  /**
-   * Show duplicate judge warning modal
+   * Show duplicate judge warning modal (DISABLED - warnings now only shown in Overview tab)
    */
   showDuplicateJudgeWarningModal(warnings) {
+    // This method is disabled - warnings are now only displayed in the Overview tab
+    // to avoid interrupting user workflow with popup modals
+    console.log('⚠️ [EventWorkspace] Judge assignment conflicts detected but modal is disabled');
+    return;
+    
+    /* DISABLED MODAL CODE - warnings now only shown in Overview tab
     const warningHTML = warnings.map(warning => {
       const roundName = this.getRoundDisplayName(warning.roundNumber);
       const matchList = warning.matches.map(m => 
@@ -888,6 +927,7 @@ class EventWorkspacePage {
     
     // Add new modal to body
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+    */
   }
 
   /**
@@ -900,6 +940,7 @@ class EventWorkspacePage {
       const eventResponse = await this.eventService.getEventById(this.currentEventId);
       this.currentEvent = eventResponse.data || eventResponse;
       console.log('✅ [EventWorkspace] Event details loaded:', this.currentEvent?.name);
+      console.log('📅 [EventWorkspace] Round schedules:', this.currentEvent?.roundSchedules);
 
       // Load teams for this event (with permission handling)
       console.log('👥 [EventWorkspace] Loading teams...');
@@ -910,6 +951,22 @@ class EventWorkspacePage {
       } catch (teamError) {
         console.warn('⚠️ [EventWorkspace] Failed to load teams (permission denied):', teamError);
         this.teams = []; // Fallback to empty array if no permission
+      }
+
+      // Load rooms for this event
+      console.log('🏢 [EventWorkspace] Loading rooms...');
+      try {
+        const roomsResponse = await window.roomService.getAllRooms({ isActive: true });
+        this.rooms = roomsResponse || [];
+        console.log('✅ [EventWorkspace] Loaded rooms:', this.rooms.length, 'rooms');
+        
+        // Populate room select options after a short delay to ensure DOM is ready
+        setTimeout(() => {
+          this.populateRoomSelects();
+        }, 100);
+      } catch (roomError) {
+        console.warn('⚠️ [EventWorkspace] Failed to load rooms:', roomError);
+        this.rooms = []; // Fallback to empty array
       }
 
       // Load matches for this event
@@ -968,19 +1025,34 @@ class EventWorkspacePage {
         await this.preloadJudgeScoresStatus();
         console.log('✅ [EventWorkspace] Judge scores status preloaded');
       }
+
+      // Set up score submission event listener
+      this.setupScoreSubmissionListener();
       
-      // Check for duplicate judge assignments if user is admin
-      if (effectiveRole === 'admin') {
-        console.log('🔍 [EventWorkspace] Checking for duplicate judge assignments...');
-        // Use a small delay to ensure UI rendering is complete
-        setTimeout(() => {
-          this.displayDuplicateJudgeWarnings();
-        }, 500);
-      }
     } catch (error) {
       console.error('Error loading event data:', error);
       throw error;
     }
+  }
+
+  /**
+   * Set up score submission event listener
+   */
+  setupScoreSubmissionListener() {
+    // Listen for score submission events
+    document.addEventListener('scoreSubmitted', async (event) => {
+      const { matchId } = event.detail;
+      console.log('📊 [EventWorkspace] Score submitted for match:', matchId);
+      
+      // Refresh the score status for this match
+      await this.refreshMatchScoreStatus(matchId);
+      
+      // Re-render the current tab to update the UI
+      const workspaceContent = document.getElementById('workspace-content');
+      if (workspaceContent) {
+        workspaceContent.innerHTML = this.renderTabContent();
+      }
+    });
   }
 
   /**
@@ -1079,7 +1151,7 @@ class EventWorkspacePage {
                 <div class="border-l border-gray-300 pl-4">
                   <h1 class="text-2xl font-bold text-gray-900">${this.currentEvent.name}</h1>
                   <div class="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                    <span class="font-medium">${this.getRoundDisplayName(this.currentEvent.currentRound)} of ${this.currentEvent.totalRounds}</span>
+                    <span class="font-medium">${this.getRoundDisplayNameWithTime(this.currentEvent.currentRound)} of ${this.currentEvent.totalRounds}</span>
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getStatusBadgeClasses(this.currentEvent.status)}">
                       ${this.getStatusText(this.currentEvent.status)}
                     </span>
@@ -1118,6 +1190,9 @@ class EventWorkspacePage {
               ${isAdmin ? `
                 <button data-tab="teams" class="tab-button ${this.currentTab === 'teams' ? 'active-tab' : 'inactive-tab'}">
                   Teams
+                </button>
+                <button data-tab="schedule" class="tab-button ${this.currentTab === 'schedule' ? 'active-tab' : 'inactive-tab'}">
+                  Schedule
                 </button>
                 <button data-tab="settings" class="tab-button ${this.currentTab === 'settings' ? 'active-tab' : 'inactive-tab'}">
                   Settings
@@ -1201,10 +1276,20 @@ class EventWorkspacePage {
       } else if (tabName === 'overview') {
         // Load standings data asynchronously when switching to overview tab
         setTimeout(() => this.loadAndDisplayCurrentStandings(), 100);
+        // Refresh judge scores status if in judge view
+        if (this.getEffectiveRole() === 'judge') {
+          setTimeout(() => this.refreshAllScoreStatuses(), 200);
+        }
       } else if (tabName === 'matches') {
         // Reset match filters when switching to matches tab
         setTimeout(() => this.resetMatchFilters(), 100);
         // Note: Team data refreshing is handled by teamDataChanged events, no need to refresh on tab switch
+      } else if (tabName === 'schedule') {
+        // Ensure event listeners are properly bound for schedule tab
+        setTimeout(() => {
+          // Force re-initialization of event listeners for schedule tab
+          this.initializeEventListeners();
+        }, 100);
       }
 
       return true;
@@ -1225,6 +1310,8 @@ class EventWorkspacePage {
         return this.renderMatchesTab();
       case 'teams':
         return this.renderTeamsTab();
+      case 'schedule':
+        return this.renderScheduleTab();
       case 'settings':
         return this.renderSettingsTab();
       default:
@@ -1250,9 +1337,6 @@ class EventWorkspacePage {
     ).length;
     const draftMatches = this.matches.filter(m => m.status === 'draft').length;
     
-    // Check for judge assignment conflicts
-    const duplicateWarnings = this.checkDuplicateJudgeAssignments();
-    const conflictedMatches = this.matches.filter(match => this.hasJudgeConflicts(match));
 
     // Check if admin is assigned as judge or moderator to any matches
     const adminAssignedAsJudge = isAdmin ? this.matches.filter(match => 
@@ -1273,12 +1357,6 @@ class EventWorkspacePage {
         `<p>You are assigned as moderator for ${adminAssignedAsModerator.length} match${adminAssignedAsModerator.length !== 1 ? 'es' : ''} in this event.</p>` : '';
       
       const actionNotices = [];
-      if (adminAssignedAsJudge.length > 0) {
-        actionNotices.push('<span class="font-medium">Switch to Judge role to score these matches.</span>');
-      }
-      if (adminAssignedAsModerator.length > 0) {
-        actionNotices.push('<span class="font-medium">Switch to Moderator role to manage these matches.</span>');
-      }
       
       roleInfo = `
         <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
@@ -1381,15 +1459,6 @@ class EventWorkspacePage {
               <div class="text-2xl font-bold text-gray-900">${completedMatches}</div>
                 <div class="text-gray-600">Completed</div>
             </div>
-            ${isAdmin && duplicateWarnings.length > 0 ? `
-              <div class="bg-white border border-yellow-300 p-6 rounded-lg border-l-4 border-l-yellow-400">
-                <div class="text-2xl font-bold text-yellow-600">${duplicateWarnings.length}</div>
-                <div class="text-yellow-700 text-sm">Judge Conflicts</div>
-                <div class="text-xs text-yellow-600 mt-1">
-                  ${conflictedMatches.length} matches affected
-                </div>
-              </div>
-            ` : ''}
           </div>
         </div>
 
@@ -1422,7 +1491,7 @@ class EventWorkspacePage {
               ${Object.keys(matchesByRound).map(round => `
                 <div class="mb-4 last:mb-0">
                   <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</span>
+                    <span class="font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</span>
                     <span class="text-sm text-gray-500">${matchesByRound[round].filter(m => m.status === 'completed').length}/${matchesByRound[round].length} completed</span>
               </div>
                   <div class="w-full bg-gray-200 rounded-full h-2">
@@ -1443,7 +1512,7 @@ class EventWorkspacePage {
                 <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
                   <div>
                     <div class="font-medium text-sm">${this.teams.find(t => t.id === match.teamAId)?.name || 'TBD'} vs ${this.teams.find(t => t.id === match.teamBId)?.name || 'TBD'}</div>
-                    <div class="text-xs text-gray-500">${this.getRoundDisplayName(match.roundNumber)} • ${match.room || 'No room'}</div>
+                    <div class="text-xs text-gray-500">${this.getRoundDisplayNameWithTime(match.roundNumber)} • ${match.location || 'No location'}</div>
                   </div>
                   <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
                     ${this.getMatchStatusText(match.status)}
@@ -1452,6 +1521,18 @@ class EventWorkspacePage {
               `).join('')}
             </div>
           </div>
+
+          <!-- Judge Scoring Details (only for Judge view) -->
+          ${isJudge ? `
+            <div class="bg-white border border-gray-300 rounded-lg">
+              <div class="px-6 py-4 border-b border-gray-300">
+                <h3 class="text-lg font-medium text-gray-900">My Scoring Details</h3>
+              </div>
+              <div class="p-6">
+                ${this.renderJudgeScoringDetails()}
+              </div>
+            </div>
+          ` : ''}
         </div>
 
         <!-- Bottom Section: Wide Standings Table -->
@@ -1546,7 +1627,7 @@ class EventWorkspacePage {
     const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
       <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
         <div class="px-6 py-4 border-b border-gray-300">
-          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
+          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
         </div>
         <div class="divide-y divide-gray-200">
           ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
@@ -1626,13 +1707,9 @@ class EventWorkspacePage {
             </select>
             <select id="statusFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
               <option value="">All Status</option>
-                              <option value="draft">Draft</option>
-                              <option value="moderator_period_1">Moderator Period 1</option>
-                <option value="team_a_presentation">Team A Presentation</option>
-                <option value="team_b_commentary">Team B Commentary</option>
-                <option value="judge_1_1">Judge 1.1</option>
-                <option value="final_scoring">Final Scoring</option>
-              <option value="completed">Completed</option>
+              ${this.generateMatchStatusOptions(3).map(option => 
+                `<option value="${option.value}">${option.text}</option>`
+              ).join('')}
             </select>
           </div>
         </div>
@@ -1643,7 +1720,7 @@ class EventWorkspacePage {
         ${Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
           <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
             <div class="px-6 py-4 border-b border-gray-300">
-              <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayName(parseInt(round))}</h3>
+              <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
             </div>
             <div class="divide-y divide-gray-200">
               ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
@@ -1678,28 +1755,6 @@ class EventWorkspacePage {
     `;
   }
 
-  /**
-   * Check if a match has judge assignment conflicts
-   */
-  hasJudgeConflicts(match) {
-    if (!match.assignments || match.assignments.length === 0) return false;
-    
-    // Find all other matches in the same round
-    const sameRoundMatches = this.matches.filter(m => 
-      m.roundNumber === match.roundNumber && m.id !== match.id
-    );
-    
-    // Check if any judge in this match is also assigned to other matches in the same round
-    for (const assignment of match.assignments) {
-      for (const otherMatch of sameRoundMatches) {
-        if (otherMatch.assignments && otherMatch.assignments.some(a => a.judge.id === assignment.judge.id)) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
 
   /**
    * Render individual match card
@@ -1715,6 +1770,7 @@ class EventWorkspacePage {
     
     // Check if admin is also assigned as judge to this match
     const isAdminAssignedAsJudge = currentUser.role === 'admin' && isAssignedJudge;
+
     
     // Check if admin is also assigned as moderator to this match
     const isAdminAssignedAsModerator = currentUser.role === 'admin' && match.moderator?.id === currentUser.id;
@@ -1724,10 +1780,9 @@ class EventWorkspacePage {
 
     // Check if judge has submitted scores
     const hasSubmittedScores = this.judgeScoresCache.get(match.id);
-    const hasConflicts = this.hasJudgeConflicts(match);
 
     return `
-      <div class="p-6 ${hasConflicts ? 'border-l-4 border-yellow-400' : ''}">
+      <div class="p-6">
         <div class="flex justify-between items-start">
           <div class="flex-1">
             <div class="flex items-center space-x-4">
@@ -1737,17 +1792,9 @@ class EventWorkspacePage {
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
                 ${this.getMatchStatusText(match.status)}
               </span>
-              ${hasConflicts && isAdmin ? `
-                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200" title="Judge assignment conflict detected">
-                  <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                  </svg>
-                  Conflict
-                </span>
-              ` : ''}
             </div>
             <div class="mt-2 text-sm text-gray-600 space-y-1">
-              <div>Room: ${match.room || 'Not assigned'}</div>
+              <div>Location: ${match.location || 'Not assigned'}</div>
               <div>Scheduled: ${scheduledTime}</div>
               <div>Moderator: ${match.moderator ? `${match.moderator.firstName} ${match.moderator.lastName}${isAdminAssignedAsModerator ? ' <span class="text-blue-600 font-medium">(You)</span>' : ''}` : 'Not assigned'}</div>
               <div>Judges: ${match.assignments ? 
@@ -1777,71 +1824,51 @@ class EventWorkspacePage {
               </button>
             ` : ''}
             
-            ${isModerator && match.status !== 'draft' && match.status !== 'completed' ? `
+            ${(isModerator || isAdmin) && match.status !== 'completed' ? `
               <button data-action="manage-match-status" data-match-id="${match.id}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium">
                 Manage Status
               </button>
             ` : ''}
 
-            ${isAssignedJudge && effectiveRole === 'judge' ? `
-              ${hasSubmittedScores ? `
-                <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
-                  <div class="flex items-center space-x-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                    <span class="font-medium">Scored</span>
-                  </div>
-                </div>
-              ` : `
-                <button data-action="score-match" data-match-id="${match.id}" 
-                  class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition-colors font-medium"
-                  ${!this.canJudgesScore(match.status) ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
-                  Score
-                </button>
-              `}
+            ${isAssignedJudge && effectiveRole === 'judge' && !hasSubmittedScores ? `
+              <button data-action="score-match" data-match-id="${match.id}" 
+                class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition-colors font-medium"
+                ${!this.canJudgesScore(match.status) ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                Score
+              </button>
+            ` : ''}
+
+            ${isAdmin || isModerator ? `
+              <button data-action="view-scores" data-match-id="${match.id}" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors font-medium">
+                View Scores
+              </button>
             ` : ''}
             
             ${isAdmin ? `
-              ${isAdminAssignedAsJudge && this.canJudgesScore(match.status) && effectiveRole === 'admin' ? `
-                <div class="bg-blue-50 border border-blue-200 rounded px-3 py-1 text-xs text-blue-800">
-                  <div class="flex items-center space-x-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                    </svg>
-                    <span>Switch to Judge role to score</span>
-                  </div>
-                </div>
-              ` : ''}
-              ${isAdminAssignedAsModerator && match.status !== 'completed' && effectiveRole === 'admin' ? `
-                <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
-                  <div class="flex items-center space-x-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                    </svg>
-                    <span>Switch to Moderator role to ${match.status === 'draft' ? 'start' : 'manage'}</span>
-                  </div>
-                </div>
-              ` : ''}
-              ${isAdmin || isModerator ? `
-                <button data-action="view-scores" data-match-id="${match.id}" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors font-medium">
-                  View Scores
-                </button>
-              ` : ''}
-              ${match.status === 'draft' ? `
-                <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors font-medium">
-                  Edit
-                </button>
-              ` : `
-                <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-300 text-gray-500 px-3 py-1 rounded text-sm cursor-not-allowed" disabled>
-                  Edit
-                </button>
-              `}
+              <button data-action="edit-match" data-match-id="${match.id}" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors font-medium">
+                Edit
+              </button>
               ${match.status === 'draft' ? `
                 <button data-action="delete-match" data-match-id="${match.id}" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors font-medium">
                   Delete
                 </button>
               ` : ''}
+            ` : ''}
+          </div>
+
+          <!-- 提示信息区域 - 显示在按钮下方 (更新时间: ${new Date().toISOString()}) -->
+          <div class="mt-2 space-y-1">
+            ${isAssignedJudge && effectiveRole === 'judge' && hasSubmittedScores ? `
+              <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
+                <div class="flex items-center space-x-1">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  <span class="font-medium">Scored</span>
+                </div>
+              </div>
+            ` : ''}
+            ${isAdmin ? `
             ` : ''}
           </div>
         </div>
@@ -1908,6 +1935,149 @@ class EventWorkspacePage {
         </td>
       </tr>
     `;
+  }
+
+  /**
+   * Render schedule tab content
+   */
+  renderScheduleTab() {
+    const isAdmin = this.getEffectiveRole() === 'admin';
+    
+    if (!isAdmin) {
+      return `
+        <div class="text-center py-12">
+          <div class="text-gray-500">Access denied. Only administrators can manage round schedules.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="space-y-6">
+        <!-- Header -->
+        <div class="bg-white border border-gray-300 rounded-lg p-6">
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-xl font-semibold text-gray-900">Round Schedule Management</h2>
+              <p class="text-gray-600 mt-1">Set specific start times for each round to ensure all matches begin within the same time window.</p>
+            </div>
+            <button data-action="save-round-schedules" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+              Save All Schedules
+            </button>
+          </div>
+        </div>
+
+        <!-- Round Schedules Form -->
+        <div class="bg-white border border-gray-300 rounded-lg">
+          <div class="px-6 py-4 border-b border-gray-300">
+            <h3 class="text-lg font-medium text-gray-900">Round Schedules</h3>
+          </div>
+          <form id="roundSchedulesForm" class="p-6 space-y-6">
+            ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(roundNumber => {
+              const roundName = this.getRoundDisplayName(roundNumber);
+              const currentSchedule = this.currentEvent.roundSchedules?.[roundNumber.toString()];
+              
+              return `
+                <div class="border border-gray-200 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-md font-medium text-gray-900">${roundName}</h4>
+                    <button type="button" data-action="apply-schedule-to-round" data-round="${roundNumber}" class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors">
+                      Apply to All Matches
+                    </button>
+                  </div>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                      <input 
+                        type="datetime-local" 
+                        name="round_${roundNumber}_startTime" 
+                        class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
+                        value="${currentSchedule?.startTime ? new Date(currentSchedule.startTime).toISOString().slice(0, 16) : ''}"
+                        placeholder="Select start time"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                      <input 
+                        type="number" 
+                        name="round_${roundNumber}_duration" 
+                        class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500"
+                        value="${currentSchedule?.duration || ''}"
+                        placeholder="90"
+                        min="30"
+                        max="300"
+                      />
+                    </div>
+                  </div>
+                  
+                  ${currentSchedule ? `
+                    <div class="mt-3 text-sm text-gray-600">
+                      <div><strong>Current Schedule:</strong></div>
+                      <div>Start: ${new Date(currentSchedule.startTime).toLocaleString()}</div>
+                      <div>Duration: ${currentSchedule.duration} minutes</div>
+                      <div>End: ${new Date(new Date(currentSchedule.startTime).getTime() + (currentSchedule.duration * 60000)).toLocaleString()}</div>
+                    </div>
+                  ` : `
+                    <div class="mt-3 text-sm text-gray-500 italic">
+                      No schedule set for this round
+                    </div>
+                  `}
+                </div>
+              `;
+            }).join('')}
+          </form>
+        </div>
+
+        <!-- Schedule Actions -->
+        <div class="bg-white border border-gray-300 rounded-lg p-6">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Bulk Actions</h3>
+          <div class="space-y-3">
+            <button data-action="apply-all-schedules" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
+              Apply All Schedules to All Matches
+            </button>
+            <button data-action="clear-all-schedules" class="w-full bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors font-medium">
+              Clear All Schedules
+            </button>
+          </div>
+        </div>
+
+        <!-- Schedule Preview -->
+        <div class="bg-white border border-gray-300 rounded-lg p-6">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Schedule Preview</h3>
+          <div id="schedulePreview" class="space-y-2">
+            ${this.renderSchedulePreview()}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render schedule preview
+   */
+  renderSchedulePreview() {
+    if (!this.currentEvent.roundSchedules) {
+      return '<div class="text-gray-500 italic">No schedules set</div>';
+    }
+
+    return Object.entries(this.currentEvent.roundSchedules).map(([roundNumber, schedule]) => {
+      const roundName = this.getRoundDisplayName(parseInt(roundNumber));
+      const startTime = new Date(schedule.startTime);
+      const endTime = new Date(startTime.getTime() + (schedule.duration * 60000));
+      
+      return `
+        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+          <div>
+            <div class="font-medium">${roundName}</div>
+            <div class="text-sm text-gray-600">${startTime.toLocaleString()} - ${endTime.toLocaleString()}</div>
+          </div>
+          <div class="text-sm text-gray-500">
+            ${schedule.duration} minutes
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   /**
@@ -2152,8 +2322,15 @@ class EventWorkspacePage {
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Room</label>
-                <input type="text" name="room" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" placeholder="e.g., Room A">
+                <label class="block text-sm font-medium text-gray-700">Location</label>
+                <div class="mt-1 relative">
+                  <input type="text" name="location" id="createMatchLocation" placeholder="Enter location..." class="block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 pr-8">
+                  <button type="button" id="createMatchLocationEditBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 hidden">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -2246,10 +2423,18 @@ class EventWorkspacePage {
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Room</label>
-                <input type="text" name="room" id="editRoom" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" placeholder="e.g., Room A">
+                <label class="block text-sm font-medium text-gray-700">Location</label>
+                <div class="mt-1 relative">
+                  <input type="text" name="location" id="editMatchLocation" placeholder="Enter location..." class="block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 pr-8">
+                  <button type="button" id="editMatchLocationEditBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 hidden">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
+            
             
             <div class="grid grid-cols-2 gap-4">
               <div>
@@ -2290,17 +2475,42 @@ class EventWorkspacePage {
             <!-- Judges Selection -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Judges</label>
-              <select name="judgeIds" multiple class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 h-32 overflow-y-auto bg-white text-sm" style="min-height: 8rem;" id="editJudgeIds">
-                ${this.users && this.users.length > 0 ? 
-                  this.users.filter(u => u.role === 'judge' || u.role === 'admin').map(user => `
-                    <option value="${user.id}" class="py-2 px-3">${user.firstName} ${user.lastName} (${user.email})</option>
-                  `).join('') : 
-                  '<option disabled>No judges available</option>'
-                }
-              </select>
+              
+              <!-- Current Judges -->
+              <div class="mb-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">Current Judges</h4>
+                <div id="currentJudgesList" class="space-y-2 min-h-[60px] border border-gray-200 rounded-md p-3 bg-gray-50">
+                  <p class="text-sm text-gray-500 italic">No judges assigned yet</p>
+                </div>
+              </div>
+              
+              <!-- Add Judge Section -->
+              <div class="mb-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">Add Judge</h4>
+                <div class="flex gap-2 items-end">
+                  <div class="flex-1">
+                    <select id="availableJudgesSelect" class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm">
+                      <option value="">Select a judge to add</option>
+                      ${this.users && this.users.length > 0 ? 
+                        this.users.filter(u => u.role === 'judge' || u.role === 'admin').map(user => `
+                          <option value="${user.id}" data-name="${user.firstName} ${user.lastName}" data-email="${user.email}">${user.firstName} ${user.lastName} (${user.email})</option>
+                        `).join('') : 
+                        '<option disabled>No judges available</option>'
+                      }
+                    </select>
+                  </div>
+                  <button type="button" id="addJudgeBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium whitespace-nowrap">
+                    Add
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Hidden input to store selected judge IDs -->
+              <input type="hidden" name="judgeIds" id="editJudgeIds" value="">
+              
               <div class="mt-2 flex justify-between items-center">
                 <p class="text-xs text-gray-500">
-                  <span class="text-blue-600 font-medium">Recommended:</span> Select 2-3 judges (Hold Ctrl/Cmd to select multiple)
+                  <span class="text-blue-600 font-medium">Recommended:</span> 2-3 judges
                 </p>
                 <span id="editJudgeSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
               </div>
@@ -2652,7 +2862,8 @@ class EventWorkspacePage {
             alert('Match not found');
             return;
           }
-          if (match.status !== 'draft') {
+          // Admin can edit any match, others can only edit draft matches
+          if (this.getEffectiveRole() !== 'admin' && match.status !== 'draft') {
             alert(`Cannot edit match: Match status is "${match.status}". Only draft matches can be edited.`);
             return;
           }
@@ -2728,11 +2939,180 @@ class EventWorkspacePage {
           this.showSwissModal();
           break;
           
+        case 'save-round-schedules':
+          console.log('🎯 [EventWorkspace] Save round schedules action triggered');
+          await this.saveRoundSchedules();
+          break;
+          
+        case 'apply-schedule-to-round':
+          const roundNumber = parseInt(element.getAttribute('data-round'));
+          await this.applyScheduleToRound(roundNumber);
+          break;
+          
+        case 'apply-all-schedules':
+          await this.applyAllSchedules();
+          break;
+          
+        case 'clear-all-schedules':
+          await this.clearAllSchedules();
+          break;
+          
         default:
           console.log('Unhandled action:', action);
       }
     } finally {
       this.isOperationInProgress = false;
+    }
+  }
+
+  /**
+   * Save round schedules
+   */
+  async saveRoundSchedules() {
+    try {
+      console.log('🕒 [EventWorkspace] Save round schedules called');
+      const form = document.getElementById('roundSchedulesForm');
+      if (!form) {
+        console.error('❌ [EventWorkspace] Schedule form not found');
+        this.ui.showError('Error', 'Schedule form not found');
+        return;
+      }
+      console.log('✅ [EventWorkspace] Schedule form found');
+
+      const formData = new FormData(form);
+      const roundSchedules = {};
+
+      // Process each round
+      for (let roundNumber = 1; roundNumber <= this.currentEvent.totalRounds; roundNumber++) {
+        const startTime = formData.get(`round_${roundNumber}_startTime`);
+        const duration = formData.get(`round_${roundNumber}_duration`);
+
+        console.log(`📅 [EventWorkspace] Round ${roundNumber}: startTime="${startTime}", duration="${duration}"`);
+
+        if (startTime && duration) {
+          roundSchedules[roundNumber.toString()] = {
+            startTime: new Date(startTime).toISOString(),
+            duration: parseInt(duration)
+          };
+        }
+      }
+
+      console.log('📋 [EventWorkspace] Round schedules to save:', roundSchedules);
+
+      // Update round schedules
+      await this.eventService.updateRoundSchedules(this.currentEvent.id, roundSchedules);
+      
+      // Reload event data to get updated schedules
+      await this.loadEventData();
+      
+      // Re-render the schedule tab
+      if (this.currentTab === 'schedule') {
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
+
+      this.ui.showSuccess('Success', 'Round schedules saved successfully');
+    } catch (error) {
+      console.error('Failed to save round schedules:', error);
+      this.ui.showError('Error', 'Failed to save round schedules: ' + error.message);
+    }
+  }
+
+  /**
+   * Apply schedule to a specific round
+   */
+  async applyScheduleToRound(roundNumber) {
+    try {
+      const result = await this.matchService.applyRoundSchedule(this.currentEvent.id, roundNumber);
+      
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render current tab if it shows matches
+      if (this.currentTab === 'matches' || this.currentTab === 'overview') {
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
+
+      this.ui.showSuccess('Success', result.message);
+    } catch (error) {
+      console.error('Failed to apply schedule to round:', error);
+      this.ui.showError('Error', 'Failed to apply schedule to round: ' + error.message);
+    }
+  }
+
+  /**
+   * Apply all schedules to all matches
+   */
+  async applyAllSchedules() {
+    try {
+      if (!this.currentEvent.roundSchedules) {
+        this.ui.showError('Error', 'No schedules defined. Please set round schedules first.');
+        return;
+      }
+
+      let totalUpdated = 0;
+      const results = [];
+
+      // Apply schedule to each round
+      for (const roundNumber of Object.keys(this.currentEvent.roundSchedules)) {
+        try {
+          const result = await this.matchService.applyRoundSchedule(this.currentEvent.id, parseInt(roundNumber));
+          totalUpdated += result.updatedCount || 0;
+          results.push(`Round ${roundNumber}: ${result.updatedCount} matches`);
+        } catch (error) {
+          results.push(`Round ${roundNumber}: Error - ${error.message}`);
+        }
+      }
+
+      // Reload matches data
+      await this.loadEventData();
+      
+      // Re-render current tab if it shows matches
+      if (this.currentTab === 'matches' || this.currentTab === 'overview') {
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
+
+      this.ui.showSuccess('Success', `Applied schedules to ${totalUpdated} matches total.\n\nDetails:\n${results.join('\n')}`);
+    } catch (error) {
+      console.error('Failed to apply all schedules:', error);
+      this.ui.showError('Error', 'Failed to apply all schedules: ' + error.message);
+    }
+  }
+
+  /**
+   * Clear all round schedules
+   */
+  async clearAllSchedules() {
+    try {
+      if (!confirm('Are you sure you want to clear all round schedules? This action cannot be undone.')) {
+        return;
+      }
+
+      await this.eventService.updateRoundSchedules(this.currentEvent.id, {});
+      
+      // Reload event data
+      await this.loadEventData();
+      
+      // Re-render the schedule tab
+      if (this.currentTab === 'schedule') {
+        const workspaceContent = document.getElementById('workspace-content');
+        if (workspaceContent) {
+          workspaceContent.innerHTML = this.renderTabContent();
+        }
+      }
+
+      this.ui.showSuccess('Success', 'All round schedules cleared successfully');
+    } catch (error) {
+      console.error('Failed to clear round schedules:', error);
+      this.ui.showError('Error', 'Failed to clear round schedules: ' + error.message);
     }
   }
 
@@ -2931,10 +3311,12 @@ class EventWorkspacePage {
         errors.push('Team A and Team B cannot be the same team');
       }
       
-      // Validate room
-      const room = formData.get('room')?.trim();
-      if (!room) {
-        errors.push('Please enter a room/location for the match');
+      // Validate location (optional for moderators and admins)
+      const location = formData.get('location');
+      const canEditLocation = this.canEditLocation();
+      
+      if (!canEditLocation && location) {
+        errors.push('Only moderators and admins can set location');
       }
       
       // Get selected judge IDs from multiple select
@@ -2965,7 +3347,7 @@ class EventWorkspacePage {
         teamAId: teamAId,
         teamBId: teamBId,
         moderatorId: formData.get('moderatorId') || null,
-        room: room,
+        location: location || null,
         scheduledTime: formData.get('scheduledTime') || null
       };
 
@@ -3069,10 +3451,6 @@ class EventWorkspacePage {
           workspaceContent.innerHTML = this.renderTabContent();
         }
         
-        // Check for duplicate judge assignments after creating match
-        setTimeout(() => {
-          this.displayDuplicateJudgeWarnings();
-        }, 500);
         
       } catch (reloadError) {
         console.error('❌ Failed to reload matches after creation:', reloadError);
@@ -3116,36 +3494,37 @@ class EventWorkspacePage {
       // Populate form fields
       document.getElementById('editMatchId').value = match.id;
       document.getElementById('editRoundNumber').value = match.roundNumber;
-      document.getElementById('editRoom').value = match.room || '';
+      
+      // Set location
+      const editLocationInput = document.getElementById('editMatchLocation');
+      if (editLocationInput) {
+        editLocationInput.value = match.location || '';
+        // Update edit button visibility based on whether location is set
+        this.updateLocationEditButton('editMatchLocation', 'editMatchLocationEditBtn', !!match.location);
+      }
+      
       document.getElementById('editTeamAId').value = match.teamAId;
       document.getElementById('editTeamBId').value = match.teamBId;
       document.getElementById('editModeratorId').value = match.moderatorId || '';
       
-      // Format datetime for input
+      
+      // Format datetime for input - use local time to avoid timezone issues
       if (match.scheduledTime) {
         const date = new Date(match.scheduledTime);
-        const formattedDate = date.toISOString().slice(0, 16);
+        // Format as YYYY-MM-DDTHH:MM in local timezone
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
         document.getElementById('editScheduledTime').value = formattedDate;
       } else {
         document.getElementById('editScheduledTime').value = '';
       }
 
-      // Set selected judges
-      const judgeSelect = document.getElementById('editJudgeIds');
-      if (judgeSelect) {
-        // Clear previous selections
-        Array.from(judgeSelect.options).forEach(option => option.selected = false);
-        
-        // Select current judges
-        if (match.assignments && match.assignments.length > 0) {
-          match.assignments.forEach(assignment => {
-            const option = judgeSelect.querySelector(`option[value="${assignment.judge.id}"]`);
-            if (option) option.selected = true;
-          });
-        }
-        
-        this.updateEditJudgeSelectionCounter(judgeSelect);
-      }
+      // Initialize judge selection
+      this.initializeEditJudgeSelection(match);
 
       this.showModal('editMatchModal');
       
@@ -3153,6 +3532,169 @@ class EventWorkspacePage {
       console.error('Failed to open edit match modal:', error);
       this.ui.showError('Error', 'Failed to load match data');
     }
+  }
+
+  /**
+   * Initialize judge selection for edit match modal
+   */
+  initializeEditJudgeSelection(match) {
+    const currentJudgesList = document.getElementById('currentJudgesList');
+    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    const hiddenInput = document.getElementById('editJudgeIds');
+    const counter = document.getElementById('editJudgeSelectionCounter');
+    
+    // Clear current judges list
+    currentJudgesList.innerHTML = '';
+    
+    // Store current judge IDs
+    this.currentEditJudgeIds = [];
+    
+    if (match.assignments && match.assignments.length > 0) {
+      match.assignments.forEach(assignment => {
+        this.currentEditJudgeIds.push(assignment.judge.id);
+        this.addJudgeToCurrentList(assignment.judge);
+      });
+    }
+    
+    // Update hidden input
+    hiddenInput.value = this.currentEditJudgeIds.join(',');
+    
+    // Update counter
+    counter.textContent = `${this.currentEditJudgeIds.length} selected`;
+    
+    // Update available judges dropdown
+    this.updateAvailableJudgesDropdown();
+    
+    // Add event listeners
+    this.setupEditJudgeEventListeners();
+  }
+
+  /**
+   * Add judge to current judges list
+   */
+  addJudgeToCurrentList(judge) {
+    const currentJudgesList = document.getElementById('currentJudgesList');
+    
+    // Remove "no judges" message if it exists
+    const noJudgesMsg = currentJudgesList.querySelector('.text-gray-500.italic');
+    if (noJudgesMsg) {
+      noJudgesMsg.remove();
+    }
+    
+    const judgeItem = document.createElement('div');
+    judgeItem.className = 'flex items-center justify-between bg-white border border-gray-200 rounded-md p-2';
+    judgeItem.innerHTML = `
+      <div class="flex items-center">
+        <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+        <div>
+          <div class="text-sm font-medium text-gray-900">${judge.firstName} ${judge.lastName}</div>
+          <div class="text-xs text-gray-500">${judge.email}</div>
+        </div>
+      </div>
+      <button type="button" class="text-red-600 hover:text-red-800 text-sm font-medium" onclick="window.eventWorkspacePage.removeJudgeFromCurrent('${judge.id}')">
+        Remove
+      </button>
+    `;
+    
+    currentJudgesList.appendChild(judgeItem);
+  }
+
+  /**
+   * Remove judge from current judges list
+   */
+  removeJudgeFromCurrent(judgeId) {
+    // Remove from current judge IDs
+    this.currentEditJudgeIds = this.currentEditJudgeIds.filter(id => id !== judgeId);
+    
+    // Update hidden input
+    document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
+    
+    // Update counter
+    document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+    
+    // Update available judges dropdown
+    this.updateAvailableJudgesDropdown();
+    
+    // Re-render current judges list
+    this.renderCurrentJudgesList();
+  }
+
+  /**
+   * Render current judges list
+   */
+  renderCurrentJudgesList() {
+    const currentJudgesList = document.getElementById('currentJudgesList');
+    currentJudgesList.innerHTML = '';
+    
+    if (this.currentEditJudgeIds.length === 0) {
+      currentJudgesList.innerHTML = '<p class="text-sm text-gray-500 italic">No judges assigned yet</p>';
+      return;
+    }
+    
+    // Get judge details and render
+    this.currentEditJudgeIds.forEach(judgeId => {
+      const judge = this.users.find(u => u.id === judgeId);
+      if (judge) {
+        this.addJudgeToCurrentList(judge);
+      }
+    });
+  }
+
+  /**
+   * Update available judges dropdown
+   */
+  updateAvailableJudgesDropdown() {
+    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    const options = availableJudgesSelect.querySelectorAll('option[value]');
+    
+    options.forEach(option => {
+      const judgeId = option.value;
+      if (this.currentEditJudgeIds.includes(judgeId)) {
+        option.disabled = true;
+        option.textContent = option.textContent + ' (Already assigned)';
+      } else {
+        option.disabled = false;
+        option.textContent = option.getAttribute('data-name') + ' (' + option.getAttribute('data-email') + ')';
+      }
+    });
+  }
+
+  /**
+   * Setup event listeners for judge selection
+   */
+  setupEditJudgeEventListeners() {
+    const addJudgeBtn = document.getElementById('addJudgeBtn');
+    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    
+    // Add judge button
+    addJudgeBtn.addEventListener('click', () => {
+      const selectedJudgeId = availableJudgesSelect.value;
+      if (!selectedJudgeId) return;
+      
+      const selectedOption = availableJudgesSelect.querySelector(`option[value="${selectedJudgeId}"]`);
+      const judge = {
+        id: selectedJudgeId,
+        firstName: selectedOption.getAttribute('data-name').split(' ')[0],
+        lastName: selectedOption.getAttribute('data-name').split(' ').slice(1).join(' '),
+        email: selectedOption.getAttribute('data-email')
+      };
+      
+      // Add to current judges
+      this.currentEditJudgeIds.push(selectedJudgeId);
+      
+      // Update hidden input
+      document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
+      
+      // Update counter
+      document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+      
+      // Update UI
+      this.addJudgeToCurrentList(judge);
+      this.updateAvailableJudgesDropdown();
+      
+      // Reset selection
+      availableJudgesSelect.value = '';
+    });
   }
 
   /**
@@ -3181,13 +3723,13 @@ class EventWorkspacePage {
         teamAId: formData.get('teamAId'),
         teamBId: formData.get('teamBId'),
         moderatorId: formData.get('moderatorId'),
-        room: formData.get('room'),
+        location: formData.get('location'),
         scheduledTime: formData.get('scheduledTime')
       });
       
-      // Get selected judge IDs from multiple select
-      const judgeSelect = event.target.querySelector('select[name="judgeIds"]');
-      const selectedJudgeIds = Array.from(judgeSelect.selectedOptions).map(option => option.value);
+      // Get selected judge IDs from hidden input
+      const judgeIdsInput = event.target.querySelector('input[name="judgeIds"]');
+      const selectedJudgeIds = judgeIdsInput.value ? judgeIdsInput.value.split(',') : [];
       console.log('Selected judge IDs:', selectedJudgeIds);
       
       const matchData = {
@@ -3195,13 +3737,14 @@ class EventWorkspacePage {
         teamAId: formData.get('teamAId'),
         teamBId: formData.get('teamBId'),
         moderatorId: formData.get('moderatorId') || null,
-        room: formData.get('room'),
+        location: formData.get('location') || null,
         scheduledTime: formData.get('scheduledTime') || null
       };
       
+      
       // Clean up empty strings to null for optional fields
       if (matchData.moderatorId === '') matchData.moderatorId = null;
-      if (matchData.room === '') matchData.room = null;
+      if (matchData.location === '') matchData.location = null;
       if (matchData.scheduledTime === '') matchData.scheduledTime = null;
       
       console.log('Match data to update:', matchData);
@@ -3225,10 +3768,15 @@ class EventWorkspacePage {
       for (const currentJudgeId of currentJudgeIds) {
         if (!selectedJudgeIds.includes(currentJudgeId)) {
           try {
-            await this.matchService.removeJudge(matchId, currentJudgeId);
+            // Pass admin ID if user is admin
+            const adminId = this.getEffectiveRole() === 'admin' ? this.currentUser?.id : null;
+            await this.matchService.removeJudge(matchId, currentJudgeId, adminId);
             console.log(`Removed judge ${currentJudgeId} from match`);
           } catch (error) {
             console.error(`Failed to remove judge ${currentJudgeId}:`, error);
+            // Show error to user
+            const errorMessage = error?.message || error?.data?.message || 'Unknown error occurred';
+            this.ui.showError('Error', `Failed to remove judge: ${errorMessage}`);
           }
         }
       }
@@ -3243,6 +3791,8 @@ class EventWorkspacePage {
             successfulAssignments++;
           } catch (error) {
             console.error(`Failed to assign judge ${judgeId}:`, error);
+            const errorMessage = error?.message || error?.data?.message || 'Unknown error occurred';
+            this.ui.showError('Error', `Failed to add judge: ${errorMessage}`);
           }
         }
       }
@@ -3250,9 +3800,8 @@ class EventWorkspacePage {
       this.closeModal('editMatchModal');
       this.ui.showSuccess('Success', `Match updated successfully! ${successfulAssignments} new judges assigned.`);
       
-      // Reload matches to get latest data
-      const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
-      this.matches = matchesResponse.data?.matches || [];
+      // Reload all event data to ensure consistency
+      await this.loadEventData();
       
       // Re-render only the content
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
@@ -3433,7 +3982,7 @@ class EventWorkspacePage {
         `Are you sure you want to delete this match?\n\n` +
         `${teamAName} vs ${teamBName}\n` +
         `Round ${match.roundNumber}\n` +
-        `Room: ${match.room || 'Not assigned'}\n\n` +
+        `Location: ${match.location || 'Not assigned'}\n\n` +
         `This action cannot be undone.`
       );
 
@@ -3903,6 +4452,13 @@ class EventWorkspacePage {
     // Update team dropdown when opening create match modal
     if (modalId === 'createMatchModal') {
       this.updateCreateMatchTeamDropdowns();
+      // Setup location input permissions
+      this.setupLocationInputs();
+    }
+    
+    // Setup location input permissions when opening edit match modal
+    if (modalId === 'editMatchModal') {
+      this.setupLocationInputs();
     }
   }
 
@@ -4058,6 +4614,66 @@ class EventWorkspacePage {
       case 'scheduled': return 'Scheduled'; // legacy support
       default: return status.charAt(0).toUpperCase() + status.slice(1);
     }
+  }
+
+  /**
+   * Generate dynamic judge round options based on the number of judges assigned to a match
+   * @param {number} judgeCount - Number of judges assigned to the match
+   * @param {number} period - Period number (1 or 2)
+   * @returns {Array} Array of judge round options
+   */
+  generateJudgeRoundOptions(judgeCount, period = 1) {
+    const options = [];
+    for (let i = 1; i <= judgeCount; i++) {
+      options.push({
+        value: `judge_${period}_${i}`,
+        text: `Judge ${period}.${i}`
+      });
+    }
+    return options;
+  }
+
+  /**
+   * Generate all status options for a match based on its judge count
+   * @param {number} judgeCount - Number of judges assigned to the match
+   * @returns {Array} Array of all status options
+   */
+  generateMatchStatusOptions(judgeCount = 3) {
+    const baseStatuses = [
+      { value: 'draft', text: 'Draft' },
+      { value: 'moderator_period_1', text: 'Moderator Period 1' },
+      { value: 'team_a_conferral_1_1', text: 'Team A Conferral 1.1' },
+      { value: 'team_a_presentation', text: 'Team A Presentation' },
+      { value: 'team_b_conferral_1_1', text: 'Team B Conferral 1.1' },
+      { value: 'team_b_commentary', text: 'Team B Commentary' },
+      { value: 'team_a_conferral_1_2', text: 'Team A Conferral 1.2' },
+      { value: 'team_a_response', text: 'Team A Response' }
+    ];
+
+    // Add period 1 judge rounds
+    baseStatuses.push(...this.generateJudgeRoundOptions(judgeCount, 1));
+
+    // Add period 2 statuses
+    baseStatuses.push(
+      { value: 'moderator_period_2', text: 'Moderator Period 2' },
+      { value: 'team_b_conferral_2_1', text: 'Team B Conferral 2.1' },
+      { value: 'team_b_presentation', text: 'Team B Presentation' },
+      { value: 'team_a_conferral_2_1', text: 'Team A Conferral 2.1' },
+      { value: 'team_a_commentary', text: 'Team A Commentary' },
+      { value: 'team_b_conferral_2_2', text: 'Team B Conferral 2.2' },
+      { value: 'team_b_response', text: 'Team B Response' }
+    );
+
+    // Add period 2 judge rounds
+    baseStatuses.push(...this.generateJudgeRoundOptions(judgeCount, 2));
+
+    // Add final statuses
+    baseStatuses.push(
+      { value: 'final_scoring', text: 'Final Scoring' },
+      { value: 'completed', text: 'Completed' }
+    );
+
+    return baseStatuses;
   }
 
   /**
@@ -4549,7 +5165,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
               </button>
             </div>
             <div class="mt-2 text-sm text-gray-600">
-              ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'} • Round ${match.roundNumber} • ${match.room || 'No room assigned'}
+              ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'} • Round ${match.roundNumber} • ${match.location || 'No location assigned'}
             </div>
           </div>
           
@@ -4564,21 +5180,45 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                       ${judge.firstName} ${judge.lastName}
                       <span class="text-sm text-gray-500">(${judge.email})</span>
                     </h3>
-                    ${scores.every(s => s.isSubmitted) ? `
-                      <div class="bg-green-100 text-green-800 text-sm px-2 py-1 rounded-full flex items-center">
-                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                        </svg>
-                        Submitted
-                      </div>
-                    ` : `
-                      <div class="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full flex items-center">
-                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-                        </svg>
-                        Pending
-                      </div>
-                    `}
+                    <div class="flex items-center gap-2">
+                      ${scores.every(s => s.isSubmitted) ? `
+                        <div class="bg-green-100 text-green-800 text-sm px-2 py-1 rounded-full flex items-center">
+                          <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                          Submitted
+                        </div>
+                      ` : `
+                        <div class="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full flex items-center">
+                          <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                          </svg>
+                          Pending
+                        </div>
+                      `}
+                      ${this.getEffectiveRole() === 'admin' ? `
+                        <div class="flex gap-1">
+                          <button onclick="window.eventWorkspacePage.showModifyScoresModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
+                                  class="bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+                                  title="Modify Judge Scores">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                            </svg>
+                            Modify Scores
+                          </button>
+                          ${match.status !== 'completed' && scores.length > 0 ? `
+                            <button onclick="window.eventWorkspacePage.showReplaceJudgeModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
+                                    class="bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+                                    title="Replace Judge">
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                              </svg>
+                              Replace Judge
+                            </button>
+                          ` : ''}
+                        </div>
+                      ` : ''}
+                    </div>
                   </div>
                   
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4661,6 +5301,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                 </div>
               `;
             }).join('')}
+            
           </div>
         </div>
       </div>
@@ -4965,7 +5606,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         opponent: opponent || { name: 'Unknown', school: '' },
         result,
         round: match.roundNumber,
-        room: match.room || 'No room'
+        room: match.location || 'No location'
       };
     }).sort((a, b) => a.round - b.round);
 
@@ -5276,7 +5917,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         result,
         isWinner,
         round: match.roundNumber,
-        room: match.room || 'No room assigned'
+        room: match.location || 'No location assigned'
       };
     }).sort((a, b) => a.round - b.round);
 
@@ -6597,7 +7238,654 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     console.log('🧪 Testing error modal...');
     this.ui.showError('Error', 'Cannot create repeated match');
   }
+
+  /**
+   * Show modify scores modal (Admin only)
+   */
+  async showModifyScoresModal(matchId, judgeId, judgeName) {
+    try {
+      // Get current scores for this judge
+      const scoresResponse = await this.scoreService.getMatchScores(matchId);
+      const allScores = scoresResponse.data?.scores || scoresResponse.scores || scoresResponse.data || scoresResponse || [];
+      const judgeScores = allScores.filter(score => score.judge.id === judgeId);
+
+      if (judgeScores.length === 0) {
+        this.ui.showError('Error', 'No scores found for this judge');
+        return;
+      }
+
+      // Get match and team information
+      const match = this.matches.find(m => m.id === matchId);
+      const teamA = this.teams.find(t => t.id === match.teamAId);
+      const teamB = this.teams.find(t => t.id === match.teamBId);
+
+      // Create modal content
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-medium text-gray-900">Modify Scores - ${judgeName}</h3>
+            </div>
+            <div class="px-6 py-4">
+              <p class="text-sm text-gray-600 mb-4">Modify scores for ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'}</p>
+              
+              <form id="modifyScoresForm">
+                ${judgeScores.map(score => {
+                  const team = score.team;
+                  const criteriaScores = score.criteriaScores || {};
+                  let commentScores = score.commentScores || [];
+                  
+                  if (!Array.isArray(commentScores)) {
+                    commentScores = [];
+                  }
+                  
+                  return `
+                    <div class="mb-8 p-4 border border-gray-200 rounded-lg">
+                      <h4 class="font-medium text-gray-900 mb-4">${team?.name || 'Unknown Team'}</h4>
+                      
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h5 class="font-medium text-gray-700 mb-3">Criteria Scores:</h5>
+                          <div class="space-y-2">
+                            ${Object.entries(criteriaScores).map(([key, value]) => `
+                              <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-600 capitalize">${key.replace(/_/g, ' ')}:</label>
+                                <input type="number" 
+                                       name="criteria_${score.id}_${key}" 
+                                       value="${value || 0}" 
+                                       min="0" 
+                                       max="25" 
+                                       class="w-20 px-2 py-1 border border-gray-300 rounded text-sm">
+                              </div>
+                            `).join('')}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h5 class="font-medium text-gray-700 mb-3">Judge Questions:</h5>
+                          <div class="space-y-2">
+                            ${commentScores.map((scoreValue, index) => `
+                              <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-600">Question ${index + 1}:</label>
+                                <input type="number" 
+                                       name="comment_${score.id}_${index}" 
+                                       value="${scoreValue || 0}" 
+                                       min="0" 
+                                       max="20" 
+                                       class="w-20 px-2 py-1 border border-gray-300 rounded text-sm">
+                              </div>
+                            `).join('')}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Notes:</label>
+                        <textarea name="notes_${score.id}" 
+                                  rows="3" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                  placeholder="Add notes about this team's performance...">${score.notes || ''}</textarea>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </form>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onclick="window.eventWorkspacePage.closeModifyScoresModal()" 
+                      class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">
+                Cancel
+              </button>
+              <button onclick="window.eventWorkspacePage.saveModifiedScores('${matchId}', '${judgeId}')" 
+                      class="px-4 py-2 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-md">
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('modifyScoresModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'modifyScoresModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing modify scores modal:', error);
+      this.ui.showError('Error', 'Unable to show modify scores interface');
+    }
+  }
+
+  /**
+   * Close modify scores modal
+   */
+  closeModifyScoresModal() {
+    const modal = document.getElementById('modifyScoresModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Save modified scores
+   */
+  async saveModifiedScores(matchId, judgeId) {
+    try {
+      this.ui.showLoading('Saving score modifications...');
+      
+      // Get current scores for this judge
+      const scoresResponse = await this.scoreService.getMatchScores(matchId);
+      const allScores = scoresResponse.data?.scores || scoresResponse.scores || scoresResponse.data || scoresResponse || [];
+      const judgeScores = allScores.filter(score => score.judge.id === judgeId);
+
+      // Collect form data
+      const formData = new FormData(document.getElementById('modifyScoresForm'));
+      const updates = [];
+
+      for (const score of judgeScores) {
+        const criteriaScores = {};
+        const commentScores = [];
+        
+        // Update criteria scores
+        Object.keys(score.criteriaScores || {}).forEach(key => {
+          const inputName = `criteria_${score.id}_${key}`;
+          const input = document.querySelector(`input[name="${inputName}"]`);
+          if (input) {
+            criteriaScores[key] = parseInt(input.value) || 0;
+          }
+        });
+        
+        // Update comment scores
+        const commentInputs = document.querySelectorAll(`input[name^="comment_${score.id}_"]`);
+        commentInputs.forEach(input => {
+          commentScores.push(parseInt(input.value) || 0);
+        });
+        
+        // Get notes
+        const notesInput = document.querySelector(`textarea[name="notes_${score.id}"]`);
+        const notes = notesInput ? notesInput.value : '';
+        
+        updates.push({
+          scoreId: score.id,
+          criteriaScores,
+          commentScores,
+          notes
+        });
+      }
+
+      // Update each score
+      for (const update of updates) {
+        await this.scoreService.updateScore(matchId, update.scoreId, {
+          criteriaScores: update.criteriaScores,
+          commentScores: update.commentScores,
+          notes: update.notes
+        });
+      }
+      
+      this.ui.showSuccess('Success', 'Scores modified successfully');
+      
+      // Close modal
+      this.closeModifyScoresModal();
+      
+      // Refresh the scores modal
+      if (this.currentViewingMatchId === matchId) {
+        await this.viewMatchScores(matchId);
+      }
+      
+    } catch (error) {
+      console.error('Error saving modified scores:', error);
+      this.ui.showError('Error', error.message || 'Failed to save score modifications');
+    } finally {
+      this.ui.hideLoading();
+    }
+  }
+
+  /**
+   * Remove judge scores (Admin only) - Keep this for backward compatibility
+   */
+  async removeJudgeScores(matchId, judgeId) {
+    try {
+      const confirmed = confirm('Are you sure you want to remove all scores for this judge? This action cannot be undone.');
+      if (!confirmed) return;
+
+      this.ui.showLoading('Removing judge scores...');
+      
+      const result = await this.matchService.removeJudgeScores(matchId, judgeId);
+      
+      this.ui.showSuccess('Success', result.message || 'Judge scores removed successfully');
+      
+      // Refresh the scores modal
+      if (this.currentViewingMatchId === matchId) {
+        await this.viewMatchScores(matchId);
+      }
+      
+    } catch (error) {
+      console.error('Error removing judge scores:', error);
+      this.ui.showError('Error', error.message || 'Failed to remove judge scores');
+    } finally {
+      this.ui.hideLoading();
+    }
+  }
+
+  /**
+   * Show add judge modal
+   */
+  async showAddJudgeModal(matchId) {
+    try {
+      // Get available judges for this event
+      const event = this.currentEvent;
+      if (!event) {
+        this.ui.showError('Error', 'Unable to get event information');
+        return;
+      }
+
+      // Get all judges
+      const usersResponse = await this.userService.getAllUsers({ isActive: true });
+      const allUsers = usersResponse.users || [];
+      const judges = allUsers.filter(user => user.role === 'judge' && user.isActive);
+
+      // Filter judges who have access to this event
+      let allowedJudges = [];
+      if (event.allowedJudges) {
+        try {
+          const allowedJudgeIds = JSON.parse(event.allowedJudges);
+          if (Array.isArray(allowedJudgeIds) && allowedJudgeIds.length > 0) {
+            allowedJudges = judges.filter(judge => allowedJudgeIds.includes(judge.id));
+          } else {
+            // If allowedJudges is empty or invalid, allow all judges
+            allowedJudges = judges;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedJudges:', error);
+          // If parsing fails, allow all judges
+          allowedJudges = judges;
+        }
+      } else {
+        // If no allowedJudges field, allow all judges
+        allowedJudges = judges;
+      }
+
+      // Get current match judges
+      const match = this.matches.find(m => m.id === matchId);
+      const currentJudgeIds = match?.assignments?.map(a => a.judgeId) || [];
+      
+      // Filter out judges already assigned to this match
+      const availableJudges = allowedJudges.filter(judge => !currentJudgeIds.includes(judge.id));
+
+      if (availableJudges.length === 0) {
+        this.ui.showError('Error', 'No available judges to add to this match');
+        return;
+      }
+
+      // Create modal
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-medium text-gray-900">Add Judge</h3>
+            </div>
+            <div class="px-6 py-4">
+              <p class="text-sm text-gray-600 mb-4">Select a judge to add to this match:</p>
+              <div class="space-y-2 max-h-60 overflow-y-auto">
+                ${availableJudges.map(judge => `
+                  <label class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input type="radio" name="selectedJudge" value="${judge.id}" class="mr-3">
+                    <div>
+                      <div class="font-medium">${judge.firstName} ${judge.lastName}</div>
+                      <div class="text-sm text-gray-500">${judge.email}</div>
+                    </div>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onclick="window.eventWorkspacePage.closeAddJudgeModal()" 
+                      class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">
+                Cancel
+              </button>
+              <button onclick="window.eventWorkspacePage.addJudgeToMatch('${matchId}')" 
+                      class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md">
+                Add Judge
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('addJudgeModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'addJudgeModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing add judge modal:', error);
+      this.ui.showError('Error', 'Unable to show add judge interface');
+    }
+  }
+
+  /**
+   * Close add judge modal
+   */
+  closeAddJudgeModal() {
+    const modal = document.getElementById('addJudgeModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Add judge to match
+   */
+  async addJudgeToMatch(matchId) {
+    try {
+      const selectedJudge = document.querySelector('input[name="selectedJudge"]:checked');
+      if (!selectedJudge) {
+        this.ui.showError('Error', 'Please select a judge');
+        return;
+      }
+
+      const judgeId = selectedJudge.value;
+      
+      this.ui.showLoading('Adding judge...');
+      
+      const result = await this.matchService.addJudgeToMatch(matchId, judgeId);
+      
+      this.ui.showSuccess('Success', result.message || 'Judge added successfully');
+      
+      // Close modal
+      this.closeAddJudgeModal();
+      
+      // Refresh the scores modal
+      if (this.currentViewingMatchId === matchId) {
+        await this.viewMatchScores(matchId);
+      }
+      
+    } catch (error) {
+      console.error('Error adding judge to match:', error);
+      this.ui.showError('Error', error.message || 'Failed to add judge');
+    } finally {
+      this.ui.hideLoading();
+    }
+  }
+
+  /**
+   * Show replace judge modal
+   */
+  async showReplaceJudgeModal(matchId, oldJudgeId, oldJudgeName) {
+    try {
+      // Convert string "null" to actual null
+      const actualOldJudgeId = (oldJudgeId === 'null' || oldJudgeId === null) ? null : oldJudgeId;
+      
+      // Get available judges for this event
+      const event = this.currentEvent;
+      if (!event) {
+        this.ui.showError('Error', 'Unable to get event information');
+        return;
+      }
+
+      // Get all judges
+      const usersResponse = await this.userService.getAllUsers({ isActive: true });
+      const allUsers = usersResponse.users || [];
+      const judges = allUsers.filter(user => user.role === 'judge' && user.isActive);
+
+      // Filter judges who have access to this event
+      let allowedJudges = [];
+      if (event.allowedJudges) {
+        try {
+          const allowedJudgeIds = JSON.parse(event.allowedJudges);
+          if (Array.isArray(allowedJudgeIds) && allowedJudgeIds.length > 0) {
+            allowedJudges = judges.filter(judge => allowedJudgeIds.includes(judge.id));
+          } else {
+            // If allowedJudges is empty or invalid, allow all judges
+            allowedJudges = judges;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedJudges:', error);
+          // If parsing fails, allow all judges
+          allowedJudges = judges;
+        }
+      } else {
+        // If no allowedJudges field, allow all judges
+        allowedJudges = judges;
+      }
+
+      // Get current match judges
+      const match = this.matches.find(m => m.id === matchId);
+      const currentJudgeIds = match?.assignments?.map(a => a.judgeId) || [];
+      
+      // Filter out judges already assigned to this match (except the one being replaced)
+      const availableJudges = allowedJudges.filter(judge => 
+        !currentJudgeIds.includes(judge.id) || judge.id === actualOldJudgeId
+      );
+
+      if (availableJudges.length === 0) {
+        this.ui.showError('Error', 'No available judges');
+        return;
+      }
+
+      // Create modal
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-medium text-gray-900">${actualOldJudgeId ? 'Replace Judge' : 'Add Judge'}</h3>
+            </div>
+            <div class="px-6 py-4">
+              ${actualOldJudgeId ? `<p class="text-sm text-gray-600 mb-2">Current judge: <strong>${oldJudgeName}</strong></p>` : ''}
+              <p class="text-sm text-gray-600 mb-4">${actualOldJudgeId ? 'Select a new judge:' : 'Select a judge to add:'}</p>
+              <div class="space-y-2 max-h-60 overflow-y-auto">
+                ${availableJudges.filter(judge => judge.id !== actualOldJudgeId).map(judge => `
+                  <label class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input type="radio" name="selectedNewJudge" value="${judge.id}" class="mr-3">
+                    <div>
+                      <div class="font-medium">${judge.firstName} ${judge.lastName}</div>
+                      <div class="text-sm text-gray-500">${judge.email}</div>
+                    </div>
+                  </label>
+                `).join('')}
+              </div>
+              <div class="mt-4">
+                <label class="flex items-center">
+                  <input type="checkbox" id="removeScores" checked class="mr-2">
+                  <span class="text-sm text-gray-600">Remove original judge's scores</span>
+                </label>
+              </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onclick="window.eventWorkspacePage.closeReplaceJudgeModal()" 
+                      class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">
+                Cancel
+              </button>
+              <button onclick="window.eventWorkspacePage.replaceJudgeInMatch('${matchId}', '${actualOldJudgeId}')" 
+                      class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md">
+                ${actualOldJudgeId ? 'Replace Judge' : 'Add Judge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('replaceJudgeModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'replaceJudgeModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing replace judge modal:', error);
+      this.ui.showError('Error', 'Unable to show replace judge interface');
+    }
+  }
+
+  /**
+   * Close replace judge modal
+   */
+  closeReplaceJudgeModal() {
+    const modal = document.getElementById('replaceJudgeModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Replace judge in match
+   */
+  async replaceJudgeInMatch(matchId, oldJudgeId) {
+    try {
+      const selectedJudge = document.querySelector('input[name="selectedNewJudge"]:checked');
+      if (!selectedJudge) {
+        this.ui.showError('Error', 'Please select a new judge');
+        return;
+      }
+
+      const newJudgeId = selectedJudge.value;
+      const removeScores = document.getElementById('removeScores').checked;
+      
+      this.ui.showLoading('Replacing judge...');
+      
+      // Convert string "null" to actual null
+      const actualOldJudgeId = (oldJudgeId === 'null' || oldJudgeId === null) ? null : oldJudgeId;
+      const result = await this.matchService.replaceJudgeInMatchFlexible(matchId, actualOldJudgeId, newJudgeId, removeScores);
+      
+      this.ui.showSuccess('Success', result.message || 'Judge replaced successfully');
+      
+      // Close modal
+      this.closeReplaceJudgeModal();
+      
+      // Refresh the scores modal
+      if (this.currentViewingMatchId === matchId) {
+        await this.viewMatchScores(matchId);
+      }
+      
+    } catch (error) {
+      console.error('Error replacing judge in match:', error);
+      this.ui.showError('Error', error.message || 'Failed to replace judge');
+    } finally {
+      this.ui.hideLoading();
+    }
+  }
+
+  /**
+   * Render detailed scoring information for the current judge
+   */
+  renderJudgeScoringDetails() {
+    const currentUser = this.authManager.currentUser;
+    
+    // Get matches where current user is assigned as judge
+    const judgeMatches = this.matches.filter(match => 
+      match.assignments && match.assignments.some(a => a.judge?.id === currentUser.id)
+    );
+
+    if (judgeMatches.length === 0) {
+      return `
+        <div class="text-center py-8 text-gray-500">
+          <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p class="text-lg font-medium text-gray-900 mb-2">No Scoring Assignments</p>
+          <p class="text-gray-500">You are not assigned as a judge to any matches in this event.</p>
+        </div>
+      `;
+    }
+
+    return judgeMatches.map(match => {
+      const teamA = this.teams.find(t => t.id === match.teamAId);
+      const teamB = this.teams.find(t => t.id === match.teamBId);
+      const matchName = `${teamA?.name || 'TBD'} vs ${teamB?.name || 'TBD'}`;
+      
+      // Get submission status for this judge and match
+      const hasSubmittedScores = this.judgeScoresCache.get(match.id) || false;
+      
+      return `
+        <div class="border border-gray-200 rounded-lg p-4 mb-4">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <h4 class="font-medium text-gray-900">${matchName}</h4>
+              <p class="text-sm text-gray-500">${this.getRoundDisplayNameWithTime(match.roundNumber)} • ${match.location || 'No location'}</p>
+            </div>
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${this.getMatchStatusClasses(match.status)}">
+              ${this.getMatchStatusText(match.status)}
+            </span>
+          </div>
+          
+          ${this.renderJudgeMatchScoringDetails(match, hasSubmittedScores, match.id)}
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Render scoring details for a specific match
+   */
+  renderJudgeMatchScoringDetails(match, hasSubmittedScores, matchId) {
+    if (!hasSubmittedScores) {
+      return `
+        <div class="bg-gray-50 border border-gray-200 rounded p-3">
+          <div class="flex items-center space-x-2">
+            <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+            </svg>
+            <span class="text-sm text-gray-600">No scores submitted yet</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Show "Check Your Score" button for submitted scores
+    return `
+      <div class="space-y-3">
+        <div class="bg-green-50 border border-green-200 rounded p-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span class="text-sm font-medium text-green-800">Scores submitted</span>
+            </div>
+            <button data-action="view-scores" data-match-id="${matchId}" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors font-medium">
+              Check Your Score
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Get display name for a stage
+   */
+  getStageDisplayName(stage) {
+    const stageNames = {
+      'intro': 'Introduction',
+      'presentation': 'Presentation',
+      'cross_examination': 'Cross Examination',
+      'rebuttal': 'Rebuttal',
+      'conclusion': 'Conclusion'
+    };
+    return stageNames[stage] || stage;
+  }
 }
 
 // Make available globally
+window.EventWorkspacePage = EventWorkspacePage; 
 window.EventWorkspacePage = EventWorkspacePage; 

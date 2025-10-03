@@ -39,6 +39,13 @@ router.get('/matches/:matchId/scores', scoreController.getMatchScores);
 router.post('/matches/:matchId/scores', requireRole(USER_ROLES.JUDGE, USER_ROLES.ADMIN), scoreController.createScore);
 
 /**
+ * POST /matches/:matchId/scores/draft
+ * Save draft score (before judge's scoring stage)
+ * Access: Judges only (for their assigned matches)
+ */
+router.post('/matches/:matchId/scores/draft', requireRole(USER_ROLES.JUDGE, USER_ROLES.ADMIN), scoreController.saveDraftScore);
+
+/**
  * PUT /matches/:matchId/scores/:scoreId
  * Update score before submission
  * Access: Judges only (their own scores)

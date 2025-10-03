@@ -4,6 +4,8 @@
 
 const jwt = require('jsonwebtoken');
 const { config } = require('../config/env');
+const { prisma } = require('../config/database');
+const { USER_ROLES } = require('../constants/enums');
 
 class WebSocketService {
   constructor(io) {
@@ -11,6 +13,99 @@ class WebSocketService {
     this.connectedUsers = new Map(); // userId -> socket
     this.eventRooms = new Map(); // eventId -> Set of userIds
     this.setupSocketHandlers();
+  }
+
+  /**
+   * Check if user has access to a specific event
+   * @param {string} userId - User ID
+   * @param {string} userRole - User role
+   * @param {string} eventId - Event ID
+   * @returns {boolean} Whether user has access
+   */
+  async checkEventAccess(userId, userRole, eventId) {
+    try {
+      // Admin can access any event
+      if (userRole === USER_ROLES.ADMIN) {
+        return true;
+      }
+      
+      // Get event with allowed users
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: {
+          id: true,
+          allowedJudges: true,
+          allowedModerators: true,
+          createdBy: true
+        }
+      });
+      
+      if (!event) {
+        return false;
+      }
+      
+      // Check if user is the creator
+      if (event.createdBy === userId) {
+        return true;
+      }
+      
+      // Check if user is in allowed judges list
+      if (event.allowedJudges) {
+        try {
+          const allowedJudges = JSON.parse(event.allowedJudges);
+          if (Array.isArray(allowedJudges) && allowedJudges.includes(userId)) {
+            return true;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedJudges:', error);
+        }
+      }
+      
+      // Check if user is in allowed moderators list
+      if (event.allowedModerators) {
+        try {
+          const allowedModerators = JSON.parse(event.allowedModerators);
+          if (Array.isArray(allowedModerators) && allowedModerators.includes(userId)) {
+            return true;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedModerators:', error);
+        }
+      }
+      
+      // Check if user is assigned to any matches in this event (for judges/moderators)
+      if (userRole === USER_ROLES.JUDGE || userRole === USER_ROLES.MODERATOR) {
+        const matchAssignment = await prisma.matchAssignment.findFirst({
+          where: {
+            judgeId: userId,
+            match: {
+              eventId: eventId
+            }
+          }
+        });
+        
+        if (matchAssignment) {
+          return true;
+        }
+        
+        // Also check if user is a moderator for any matches in this event
+        const moderatedMatch = await prisma.match.findFirst({
+          where: {
+            moderatorId: userId,
+            eventId: eventId
+          }
+        });
+        
+        if (moderatedMatch) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking event access:', error);
+      return false;
+    }
   }
 
   setupSocketHandlers() {
@@ -47,32 +142,48 @@ class WebSocketService {
       });
 
       // 加入事件房间
-      socket.on('join_event', (data) => {
+      socket.on('join_event', async (data) => {
         const { eventId } = data;
         if (!socket.userId) {
           socket.emit('error', { message: '请先进行身份验证' });
           return;
         }
 
-        socket.join(`event_${eventId}`);
-        
-        // 添加到事件房间记录
-        if (!this.eventRooms.has(eventId)) {
-          this.eventRooms.set(eventId, new Set());
+        try {
+          // Check if user has access to this event
+          const hasAccess = await this.checkEventAccess(socket.userId, socket.userRole, eventId);
+          
+          if (!hasAccess) {
+            socket.emit('error', { 
+              message: '您没有权限访问此事件',
+              eventId: eventId
+            });
+            return;
+          }
+
+          socket.join(`event_${eventId}`);
+          
+          // 添加到事件房间记录
+          if (!this.eventRooms.has(eventId)) {
+            this.eventRooms.set(eventId, new Set());
+          }
+          this.eventRooms.get(eventId).add(socket.userId);
+          
+          socket.currentEventId = eventId;
+          socket.emit('joined_event', { eventId });
+          
+          // 通知其他用户有新用户加入
+          socket.to(`event_${eventId}`).emit('user_joined', {
+            userId: socket.userId,
+            userRole: socket.userRole,
+            eventId
+          });
+          
+          console.log(`User ${socket.userId} joined event ${eventId}`);
+        } catch (error) {
+          console.error('Error checking event access:', error);
+          socket.emit('error', { message: '检查事件访问权限时出错' });
         }
-        this.eventRooms.get(eventId).add(socket.userId);
-        
-        socket.currentEventId = eventId;
-        socket.emit('joined_event', { eventId });
-        
-        // 通知其他用户有新用户加入
-        socket.to(`event_${eventId}`).emit('user_joined', {
-          userId: socket.userId,
-          userRole: socket.userRole,
-          eventId
-        });
-        
-        console.log(`User ${socket.userId} joined event ${eventId}`);
       });
 
       // 离开事件房间

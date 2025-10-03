@@ -34,7 +34,7 @@ class WebSocketClient {
         // Fallback for development
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
-        const port = '3000'; // Backend port
+        const port = '3001'; // Backend port
         wsUrl = `${protocol}//${host}:${port}`;
       }
 

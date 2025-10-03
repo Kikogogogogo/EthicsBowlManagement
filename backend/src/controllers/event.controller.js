@@ -7,11 +7,11 @@ class EventController {
 
   /**
    * GET /events
-   * Get all events (Admin only)
+   * Get events accessible to the current user
    */
   getAllEvents = async (req, res) => {
     try {
-      const events = await this.eventService.getAllEvents();
+      const events = await this.eventService.getAccessibleEvents(req.user.id, req.user.role);
       
       res.json({
         success: true,
@@ -296,6 +296,105 @@ class EventController {
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Failed to delete event',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * PUT /events/:eventId/round-schedules
+   * Update round schedules for an event (Admin only)
+   */
+  updateRoundSchedules = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const { roundSchedules } = req.body;
+      
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      const event = await this.eventService.updateRoundSchedules(eventId, roundSchedules, req.user.id);
+      
+      res.json({
+        success: true,
+        data: event,
+        message: 'Round schedules updated successfully'
+      });
+    } catch (error) {
+      console.error('Update round schedules error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'ROUND_SCHEDULES_UPDATE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      } else if (error.message.includes('permission')) {
+        statusCode = 403;
+        errorCode = 'FORBIDDEN';
+      } else if (error.message.includes('Invalid')) {
+        statusCode = 400;
+        errorCode = 'VALIDATION_ERROR';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to update round schedules',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * GET /events/:eventId/round-schedules/:roundNumber
+   * Get round schedule for a specific round
+   */
+  getRoundSchedule = async (req, res) => {
+    try {
+      const { eventId, roundNumber } = req.params;
+      
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!roundNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'Round number is required',
+          error: 'MISSING_ROUND_NUMBER'
+        });
+      }
+
+      const roundSchedule = await this.eventService.getRoundSchedule(eventId, parseInt(roundNumber));
+      
+      res.json({
+        success: true,
+        data: roundSchedule,
+        message: 'Round schedule retrieved successfully'
+      });
+    } catch (error) {
+      console.error('Get round schedule error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'ROUND_SCHEDULE_FETCH_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to get round schedule',
         error: errorCode
       });
     }

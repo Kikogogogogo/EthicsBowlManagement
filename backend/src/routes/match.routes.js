@@ -63,15 +63,15 @@ router.put('/matches/:matchId/step', requireRole(USER_ROLES.MODERATOR, USER_ROLE
 
 /**
  * PUT /matches/:matchId/status
- * Update match status (Moderator only)
+ * Update match status (Moderator, Admin, Judge)
  */
-router.put('/matches/:matchId/status', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN), matchController.updateMatchStatus);
+router.put('/matches/:matchId/status', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN, USER_ROLES.JUDGE), matchController.updateMatchStatus);
 
 /**
  * GET /matches/:matchId/status-options
- * Get available status options (Moderator only)
+ * Get available status options (Moderator, Admin, Judge)
  */
-router.get('/matches/:matchId/status-options', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN), matchController.getStatusOptions);
+router.get('/matches/:matchId/status-options', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN, USER_ROLES.JUDGE), matchController.getStatusOptions);
 
 /**
  * POST /matches/:matchId/assignments
@@ -84,5 +84,17 @@ router.post('/matches/:matchId/assignments', requireRole(USER_ROLES.ADMIN), matc
  * Remove judge assignment from match (Admin only)
  */
 router.delete('/matches/:matchId/assignments/:judgeId', requireRole(USER_ROLES.ADMIN), matchController.removeJudgeFromMatch);
+
+/**
+ * DELETE /matches/:matchId/judges/:judgeId
+ * Remove a judge from an ongoing match (Admin only)
+ */
+router.delete('/matches/:matchId/judges/:judgeId', requireRole(USER_ROLES.ADMIN), matchController.removeJudgeFromMatch);
+
+/**
+ * POST /events/:eventId/matches/apply-round-schedule/:roundNumber
+ * Apply round schedule to all matches in a specific round (Admin only)
+ */
+router.post('/events/:eventId/matches/apply-round-schedule/:roundNumber', requireRole(USER_ROLES.ADMIN), matchController.applyRoundScheduleToMatches);
 
 module.exports = router; 

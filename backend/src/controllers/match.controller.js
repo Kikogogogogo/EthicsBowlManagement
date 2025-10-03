@@ -56,6 +56,8 @@ class MatchController {
         teamBId,
         moderatorId,
         room,
+        roomId,
+        location,
         scheduledTime
       } = req.body;
 
@@ -81,7 +83,7 @@ class MatchController {
         teamAId,
         teamBId,
         moderatorId,
-        room,
+        location: location || null, // Use location if provided
         scheduledTime: scheduledTime ? new Date(scheduledTime) : null
       };
 
@@ -156,6 +158,8 @@ class MatchController {
         teamBId,
         moderatorId,
         room,
+        roomId,
+        location,
         scheduledTime
       } = req.body;
 
@@ -172,7 +176,8 @@ class MatchController {
         teamAId,
         teamBId,
         moderatorId,
-        room,
+        room: roomId || room, // Use roomId if provided, otherwise fall back to room
+        location,
         scheduledTime: scheduledTime ? new Date(scheduledTime) : null
       };
 
@@ -517,6 +522,57 @@ class MatchController {
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Failed to delete match',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * POST /events/:eventId/matches/apply-round-schedule/:roundNumber
+   * Apply round schedule to all matches in a specific round (Admin only)
+   */
+  applyRoundScheduleToMatches = async (req, res) => {
+    try {
+      const { eventId, roundNumber } = req.params;
+      
+      if (!eventId || !roundNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID and round number are required',
+          error: 'MISSING_REQUIRED_PARAMS'
+        });
+      }
+
+      const roundNumberInt = parseInt(roundNumber);
+      if (isNaN(roundNumberInt) || roundNumberInt < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Round number must be a positive integer',
+          error: 'INVALID_ROUND_NUMBER'
+        });
+      }
+
+      const result = await this.matchService.applyRoundScheduleToMatches(eventId, roundNumberInt);
+      
+      res.json({
+        success: true,
+        data: result,
+        message: result.message
+      });
+    } catch (error) {
+      console.error('Apply round schedule to matches error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'APPLY_SCHEDULE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to apply round schedule to matches',
         error: errorCode
       });
     }

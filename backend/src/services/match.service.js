@@ -8,7 +8,8 @@ const {
   canJudgesScore,
   canModeratorAdvance,
   getNextStatus,
-  getPreviousStatus
+  getPreviousStatus,
+  isJudgeInScoringStage
 } = require('../constants/enums');
 
 const prisma = new PrismaClient();
@@ -56,6 +57,9 @@ class MatchService {
           winner: {
             select: { id: true, name: true, school: true }
           },
+          roomRef: {
+            select: { id: true, name: true, description: true }
+          },
           assignments: {
             include: {
               judge: {
@@ -87,7 +91,7 @@ class MatchService {
    */
   async createMatch(matchData) {
     try {
-      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, scheduledTime } = matchData;
+      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, location, scheduledTime } = matchData;
 
       // Verify event exists and is not completed
       const event = await prisma.event.findUnique({
@@ -151,6 +155,33 @@ class MatchService {
         throw new Error('Match between these teams already exists in this round');
       }
 
+      // Handle room assignment - if room is provided, it should be a room ID
+      let roomId = null;
+      if (room) {
+        // Check if room is a valid UUID (room ID) or room name
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(room);
+        if (isUUID) {
+          roomId = room;
+        } else {
+          // If it's a room name, find the room ID
+          const roomRecord = await prisma.room.findFirst({
+            where: { name: room }
+          });
+          if (roomRecord) {
+            roomId = roomRecord.id;
+          }
+        }
+      }
+
+      // Handle round-specific scheduling - if no scheduledTime provided, try to get from round schedule
+      let finalScheduledTime = scheduledTime;
+      if (!finalScheduledTime) {
+        const roundSchedule = await this.getRoundSchedule(eventId, roundNumber);
+        if (roundSchedule && roundSchedule.startTime) {
+          finalScheduledTime = new Date(roundSchedule.startTime);
+        }
+      }
+
       const match = await prisma.match.create({
         data: {
           eventId,
@@ -158,8 +189,10 @@ class MatchService {
           teamAId,
           teamBId,
           moderatorId,
-          room,
-          scheduledTime,
+          room, // Keep for backward compatibility
+          roomId,
+          location,
+          scheduledTime: finalScheduledTime,
           status: MATCH_STATUSES.DRAFT,
           currentStep: MATCH_STEPS.INTRO
         },
@@ -548,15 +581,9 @@ class MatchService {
         throw new Error(`Invalid status. Must be one of: ${validStatuses.map(s => getMatchStatusDisplayName(s)).join(', ')}`);
       }
 
-      // Validate status transitions
-      if (match.status === MATCH_STATUSES.COMPLETED && status !== MATCH_STATUSES.COMPLETED) {
-        throw new Error('Cannot change status of completed match');
-      }
+      // Allow admin to change any status - no restrictions
 
-      // Check if moderator can advance to this status
-      if (!canModeratorAdvance(status)) {
-        throw new Error('Moderators cannot set this status');
-      }
+      // Allow admin to set any status - no restrictions
 
       // Special validation for completing a match
       if (status === MATCH_STATUSES.COMPLETED) {
@@ -586,9 +613,557 @@ class MatchService {
         }
       });
 
+      // Auto-submit scores for judges whose stage has passed
+      await this.autoSubmitPassedJudgeScores(matchId, status);
+
       return updatedMatch;
     } catch (error) {
       console.error('Error updating match status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Auto-submit scores for judges whose scoring stage has passed
+   * @param {string} matchId - Match ID
+   * @param {string} newStatus - New match status
+   */
+  async autoSubmitPassedJudgeScores(matchId, newStatus) {
+    try {
+      // Get all assignments for this match
+      const assignments = await prisma.matchAssignment.findMany({
+        where: { matchId },
+        orderBy: { createdAt: 'asc' },
+        include: { judge: true }
+      });
+
+      // Get all unsubmitted scores for this match
+      const unsubmittedScores = await prisma.score.findMany({
+        where: {
+          matchId,
+          isSubmitted: false
+        }
+      });
+
+      // Check each judge's position and see if their stage has passed
+      for (let i = 0; i < assignments.length; i++) {
+        const assignment = assignments[i];
+        const judgePosition = i + 1;
+        
+        // Check if this judge's stage has passed
+        const wasInStage = isJudgeInScoringStage(newStatus, judgePosition, assignments.length);
+        
+        if (!wasInStage) {
+          // This judge's stage has passed, auto-submit their unsubmitted scores
+          const judgeScores = unsubmittedScores.filter(score => score.judgeId === assignment.judgeId);
+          
+          if (judgeScores.length > 0) {
+            console.log(`Auto-submitting ${judgeScores.length} scores for judge ${assignment.judge.firstName} ${assignment.judge.lastName} (position ${judgePosition})`);
+            
+            // Update all unsubmitted scores for this judge
+            await prisma.score.updateMany({
+              where: {
+                matchId,
+                judgeId: assignment.judgeId,
+                isSubmitted: false
+              },
+              data: {
+                isSubmitted: true,
+                submittedAt: new Date()
+              }
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error auto-submitting passed judge scores:', error);
+      // Don't throw error to avoid breaking match status update
+    }
+  }
+
+  /**
+   * Add a judge to an ongoing match (Admin only)
+   * @param {string} matchId - Match ID
+   * @param {string} judgeId - Judge ID to add
+   * @param {string} adminId - Admin user ID
+   * @returns {Object} Updated match with new assignment
+   */
+  async addJudgeToMatch(matchId, judgeId, adminId) {
+    try {
+      // Verify admin permissions
+      const admin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { role: true }
+      });
+
+      if (!admin || admin.role !== USER_ROLES.ADMIN) {
+        throw new Error('Only administrators can add judges to matches');
+      }
+
+      // Verify match exists and is not completed
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: { select: { id: true, name: true } },
+          assignments: { include: { judge: true } }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      if (match.status === 'completed') {
+        throw new Error('Cannot add judges to completed matches');
+      }
+
+      // Verify judge exists and has judge role
+      const judge = await prisma.user.findUnique({
+        where: { id: judgeId },
+        select: { id: true, role: true, firstName: true, lastName: true, email: true }
+      });
+
+      if (!judge) {
+        throw new Error('Judge not found');
+      }
+
+      if (judge.role !== USER_ROLES.JUDGE) {
+        throw new Error('User is not a judge');
+      }
+
+      // Check if judge is already assigned to this match
+      const existingAssignment = await prisma.matchAssignment.findUnique({
+        where: {
+          matchId_judgeId: {
+            matchId,
+            judgeId
+          }
+        }
+      });
+
+      if (existingAssignment) {
+        throw new Error('Judge is already assigned to this match');
+      }
+
+      // Check if judge has access to this event
+      const event = await prisma.event.findUnique({
+        where: { id: match.eventId },
+        select: { allowedJudges: true, allowedModerators: true }
+      });
+
+      let hasEventAccess = false;
+      
+      // Check if judge is in allowed judges list
+      if (event.allowedJudges) {
+        try {
+          const allowedJudges = JSON.parse(event.allowedJudges);
+          if (Array.isArray(allowedJudges) && allowedJudges.includes(judgeId)) {
+            hasEventAccess = true;
+          }
+        } catch (error) {
+          console.error('Error parsing allowedJudges:', error);
+        }
+      }
+
+      if (!hasEventAccess) {
+        throw new Error('Judge does not have access to this event');
+      }
+
+      // Add judge assignment
+      const assignment = await prisma.matchAssignment.create({
+        data: {
+          matchId,
+          judgeId
+        },
+        include: {
+          judge: {
+            select: { id: true, firstName: true, lastName: true, email: true }
+          }
+        }
+      });
+
+      // Get updated match with all assignments
+      const updatedMatch = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          assignments: {
+            include: {
+              judge: {
+                select: { id: true, firstName: true, lastName: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      return {
+        success: true,
+        message: `Judge ${judge.firstName} ${judge.lastName} added to match`,
+        assignment,
+        match: updatedMatch
+      };
+
+    } catch (error) {
+      console.error('Error adding judge to match:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Replace a judge in an ongoing match (Admin only) - Flexible version that can add or replace
+   * @param {string} matchId - Match ID
+   * @param {string} oldJudgeId - Current judge ID to replace (can be null for adding)
+   * @param {string} newJudgeId - New judge ID
+   * @param {string} adminId - Admin user ID
+   * @param {boolean} removeScores - Whether to remove existing scores
+   * @returns {Object} Updated match with new assignment
+   */
+  async replaceJudgeInMatch(matchId, oldJudgeId, newJudgeId, adminId, removeScores = true) {
+    try {
+      // Verify admin permissions
+      const admin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { role: true }
+      });
+
+      if (!admin || admin.role !== USER_ROLES.ADMIN) {
+        throw new Error('Only administrators can replace judges in matches');
+      }
+
+      // Verify match exists and is not completed
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: { select: { id: true, name: true } },
+          assignments: { include: { judge: true } }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      if (match.status === 'completed') {
+        throw new Error('Cannot replace judges in completed matches');
+      }
+
+      // Verify old judge is assigned to this match (only if oldJudgeId is provided and not null)
+      let oldAssignment = null;
+      if (oldJudgeId && oldJudgeId !== 'null' && oldJudgeId !== null) {
+        oldAssignment = await prisma.matchAssignment.findUnique({
+          where: {
+            matchId_judgeId: {
+              matchId,
+              judgeId: oldJudgeId
+            }
+          },
+          include: { judge: true }
+        });
+
+        if (!oldAssignment) {
+          throw new Error('Old judge is not assigned to this match');
+        }
+      }
+
+      // Verify new judge exists and has judge role
+      const newJudge = await prisma.user.findUnique({
+        where: { id: newJudgeId },
+        select: { id: true, role: true, firstName: true, lastName: true, email: true }
+      });
+
+      if (!newJudge) {
+        throw new Error('New judge not found');
+      }
+
+      if (newJudge.role !== USER_ROLES.JUDGE) {
+        throw new Error('New user is not a judge');
+      }
+
+      // Check if new judge is already assigned to this match
+      const existingAssignment = await prisma.matchAssignment.findUnique({
+        where: {
+          matchId_judgeId: {
+            matchId,
+            judgeId: newJudgeId
+          }
+        }
+      });
+
+      if (existingAssignment) {
+        throw new Error('New judge is already assigned to this match');
+      }
+
+      // Check for time conflicts only (removed event access check)
+      const conflictingMatches = await prisma.match.findMany({
+        where: {
+          eventId: match.eventId,
+          roundNumber: match.roundNumber,
+          status: { in: ['scheduled', 'in_progress'] },
+          assignments: {
+            some: {
+              judgeId: newJudgeId
+            }
+          }
+        },
+        include: {
+          assignments: {
+            where: { judgeId: newJudgeId },
+            include: { judge: true }
+          }
+        }
+      });
+
+      if (conflictingMatches.length > 0) {
+        const conflictMatch = conflictingMatches[0];
+        const conflictJudge = conflictMatch.assignments[0]?.judge;
+        throw new Error(`Judge ${conflictJudge?.firstName} ${conflictJudge?.lastName} is already assigned to another match in the same round`);
+      }
+
+      // Perform the replacement in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Remove old judge assignment (only if oldJudgeId is provided and not null)
+        if (oldJudgeId && oldJudgeId !== 'null' && oldJudgeId !== null) {
+          await tx.matchAssignment.delete({
+            where: {
+              matchId_judgeId: {
+                matchId,
+                judgeId: oldJudgeId
+              }
+            }
+          });
+
+          // Remove old judge's scores if requested
+          if (removeScores) {
+            await tx.score.deleteMany({
+              where: {
+                matchId,
+                judgeId: oldJudgeId
+              }
+            });
+          }
+        }
+
+        // Add new judge assignment
+        const newAssignment = await tx.matchAssignment.create({
+          data: {
+            matchId,
+            judgeId: newJudgeId
+          },
+          include: {
+            judge: {
+              select: { id: true, firstName: true, lastName: true, email: true }
+            }
+          }
+        });
+
+        return newAssignment;
+      });
+
+      // Get updated match with all assignments
+      const updatedMatch = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          assignments: {
+            include: {
+              judge: {
+                select: { id: true, firstName: true, lastName: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      return {
+        success: true,
+        message: (oldJudgeId && oldJudgeId !== 'null' && oldJudgeId !== null) 
+          ? `Judge ${oldAssignment.judge.firstName} ${oldAssignment.judge.lastName} replaced with ${newJudge.firstName} ${newJudge.lastName}`
+          : `Judge ${newJudge.firstName} ${newJudge.lastName} added to match`,
+        oldJudge: oldAssignment?.judge || null,
+        newJudge: newJudge,
+        assignment: result,
+        match: updatedMatch,
+        scoresRemoved: removeScores
+      };
+
+    } catch (error) {
+      console.error('Error replacing judge in match:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a judge from an ongoing match (Admin only)
+   * @param {string} matchId - Match ID
+   * @param {string} judgeId - Judge ID to remove
+   * @param {string} adminId - Admin user ID
+   * @param {boolean} removeScores - Whether to remove existing scores
+   * @returns {Object} Updated match
+   */
+  async removeJudgeFromMatch(matchId, judgeId, adminId, removeScores = true) {
+    try {
+      // Verify admin permissions
+      const admin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { role: true }
+      });
+
+      if (!admin || admin.role !== USER_ROLES.ADMIN) {
+        throw new Error('Only administrators can remove judges from matches');
+      }
+
+      // Verify match exists and is not completed
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: { select: { id: true, name: true } },
+          assignments: { include: { judge: true } }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      // Allow removal of judges from any match status - no restrictions
+
+      // Verify judge is assigned to this match
+      const assignment = await prisma.matchAssignment.findUnique({
+        where: {
+          matchId_judgeId: {
+            matchId,
+            judgeId
+          }
+        },
+        include: { judge: true }
+      });
+
+      if (!assignment) {
+        throw new Error('Judge is not assigned to this match');
+      }
+
+      // Check if this would leave the match with no judges
+      if (match.assignments.length <= 1) {
+        throw new Error('Cannot remove the last judge from a match');
+      }
+
+      // Perform the removal in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Remove judge assignment
+        await tx.matchAssignment.delete({
+          where: {
+            matchId_judgeId: {
+              matchId,
+              judgeId
+            }
+          }
+        });
+
+        // Remove judge's scores if requested
+        let scoresRemoved = 0;
+        if (removeScores) {
+          const deleteResult = await tx.score.deleteMany({
+            where: {
+              matchId,
+              judgeId
+            }
+          });
+          scoresRemoved = deleteResult.count;
+        }
+
+        return { scoresRemoved };
+      });
+
+      // Get updated match with all assignments
+      const updatedMatch = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          assignments: {
+            include: {
+              judge: {
+                select: { id: true, firstName: true, lastName: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      return {
+        success: true,
+        message: `Judge ${assignment.judge.firstName} ${assignment.judge.lastName} removed from match`,
+        removedJudge: assignment.judge,
+        match: updatedMatch,
+        scoresRemoved: result.scoresRemoved
+      };
+
+    } catch (error) {
+      console.error('Error removing judge from match:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove all scores for a specific judge in a match (Admin only)
+   * @param {string} matchId - Match ID
+   * @param {string} judgeId - Judge ID
+   * @param {string} adminId - Admin user ID
+   * @returns {Object} Result of score removal
+   */
+  async removeJudgeScores(matchId, judgeId, adminId) {
+    try {
+      // Verify admin permissions
+      const admin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { role: true }
+      });
+
+      if (!admin || admin.role !== USER_ROLES.ADMIN) {
+        throw new Error('Only administrators can remove scores');
+      }
+
+      // Verify match exists
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: { select: { id: true, name: true } }
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      // Verify judge is assigned to this match
+      const assignment = await prisma.matchAssignment.findUnique({
+        where: {
+          matchId_judgeId: {
+            matchId,
+            judgeId
+          }
+        },
+        include: { judge: true }
+      });
+
+      if (!assignment) {
+        throw new Error('Judge is not assigned to this match');
+      }
+
+      // Remove all scores for this judge in this match
+      const deleteResult = await prisma.score.deleteMany({
+        where: {
+          matchId,
+          judgeId
+        }
+      });
+
+      return {
+        success: true,
+        message: `Removed ${deleteResult.count} scores for judge ${assignment.judge.firstName} ${assignment.judge.lastName}`,
+        judge: assignment.judge,
+        scoresRemoved: deleteResult.count
+      };
+
+    } catch (error) {
+      console.error('Error removing judge scores:', error);
       throw error;
     }
   }
@@ -784,7 +1359,7 @@ class MatchService {
             select: { id: true, firstName: true, lastName: true, email: true }
           },
           match: {
-            select: { id: true, roundNumber: true, room: true, scheduledTime: true }
+            select: { id: true, roundNumber: true, room: true, roomId: true, scheduledTime: true }
           }
         }
       });
@@ -801,7 +1376,7 @@ class MatchService {
    * @param {string} matchId - Match ID
    * @param {string} judgeId - Judge ID
    */
-  async removeJudgeFromMatch(matchId, judgeId) {
+  async removeJudgeFromMatch(matchId, judgeId, adminId = null) {
     try {
       // Verify assignment exists
       const assignment = await prisma.matchAssignment.findUnique({
@@ -820,9 +1395,7 @@ class MatchService {
         throw new Error('Judge assignment not found');
       }
 
-      if (assignment.match.status !== MATCH_STATUSES.DRAFT) {
-        throw new Error('Cannot remove judge from match that has started');
-      }
+      // Allow removal of judges from any match at any time - no restrictions
 
       // Check if judge has submitted scores
       const scores = await prisma.score.findMany({
@@ -923,6 +1496,96 @@ class MatchService {
     } catch (error) {
       console.error('Error deleting match:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get round schedule for a specific round
+   * @param {string} eventId - Event ID
+   * @param {number} roundNumber - Round number
+   * @returns {Object|null} Round schedule or null
+   */
+  async getRoundSchedule(eventId, roundNumber) {
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { roundSchedules: true },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      if (!event.roundSchedules) {
+        return null;
+      }
+
+      const roundSchedules = JSON.parse(event.roundSchedules);
+      return roundSchedules[roundNumber.toString()] || null;
+    } catch (error) {
+      console.error('Error getting round schedule:', error);
+      throw new Error('Failed to get round schedule');
+    }
+  }
+
+  /**
+   * Apply round schedules to all matches in a specific round
+   * @param {string} eventId - Event ID
+   * @param {number} roundNumber - Round number
+   * @returns {Object} Result of applying schedules
+   */
+  async applyRoundScheduleToMatches(eventId, roundNumber) {
+    try {
+      const roundSchedule = await this.getRoundSchedule(eventId, roundNumber);
+      
+      if (!roundSchedule || !roundSchedule.startTime) {
+        return {
+          success: false,
+          message: `No schedule defined for round ${roundNumber}`,
+          updatedCount: 0
+        };
+      }
+
+      // Get all matches in this round that don't have a scheduled time
+      const matches = await prisma.match.findMany({
+        where: {
+          eventId,
+          roundNumber,
+          scheduledTime: null,
+          status: { not: 'completed' }
+        }
+      });
+
+      if (matches.length === 0) {
+        return {
+          success: true,
+          message: `No matches found in round ${roundNumber} that need scheduling`,
+          updatedCount: 0
+        };
+      }
+
+      // Update all matches with the round schedule time
+      const updateResult = await prisma.match.updateMany({
+        where: {
+          eventId,
+          roundNumber,
+          scheduledTime: null,
+          status: { not: 'completed' }
+        },
+        data: {
+          scheduledTime: new Date(roundSchedule.startTime)
+        }
+      });
+
+      return {
+        success: true,
+        message: `Applied round schedule to ${updateResult.count} matches in round ${roundNumber}`,
+        updatedCount: updateResult.count,
+        schedule: roundSchedule
+      };
+    } catch (error) {
+      console.error('Error applying round schedule to matches:', error);
+      throw new Error('Failed to apply round schedule to matches');
     }
   }
 }

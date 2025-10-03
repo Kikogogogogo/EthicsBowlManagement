@@ -38,7 +38,7 @@ class EventEmitter {
 window.eventEmitter = new EventEmitter();
 
 import { authManager, OAuthCallbackHandler, ApiError } from './auth.js';
-import { authService, healthService, eventService, teamService, userService, preApprovedEmailService, matchService, scoreService, statisticsService } from './api.js';
+import { authService, healthService, eventService, teamService, userService, roomService, preApprovedEmailService, matchService, scoreService, statisticsService } from './api.js';
 import { initWebSocket, getWebSocketClient, destroyWebSocket } from './websocket.js';
 
 // Import CSS
@@ -931,6 +931,7 @@ class App {
       window.eventService = eventService;
       window.teamService = teamService;
       window.userService = userService;
+      window.roomService = roomService;
       window.preApprovedEmailService = preApprovedEmailService;
       window.matchService = matchService;
       window.scoreService = scoreService;
@@ -1419,6 +1420,7 @@ function bootstrapApp() {
   window.eventService = eventService;
   window.teamService = teamService;
   window.userService = userService;
+  window.roomService = roomService;
   window.preApprovedEmailService = preApprovedEmailService;
 }
 
