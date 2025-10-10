@@ -19,11 +19,8 @@ const matchRoutes = require('./routes/match.routes');
 const scoreRoutes = require('./routes/score.routes');
 const roomRoutes = require('./routes/room.routes');
 
-// Import test routes (only in development)
-let testAuthRoutes = null;
-if (config.nodeEnv === 'development') {
-  testAuthRoutes = require('./routes/test-auth.routes');
-}
+// Import test routes (available in both development and production)
+const testAuthRoutes = require('./routes/test-auth.routes');
 
 // Validate environment variables
 validateEnv();
@@ -121,11 +118,9 @@ app.get('/health', (req, res) => {
 // API routes
 app.use(`${config.api.prefix}/auth`, authRoutes);
 
-// Test routes (only in development) - must be before generic routes
-if (testAuthRoutes) {
-  app.use(`${config.api.prefix}/test`, testAuthRoutes);
-  console.log('🧪 Test routes enabled for development environment');
-}
+// Test routes (available in both development and production) - must be before generic routes
+app.use(`${config.api.prefix}/test`, testAuthRoutes);
+console.log('🧪 Test routes enabled');
 
 app.use(`${config.api.prefix}`, matchRoutes);
 app.use(`${config.api.prefix}`, scoreRoutes);
