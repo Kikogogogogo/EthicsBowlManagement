@@ -50,6 +50,7 @@ import '../pages/events.js';
 import '../pages/teams.js';
 import '../pages/users.js';
 import '../pages/score-match.js';
+import '../pages/test-users.js';
 
 import '../pages/event-workspace.js';
 
@@ -97,6 +98,7 @@ class UIManager {
       navEvents: document.getElementById('nav-events'),
       navTeams: document.getElementById('nav-teams'),
       navUsers: document.getElementById('nav-users'),
+      navTestUsers: document.getElementById('nav-test-users'),
       
       // Event Management page
       eventWorkspacePage: document.getElementById('event-workspace-page'),
@@ -153,6 +155,9 @@ class UIManager {
       usersSuccessMessage: document.getElementById('users-success-message'),
       usersSuccessTitle: document.getElementById('users-success-title'),
       usersSuccessText: document.getElementById('users-success-text'),
+      
+      // Test Users page
+      testUsersPage: document.getElementById('test-users-page'),
       
       // Event modal
       eventModal: document.getElementById('event-modal'),
@@ -221,6 +226,8 @@ class UIManager {
     let page;
     if (pageName === 'event-workspace') {
       page = this.elements.eventWorkspacePage;
+    } else if (pageName === 'test-users') {
+      page = this.elements.testUsersPage;
     } else {
       page = this.elements[pageName + 'Page'];
     }
@@ -497,33 +504,42 @@ class UIManager {
     if (this.elements.mainNav) {
       this.elements.mainNav.classList.remove('hidden');
       
+      // Check if user is a virtual test user
+      const isVirtualTestUser = user.email && user.email.endsWith('@virtual.test');
+      
       // Show/hide navigation buttons based on user role
-      if (user.role === 'admin') {
-        // Admin sees all tabs
+      if (user.role === 'admin' || isVirtualTestUser) {
+        // Admin and virtual test users see all tabs
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'block';
         if (this.elements.navTeams) this.elements.navTeams.style.display = 'block';
         if (this.elements.navUsers) this.elements.navUsers.style.display = 'block';
+        if (this.elements.navTestUsers) this.elements.navTestUsers.style.display = 'block';
         
         // Also show/hide mobile navigation buttons
         const navEventsMobile = document.getElementById('nav-events-mobile');
         const navTeamsMobile = document.getElementById('nav-teams-mobile');
         const navUsersMobile = document.getElementById('nav-users-mobile');
+        const navTestUsersMobile = document.getElementById('nav-test-users-mobile');
         if (navEventsMobile) navEventsMobile.style.display = 'block';
         if (navTeamsMobile) navTeamsMobile.style.display = 'block';
         if (navUsersMobile) navUsersMobile.style.display = 'block';
+        if (navTestUsersMobile) navTestUsersMobile.style.display = 'block';
       } else {
         // Non-admin only sees Dashboard
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'none';
         if (this.elements.navTeams) this.elements.navTeams.style.display = 'none';
         if (this.elements.navUsers) this.elements.navUsers.style.display = 'none';
+        if (this.elements.navTestUsers) this.elements.navTestUsers.style.display = 'none';
         
         // Also hide mobile navigation buttons
         const navEventsMobile = document.getElementById('nav-events-mobile');
         const navTeamsMobile = document.getElementById('nav-teams-mobile');
         const navUsersMobile = document.getElementById('nav-users-mobile');
+        const navTestUsersMobile = document.getElementById('nav-test-users-mobile');
         if (navEventsMobile) navEventsMobile.style.display = 'none';
         if (navTeamsMobile) navTeamsMobile.style.display = 'none';
         if (navUsersMobile) navUsersMobile.style.display = 'none';
+        if (navTestUsersMobile) navTestUsersMobile.style.display = 'none';
       }
     }
   }
@@ -639,6 +655,7 @@ class App {
     this.teamsPage = new TeamsPage();
     this.usersPage = new UsersPage();
     this.eventWorkspacePage = new EventWorkspacePage(this.ui);
+    this.testUsersPage = new TestUsersPage(this.ui);
     
     // Set UI manager for new pages
     this.teamsPage.setUIManager(this.ui);
@@ -650,6 +667,7 @@ class App {
     window.usersPage = this.usersPage;
     window.dashboardPage = this.dashboardPage;
     window.eventWorkspacePage = this.eventWorkspacePage;
+    window.testUsersPage = this.testUsersPage;
     
     // Track whether event listeners have been initialized
     this.eventListenersInitialized = false;
@@ -868,6 +886,13 @@ class App {
       const handler = () => this.showUsersPage();
       this.ui.elements.navUsersUsers.addEventListener('click', handler);
       this.navigationListeners.push({ element: this.ui.elements.navUsersUsers, event: 'click', handler });
+    }
+    
+    // Test Users navigation
+    if (this.ui.elements.navTestUsers) {
+      const handler = () => this.showTestUsersPage();
+      this.ui.elements.navTestUsers.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navTestUsers, event: 'click', handler });
     }
     
     // Dashboard navigation from all pages
@@ -1284,6 +1309,42 @@ class App {
   }
 
   /**
+   * Show test users page
+   */
+  async showTestUsersPage() {
+    console.log('🧪 [MainApp] showTestUsersPage called');
+    
+    // Check if workspace is cleaning up
+    if (window.eventWorkspacePage && window.eventWorkspacePage.isCleaningUp) {
+      console.log('⚠️ [MainApp] Workspace is cleaning up, ignoring showTestUsersPage call');
+      return;
+    }
+    
+    // Allow access for admin users and virtual test users
+    const isVirtualTestUser = authManager.currentUser && 
+      authManager.currentUser.email && 
+      authManager.currentUser.email.endsWith('@virtual.test');
+    
+    if (authManager.currentUser && (authManager.currentUser.role === 'admin' || isVirtualTestUser)) {
+      this.ui.showPage('test-users');
+      
+      // Initialize the page first (this loads the data but doesn't bind events)
+      await this.testUsersPage.loadVirtualUsers();
+      
+      // Then render the content with the loaded data
+      const pageElement = this.ui.elements.testUsersPage;
+      if (pageElement) {
+        pageElement.innerHTML = await this.testUsersPage.render();
+      }
+      
+      // Finally bind event listeners after the DOM is updated
+      this.testUsersPage.initEventListeners();
+      
+      this.updateNavigation('test-users');
+    }
+  }
+
+  /**
    * Show login page from landing page
    */
   showLoginPage() {
@@ -1401,6 +1462,12 @@ class App {
           btn.classList.remove('border-transparent');
         }
       });
+    } else if (activePage === 'test-users') {
+      // Main test users nav
+      if (this.ui.elements.navTestUsers) {
+        this.ui.elements.navTestUsers.classList.add('border-black');
+        this.ui.elements.navTestUsers.classList.remove('border-transparent');
+      }
     }
   }
 }

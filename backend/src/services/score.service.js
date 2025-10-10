@@ -722,6 +722,7 @@ class ScoreService {
 
   /**
    * Calculate vote scores for each team in a match
+   * Uses virtual third judge logic for 2-judge matches
    */
   calculateVoteScores(scores, match) {
     const teamAScores = scores.filter(score => score.teamId === match.teamAId);
@@ -744,7 +745,7 @@ class ScoreService {
       }
     });
     
-    // Calculate votes for each team
+    // Calculate votes for each team using the same logic as StatisticsService
     let teamAVotes = 0;
     let teamBVotes = 0;
     
@@ -762,6 +763,45 @@ class ScoreService {
         teamBVotes += 0.5;
       }
     });
+    
+    // Apply virtual third judge logic for 2-judge matches
+    if (judgesWithBothScores.length === 2) {
+      console.log('🔍 [ScoreService] Applying virtual third judge logic for 2-judge match');
+      
+      // Calculate average scores for both teams
+      const teamATotalScores = teamAScores
+        .filter(score => score.isSubmitted)
+        .map(score => this.calculateTotalScore(score));
+      const teamBTotalScores = teamBScores
+        .filter(score => score.isSubmitted)
+        .map(score => this.calculateTotalScore(score));
+      
+      const avgTeamAScore = teamATotalScores.reduce((sum, score) => sum + score, 0) / teamATotalScores.length;
+      const avgTeamBScore = teamBTotalScores.reduce((sum, score) => sum + score, 0) / teamBTotalScores.length;
+      
+      console.log('🔍 [ScoreService] Virtual third judge calculation:');
+      console.log('  - avgTeamAScore:', avgTeamAScore);
+      console.log('  - avgTeamBScore:', avgTeamBScore);
+      console.log('  - teamAVotes before:', teamAVotes);
+      console.log('  - teamBVotes before:', teamBVotes);
+      
+      // Virtual third judge votes based on average scores
+      if (avgTeamAScore > avgTeamBScore) {
+        teamAVotes += 1;
+        console.log('  - Virtual third judge votes for Team A');
+      } else if (avgTeamBScore > avgTeamAScore) {
+        teamBVotes += 1;
+        console.log('  - Virtual third judge votes for Team B');
+      } else {
+        // Tie: split the vote
+        teamAVotes += 0.5;
+        teamBVotes += 0.5;
+        console.log('  - Virtual third judge votes split (tie)');
+      }
+      
+      console.log('  - teamAVotes after:', teamAVotes);
+      console.log('  - teamBVotes after:', teamBVotes);
+    }
     
     return {
       teamA: {

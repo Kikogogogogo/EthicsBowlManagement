@@ -147,14 +147,25 @@ class TestAuthController {
     try {
       const { config } = req.body;
       
+      console.log('📝 Received config:', config);
+      
       // Default configuration
-      const defaultConfig = {
-        admins: { count: 2, role: USER_ROLES.ADMIN, prefix: 'Admin' },
-        judges: { count: 3, role: USER_ROLES.JUDGE, prefix: 'Judge' },
-        moderators: { count: 3, role: USER_ROLES.MODERATOR, prefix: 'Moderator' }
+      const defaultCounts = {
+        admins: 2,
+        judges: 3,
+        moderators: 3
       };
       
-      const userConfig = config || defaultConfig;
+      // Use provided config or defaults
+      const counts = config || defaultCounts;
+      
+      // Convert simple counts to full config
+      const roleMapping = {
+        admins: USER_ROLES.ADMIN,
+        judges: USER_ROLES.JUDGE,
+        moderators: USER_ROLES.MODERATOR
+      };
+      
       const createdUsers = [];
       
       // Generate specific names for test users
@@ -169,18 +180,27 @@ class TestAuthController {
       };
       
       // Generate test users for different roles
-      for (const [roleType, roleConfig] of Object.entries(userConfig)) {
-        for (let i = 1; i <= roleConfig.count; i++) {
+      for (const [roleType, count] of Object.entries(counts)) {
+        const role = roleMapping[roleType];
+        
+        if (!role) {
+          console.warn(`⚠️ Unknown role type: ${roleType}, skipping`);
+          continue;
+        }
+        
+        console.log(`👤 Generating ${count} ${roleType}...`);
+        
+        for (let i = 1; i <= count; i++) {
           const { firstName, lastName } = generateTestUserName(roleType, i);
           const email = `test.${roleType.toLowerCase()}.${i}@virtual.test`;
-          const googleId = `virtual_${roleType}_${i}_${Date.now()}`;
+          const googleId = `virtual_${roleType}_${i}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
           try {
             const user = await prisma.user.upsert({
               where: { email },
               update: {
                 isActive: true,
-                role: roleConfig.role,
+                role: role,
                 firstName,
                 lastName,
                 isEmailVerified: true,
@@ -190,7 +210,7 @@ class TestAuthController {
                 email,
                 firstName,
                 lastName,
-                role: roleConfig.role,
+                role: role,
                 googleId,
                 isEmailVerified: true,
                 isActive: true,
@@ -205,11 +225,15 @@ class TestAuthController {
               isActive: user.isActive
             });
             
+            console.log(`✅ Created/Updated: ${email} (${role})`);
+            
           } catch (error) {
-            console.error(`创建用户失败: ${email}`, error.message);
+            console.error(`❌ Failed to create user: ${email}`, error.message);
           }
         }
       }
+      
+      console.log(`🎉 Total users created/updated: ${createdUsers.length}`);
       
       res.json({
         success: true,
@@ -221,7 +245,7 @@ class TestAuthController {
       });
       
     } catch (error) {
-      console.error('Error generating virtual users:', error);
+      console.error('❌ Error generating virtual users:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to generate virtual users',
@@ -236,28 +260,160 @@ class TestAuthController {
    */
   async clearVirtualUsers(req, res) {
     try {
+      // Exclude the current user to avoid deleting themselves
+      const currentUserId = req.user.id;
+      const currentUserEmail = req.user.email;
+      
+      console.log(`🧹 Clearing virtual users, excluding current user: ${currentUserEmail}`);
+      
+      // Find all virtual users except current user
+      const virtualUsers = await prisma.user.findMany({
+        where: {
+          AND: [
+            {
+              email: {
+                contains: '@virtual.test'
+              }
+            },
+            {
+              id: {
+                not: currentUserId
+              }
+            }
+          ]
+        },
+        select: {
+          id: true,
+          email: true
+        }
+      });
+      
+      console.log(`Found ${virtualUsers.length} virtual users to delete`);
+      
+      if (virtualUsers.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No virtual users to delete (only current user remains)',
+          data: {
+            deletedCount: 0,
+            currentUser: currentUserEmail
+          }
+        });
+      }
+      
+      const userIds = virtualUsers.map(u => u.id);
+      
+      // Find all events created by virtual users
+      const eventsToDelete = await prisma.event.findMany({
+        where: {
+          createdBy: {
+            in: userIds
+          }
+        },
+        select: {
+          id: true
+        }
+      });
+      
+      const eventIds = eventsToDelete.map(e => e.id);
+      console.log(`Found ${eventIds.length} events to delete`);
+      
+      // Delete related data first to avoid foreign key constraints
+      // 1. Delete pre-approved emails created by virtual users
+      await prisma.preApprovedEmail.deleteMany({
+        where: {
+          createdBy: {
+            in: userIds
+          }
+        }
+      });
+      console.log('✅ Deleted pre-approved emails');
+      
+      // 2. Delete ALL scores related to these events (not just by judge_id)
+      // This includes scores for teams in these events
+      if (eventIds.length > 0) {
+        await prisma.score.deleteMany({
+          where: {
+            match: {
+              eventId: {
+                in: eventIds
+              }
+            }
+          }
+        });
+        console.log('✅ Deleted all scores for events');
+      }
+      
+      // 3. Delete match assignments for virtual judges
+      await prisma.matchAssignment.deleteMany({
+        where: {
+          judgeId: {
+            in: userIds
+          }
+        }
+      });
+      console.log('✅ Deleted match assignments');
+      
+      // 4. Update matches to remove virtual moderators (SET NULL)
+      await prisma.match.updateMany({
+        where: {
+          moderatorId: {
+            in: userIds
+          }
+        },
+        data: {
+          moderatorId: null
+        }
+      });
+      console.log('✅ Updated matches to remove moderators');
+      
+      // 5. Delete events created by virtual users (this will cascade to teams and matches)
+      const deletedEvents = await prisma.event.deleteMany({
+        where: {
+          createdBy: {
+            in: userIds
+          }
+        }
+      });
+      console.log(`✅ Deleted ${deletedEvents.count} events`);
+      
+      // 6. Finally, delete the virtual users
       const result = await prisma.user.deleteMany({
         where: {
-          email: {
-            contains: '@virtual.test'
+          id: {
+            in: userIds
           }
         }
       });
       
+      console.log(`✅ Deleted ${result.count} virtual users`);
+      
       res.json({
         success: true,
-        message: `Deleted ${result.count} virtual users`,
+        message: `Deleted ${result.count} virtual users (excluding current user)`,
         data: {
-          deletedCount: result.count
+          deletedCount: result.count,
+          currentUser: currentUserEmail,
+          details: {
+            users: result.count,
+            events: deletedEvents.count
+          }
         }
       });
       
     } catch (error) {
-      console.error('Error clearing virtual users:', error);
+      console.error('❌ Error clearing virtual users:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        meta: error.meta
+      });
+      
       res.status(500).json({
         success: false,
         message: 'Failed to clear virtual users',
-        error: error.message
+        error: error.message,
+        details: error.code || 'UNKNOWN_ERROR'
       });
     }
   }

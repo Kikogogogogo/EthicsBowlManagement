@@ -6714,8 +6714,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         if (!confirmed) return;
       }
 
-      // Generate random pairings for single round
-      const pairings = this.generateRandomPairings(selectedTeams);
+      // Generate Round Robin pairings using circle method
+      const pairings = this.generateRoundRobinPairings(selectedTeams);
       
       // Delete existing matches for the round if any
       if (existingMatches.length > 0) {
@@ -6812,13 +6812,24 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       let totalCreatedCount = 0;
       const roundDistribution = {};
       
-      for (const roundNumber of selectedRoundNumbers) {
+      // Generate complete Round Robin pairings first
+      const allPairings = this.generateRoundRobinPairings([...selectedTeams]);
+      console.log(`\n🔄 Generated ${allPairings.length} total Round Robin pairings`);
+      
+      // Distribute pairings across selected rounds
+      const pairingsPerRound = Math.ceil(allPairings.length / selectedRoundNumbers.length);
+      console.log(`🔄 Distributing ${pairingsPerRound} pairings per round across ${selectedRoundNumbers.length} rounds`);
+      
+      for (let i = 0; i < selectedRoundNumbers.length; i++) {
+        const roundNumber = selectedRoundNumbers[i];
         roundDistribution[roundNumber] = [];
         
-        // Generate random pairings for this round (each team plays once)
-        const roundPairings = this.generateRandomPairings([...selectedTeams]);
+        // Get pairings for this round
+        const startIndex = i * pairingsPerRound;
+        const endIndex = Math.min(startIndex + pairingsPerRound, allPairings.length);
+        const roundPairings = allPairings.slice(startIndex, endIndex);
         
-        console.log(`\n🔄 Round ${roundNumber}: generating ${roundPairings.length} pairings`);
+        console.log(`\n🔄 Round ${roundNumber}: distributing ${roundPairings.length} pairings (${startIndex + 1}-${endIndex})`);
         
         // Track excluded team for this round
         let excludedTeam = null;
@@ -6914,11 +6925,34 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    * Update team list in Swiss modal
    */
   updateSwissTeamList() {
+    console.log('🔍 [SwissModal] updateSwissTeamList called');
+    console.log('🔍 [SwissModal] this.teams:', this.teams);
+    console.log('🔍 [SwissModal] teams count:', this.teams?.length || 0);
+    
     // Find the parent container of team checkboxes by looking for selectedTeams inputs
     const firstTeamCheckbox = document.querySelector('#swissModal input[name="selectedTeams"]');
     const teamContainer = firstTeamCheckbox?.closest('.space-y-2');
-    if (!teamContainer) return;
+    
+    console.log('🔍 [SwissModal] firstTeamCheckbox:', firstTeamCheckbox);
+    console.log('🔍 [SwissModal] teamContainer:', teamContainer);
+    
+    if (!teamContainer) {
+      console.error('❌ [SwissModal] Team container not found!');
+      return;
+    }
 
+    if (!this.teams || this.teams.length === 0) {
+      console.warn('⚠️ [SwissModal] No teams available to display');
+      teamContainer.innerHTML = `
+        <div class="text-center text-gray-500 py-4">
+          <p>No teams available for this event.</p>
+          <p class="text-sm">Please add teams first before generating Swiss matches.</p>
+        </div>
+      `;
+      return;
+    }
+
+    console.log('🔍 [SwissModal] Rendering', this.teams.length, 'teams');
     teamContainer.innerHTML = this.teams.map(team => `
       <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
         <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-green-600 focus:ring-green-500">
@@ -6931,12 +6965,18 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
     // Re-setup event listeners for the new checkboxes
     this.addSwissEventListeners();
+    console.log('✅ [SwissModal] Team list updated successfully');
   }
 
   /**
    * Show Swiss Tournament modal
    */
   showSwissModal() {
+    console.log('🔍 [SwissModal] showSwissModal called');
+    console.log('🔍 [SwissModal] Current event ID:', this.currentEventId);
+    console.log('🔍 [SwissModal] Teams available:', this.teams?.length || 0);
+    console.log('🔍 [SwissModal] Teams data:', this.teams);
+    
     this.showModal('swissModal');
     
     // Update team list with latest data
@@ -6965,6 +7005,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     
     // Add event listeners for team selection
     this.addSwissEventListeners();
+    console.log('✅ [SwissModal] Swiss modal opened successfully');
   }
 
   /**
@@ -7143,6 +7184,13 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    * @returns {Array} Array of pairing objects {teamA, teamB}
    */
   generateRoundRobinPairings(teams) {
+    console.log('🔍 [RoundRobin] Generating Round Robin pairings for', teams.length, 'teams');
+    
+    if (teams.length < 2) {
+      console.warn('⚠️ [RoundRobin] Need at least 2 teams for Round Robin');
+      return [];
+    }
+    
     const pairings = [];
     const teamIds = teams.map(team => team.id);
     
@@ -7150,13 +7198,18 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const isOdd = teamIds.length % 2 === 1;
     if (isOdd) {
       teamIds.push(null); // null represents a bye
+      console.log('🔍 [RoundRobin] Odd number of teams, adding bye');
     }
     
     const n = teamIds.length;
     const rounds = n - 1;
     
-    // Generate pairings for each round
+    console.log('🔍 [RoundRobin] Total rounds needed:', rounds);
+    
+    // Generate pairings for each round using circle method
     for (let round = 0; round < rounds; round++) {
+      console.log(`🔍 [RoundRobin] Round ${round + 1}:`);
+      
       for (let i = 0; i < n / 2; i++) {
         const teamAIndex = i;
         const teamBIndex = n - 1 - i;
@@ -7166,18 +7219,38 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           const teamA = teams.find(t => t.id === teamIds[teamAIndex]);
           const teamB = teams.find(t => t.id === teamIds[teamBIndex]);
           
-          pairings.push({ teamA, teamB });
+          if (teamA && teamB) {
+            pairings.push({ teamA, teamB });
+            console.log(`  - ${teamA.name} vs ${teamB.name}`);
+          }
+        } else if (teamIds[teamAIndex] === null && teamIds[teamBIndex] !== null) {
+          // Team B gets a bye
+          const teamB = teams.find(t => t.id === teamIds[teamBIndex]);
+          if (teamB) {
+            pairings.push({ teamA: teamB, teamB: null });
+            console.log(`  - ${teamB.name} gets a bye`);
+          }
+        } else if (teamIds[teamAIndex] !== null && teamIds[teamBIndex] === null) {
+          // Team A gets a bye
+          const teamA = teams.find(t => t.id === teamIds[teamAIndex]);
+          if (teamA) {
+            pairings.push({ teamA, teamB: null });
+            console.log(`  - ${teamA.name} gets a bye`);
+          }
         }
       }
       
-      // Rotate teams (keep first team fixed, rotate the rest)
-      const temp = teamIds[1];
-      for (let i = 1; i < n - 1; i++) {
-        teamIds[i] = teamIds[i + 1];
+      // Rotate teams (keep first team fixed, rotate the rest clockwise)
+      if (round < rounds - 1) { // Don't rotate after the last round
+        const temp = teamIds[1];
+        for (let i = 1; i < n - 1; i++) {
+          teamIds[i] = teamIds[i + 1];
+        }
+        teamIds[n - 1] = temp;
       }
-      teamIds[n - 1] = temp;
     }
     
+    console.log(`✅ [RoundRobin] Generated ${pairings.length} total pairings`);
     return pairings;
   }
 

@@ -184,6 +184,13 @@ class StatisticsService {
     // Check if using two-judge protocol
     const actualJudges = assignments.length;
     const useThreeJudgeProtocol = actualJudges === 2;
+    
+    // Debug logging
+    console.log('🔍 [Statistics] calculateJudgeVotes called with:');
+    console.log('  - assignments.length:', actualJudges);
+    console.log('  - useThreeJudgeProtocol:', useThreeJudgeProtocol);
+    console.log('  - teamScores count:', teamScores.length);
+    console.log('  - opponentScores count:', opponentScores.length);
 
     assignments.forEach(assignment => {
       const judgeId = assignment.judgeId;
@@ -217,6 +224,12 @@ class StatisticsService {
       const avgTeamScore = teamTotal / 2;
       const avgOpponentScore = opponentTotal / 2;
       
+      console.log('🔍 [Statistics] Simulating third judge:');
+      console.log('  - avgTeamScore:', avgTeamScore);
+      console.log('  - avgOpponentScore:', avgOpponentScore);
+      console.log('  - teamVotes before:', teamVotes);
+      console.log('  - opponentVotes before:', opponentVotes);
+      
       // Simulate third judge's score (average of two real judges)
       teamTotal += avgTeamScore;
       opponentTotal += avgOpponentScore;
@@ -230,6 +243,14 @@ class StatisticsService {
         teamVotes += 0.5;
         opponentVotes += 0.5;
       }
+      
+      console.log('  - teamVotes after:', teamVotes);
+      console.log('  - opponentVotes after:', opponentVotes);
+    } else {
+      console.log('🔍 [Statistics] Not simulating third judge:', {
+        useThreeJudgeProtocol,
+        assignmentsLength: assignments.length
+      });
     }
 
     return { teamVotes, opponentVotes, teamTotal, opponentTotal };

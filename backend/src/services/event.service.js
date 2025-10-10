@@ -284,6 +284,18 @@ class EventService {
         }
       }
 
+      // Set default scoring criteria if none provided
+      const defaultScoringCriteria = {
+        commentQuestionsCount: 3,
+        commentMaxScore: 20,
+        commentInstructions: 'Judge Questions Scoring Guide (20 points per question):\n\n1-5 points: The team answered the question but did not explain how it impacts their position\n6-10 points: The team answered the question clearly and explained its relevance to their stance\n11-15 points: The team made their position clearer in light of the question\n16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement\n\nNote: Judges typically score each question individually (First, Second, Third Question)',
+        criteria: {
+          clarity: { maxScore: 25, description: 'Clarity of argument and presentation' },
+          analysis: { maxScore: 30, description: 'Depth of ethical analysis' },
+          engagement: { maxScore: 25, description: 'Engagement with opposing arguments' }
+        }
+      };
+
       const event = await prisma.event.create({
         data: {
           name,
@@ -295,7 +307,7 @@ class EventService {
           endDate: endDate ? new Date(endDate) : null,
           location: location || null,
           maxTeams: maxTeams ? parseInt(maxTeams) : null,
-          scoringCriteria: scoringCriteria ? JSON.stringify(scoringCriteria) : null,
+          scoringCriteria: scoringCriteria ? JSON.stringify(scoringCriteria) : JSON.stringify(defaultScoringCriteria),
           roundNames: roundNames || null,
           allowedJudges: allowedJudges ? JSON.stringify(allowedJudges) : null,
           allowedModerators: allowedModerators ? JSON.stringify(allowedModerators) : null,
