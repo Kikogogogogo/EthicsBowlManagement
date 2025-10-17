@@ -641,7 +641,45 @@ class EventsPage {
     } catch (error) {
       console.error('Failed to delete event:', error);
       
-      // Provide user-friendly error messages
+      // Check if user is admin and error is about teams/matches
+      const currentUser = this.authManager?.currentUser;
+      const isAdmin = currentUser?.role === 'admin';
+      
+      if (error.message.includes('teams or matches') && isAdmin) {
+        // Show force delete confirmation for admin
+        const forceDelete = confirm(
+          'Cannot delete this event because it has associated teams or matches.\n\n' +
+          'As an administrator, you can force delete this event, which will permanently remove:\n' +
+          '• All teams in this event\n' +
+          '• All matches in this event\n' +
+          '• All scores and judge assignments\n' +
+          '• The event itself\n\n' +
+          'This action cannot be undone. Do you want to force delete this event?'
+        );
+        
+        if (forceDelete) {
+          try {
+            await this.eventService.deleteEvent(eventId, true); // Force delete
+            await this.loadEvents();
+            this.ui.showSuccess('Success', 'Event force deleted successfully');
+            
+            // Auto-hide success message after 3 seconds
+            setTimeout(() => {
+              this.ui.hideMessages();
+            }, 3000);
+            return;
+          } catch (forceError) {
+            console.error('Failed to force delete event:', forceError);
+            this.ui.showError('Force Delete Failed', forceError.message || 'Failed to force delete event');
+            return;
+          }
+        } else {
+          this.ui.showError('Cannot Delete Event', 'Cannot delete this event because it has associated teams or matches. Please remove all teams and matches first, then try again.');
+          return;
+        }
+      }
+      
+      // Provide user-friendly error messages for other cases
       let errorMessage = error.message;
       if (error.message.includes('teams or matches')) {
         errorMessage = 'Cannot delete this event because it has associated teams or matches. Please remove all teams and matches first, then try again.';

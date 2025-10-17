@@ -259,6 +259,7 @@ class EventController {
   deleteEvent = async (req, res) => {
     try {
       const { eventId } = req.params;
+      const { forceDelete } = req.query;
       
       if (!eventId) {
         return res.status(400).json({
@@ -268,7 +269,10 @@ class EventController {
         });
       }
 
-      await this.eventService.deleteEvent(eventId, req.user.id);
+      // Convert forceDelete query parameter to boolean
+      const shouldForceDelete = forceDelete === 'true';
+
+      await this.eventService.deleteEvent(eventId, req.user.id, shouldForceDelete);
       
       res.json({
         success: true,

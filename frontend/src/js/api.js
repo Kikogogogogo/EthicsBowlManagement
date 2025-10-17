@@ -354,8 +354,9 @@ class EventService {
   /**
    * Delete event
    */
-  async deleteEvent(id) {
-    await this.api.delete(ENDPOINTS.events.delete(id));
+  async deleteEvent(id, forceDelete = false) {
+    const url = forceDelete ? `${ENDPOINTS.events.delete(id)}?forceDelete=true` : ENDPOINTS.events.delete(id);
+    await this.api.delete(url);
   }
 
   /**

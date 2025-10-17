@@ -198,9 +198,17 @@ class ScoreService {
 
       let score;
       if (existingScore) {
-        // Update existing score if not submitted
+        // Update existing score if not submitted (or if user is admin)
         if (existingScore.isSubmitted) {
-          throw new Error('Cannot update already submitted scores');
+          // Check if user is admin - admins can update submitted scores
+          const user = await prisma.user.findUnique({
+            where: { id: judgeId },
+            select: { role: true }
+          });
+          
+          if (!user || user.role !== USER_ROLES.ADMIN) {
+            throw new Error('Cannot update already submitted scores');
+          }
         }
 
         score = await prisma.score.update({
@@ -321,7 +329,15 @@ class ScoreService {
 
       // Check if judge can save draft at current stage
       if (!canJudgeSaveDraft(match.status)) {
-        throw new Error('Cannot save draft scores at this match stage');
+        // Check if user is admin - admins can save draft scores at any match stage
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Cannot save draft scores at this match stage');
+        }
       }
 
       // Check if score already exists for this judge-team-match combination
@@ -337,9 +353,17 @@ class ScoreService {
 
       let score;
       if (existingScore) {
-        // Update existing score (only if not submitted)
+        // Update existing score (only if not submitted, or if user is admin)
         if (existingScore.isSubmitted) {
-          throw new Error('Cannot update already submitted scores');
+          // Check if user is admin - admins can update submitted scores
+          const user = await prisma.user.findUnique({
+            where: { id: judgeId },
+            select: { role: true }
+          });
+          
+          if (!user || user.role !== USER_ROLES.ADMIN) {
+            throw new Error('Cannot update already submitted scores');
+          }
         }
 
         score = await prisma.score.update({
@@ -434,11 +458,27 @@ class ScoreService {
       }
 
       if (score.isSubmitted) {
-        throw new Error('Cannot update submitted scores');
+        // Check if user is admin - admins can update submitted scores
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Cannot update submitted scores');
+        }
       }
 
       if (!canJudgesScore(score.match.status)) {
-        throw new Error('Cannot update scores at this match stage');
+        // Check if user is admin - admins can update scores at any match stage
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Cannot update scores at this match stage');
+        }
       }
 
       // Handle JSON fields
@@ -875,7 +915,15 @@ class ScoreService {
       }
 
       if (score.isSubmitted) {
-        throw new Error('Cannot delete already submitted scores');
+        // Check if user is admin - admins can delete submitted scores
+        const user = await prisma.user.findUnique({
+          where: { id: judgeId },
+          select: { role: true }
+        });
+        
+        if (!user || user.role !== USER_ROLES.ADMIN) {
+          throw new Error('Cannot delete already submitted scores');
+        }
       }
 
       await prisma.score.delete({

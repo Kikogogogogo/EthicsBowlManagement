@@ -2522,11 +2522,11 @@ class EventWorkspacePage {
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700">Description</label>
-          <input type="text" 
-                 value="${value.description || ''}" 
+          <textarea 
                  data-field="description" ${disabledAttr}
                  placeholder="Describe what this criteria evaluates"
-                 class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass}">
+                 rows="3"
+                 class="criteria-input mt-1 block w-full text-sm border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 ${disabledClass} resize-vertical">${value.description || ''}</textarea>
         </div>
       </div>
     `).join('');
@@ -7721,6 +7721,11 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             </div>
             <div class="px-6 py-4">
               <p class="text-sm text-gray-600 mb-4">Modify scores for ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'}</p>
+              <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p class="text-sm text-blue-800">
+                  <strong>Admin Note:</strong> As an administrator, you can modify scores even after they have been submitted by judges.
+                </p>
+              </div>
               
               <form id="modifyScoresForm">
                 ${judgeScores.map(score => {

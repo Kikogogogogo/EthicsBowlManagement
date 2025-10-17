@@ -304,12 +304,19 @@ class ExportController {
    */
   formatCriteriaName(key) {
     const nameMap = {
+      // Legacy criteria
       clarity: 'Clarity',
       analysis: 'Analysis', 
       engagement: 'Engagement',
       argumentation: 'Argumentation',
       reasoning: 'Reasoning',
-      response: 'Response'
+      response: 'Response',
+      // New Ethics Bowl criteria
+      clarity_systematicity: 'Clarity & Systematicity',
+      moral_dimension: 'Moral Dimension',
+      opposing_viewpoints: 'Opposing Viewpoints',
+      commentary: 'Commentary',
+      respectful_dialogue: 'Respectful Dialogue'
     };
     return nameMap[key] || key.charAt(0).toUpperCase() + key.slice(1);
   }

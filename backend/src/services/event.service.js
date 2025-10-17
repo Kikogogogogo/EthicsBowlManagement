@@ -286,13 +286,34 @@ class EventService {
 
       // Set default scoring criteria if none provided
       const defaultScoringCriteria = {
-        commentQuestionsCount: 3,
-        commentMaxScore: 20,
-        commentInstructions: 'Judge Questions Scoring Guide (20 points per question):\n\n1-5 points: The team answered the question but did not explain how it impacts their position\n6-10 points: The team answered the question clearly and explained its relevance to their stance\n11-15 points: The team made their position clearer in light of the question\n16-20 points: The team refined their position or provided a clear rationale for not refining it, demonstrating strong engagement\n\nNote: Judges typically score each question individually (First, Second, Third Question)',
+        commentQuestionsCount: 0, // No separate comment questions in new format
+        commentMaxScore: 0,
+        commentInstructions: 'All scoring is now integrated into the main criteria below.',
         criteria: {
-          clarity: { maxScore: 25, description: 'Clarity of argument and presentation' },
-          analysis: { maxScore: 30, description: 'Depth of ethical analysis' },
-          engagement: { maxScore: 25, description: 'Engagement with opposing arguments' }
+          clarity_systematicity: { 
+            maxScore: 5, 
+            description: 'Clarity & Systematicity: The team presented a clear and identifiable position in response to the moderator\'s question and supported their position with identifiable reasons that were well articulated and jointly coherent.' 
+          },
+          moral_dimension: { 
+            maxScore: 5, 
+            description: 'Moral Dimension: The team unequivocally identified the moral problem(s) at the heart of the case and applied moral concepts (duties, values, rights, responsibilities, etc.) to relevant aspects of the case in a way that tackled the underlying moral tensions within the case.' 
+          },
+          opposing_viewpoints: { 
+            maxScore: 5, 
+            description: 'Opposing Viewpoints: The team acknowledged strong, conflicting viewpoint(s) that lead to reasonable disagreement and charitably explained why these viewpoints pose a serious challenge to their position and argued that their position better defuses the moral tension within the case.' 
+          },
+          commentary: { 
+            maxScore: 10, 
+            description: 'Commentary: The team developed a manageably small number of suggestions, questions, and critiques that constructively critiqued the presentation and was focused on salient and important moral considerations and provided the presenting team with novel options to modify their position.' 
+          },
+          response: { 
+            maxScore: 10, 
+            description: 'Response: The team prioritized the commentary\'s main suggestions, questions, and critiques in a way that charitably explained why these viewpoints pose a serious challenge to their position, making their position clearer and refining their position or explaining why such refinement is not required.' 
+          },
+          respectful_dialogue: { 
+            maxScore: 5, 
+            description: 'Respectful Dialogue: The team repeatedly acknowledged viewpoints different from their own in a way that demonstrated genuine reflection and improved their original position in light of the other team\'s contributions, whether or not the teams agreed in the end.' 
+          }
         }
       };
 
@@ -565,9 +586,10 @@ class EventService {
    * Delete event
    * @param {string} eventId - Event ID
    * @param {string} userId - ID of the user making the deletion
+   * @param {boolean} forceDelete - Force delete even with associated data (admin only)
    * @returns {boolean} True if deleted successfully
    */
-  async deleteEvent(eventId, userId) {
+  async deleteEvent(eventId, userId, forceDelete = false) {
     try {
       // Check if event exists and user has permission
       const existingEvent = await prisma.event.findUnique({
@@ -601,7 +623,46 @@ class EventService {
 
       // Don't allow deleting events with matches or teams (safety check)
       if (existingEvent._count.matches > 0 || existingEvent._count.teams > 0) {
-        throw new Error('Cannot delete event that has teams or matches. Please remove them first.');
+        if (forceDelete && user.role === 'admin') {
+          // Admin can force delete - cascade delete all related data
+          console.log(`Admin ${user.email} is force deleting event ${eventId} with ${existingEvent._count.teams} teams and ${existingEvent._count.matches} matches`);
+          
+          // Delete all scores first
+          await prisma.score.deleteMany({
+            where: {
+              match: {
+                eventId: eventId
+              }
+            }
+          });
+          
+          // Delete all match assignments
+          await prisma.matchAssignment.deleteMany({
+            where: {
+              match: {
+                eventId: eventId
+              }
+            }
+          });
+          
+          // Delete all matches
+          await prisma.match.deleteMany({
+            where: {
+              eventId: eventId
+            }
+          });
+          
+          // Delete all teams
+          await prisma.team.deleteMany({
+            where: {
+              eventId: eventId
+            }
+          });
+          
+          console.log(`Force delete completed for event ${eventId}`);
+        } else {
+          throw new Error('Cannot delete event that has teams or matches. Please remove them first.');
+        }
       }
 
       // Only allow admin to delete non-draft events, others can only delete drafts
