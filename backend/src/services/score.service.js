@@ -18,7 +18,13 @@ class ScoreService {
         where: { id: matchId },
         include: {
           moderator: true,
-          assignments: true
+          assignments: true,
+          teamA: {
+            select: { id: true, name: true, school: true }
+          },
+          teamB: {
+            select: { id: true, name: true, school: true }
+          }
         }
       });
 
@@ -97,6 +103,15 @@ class ScoreService {
         return parsedScore;
       });
 
+      // For all users, if there are only 2 judges, add virtual judge scores
+      if (match.assignments.length === 2) {
+        console.log('🔍 [ScoreService] Generating virtual judge scores for 2-judge match');
+        const virtualJudgeScores = this.generateVirtualJudgeScores(match, parsedScores);
+        console.log('🔍 [ScoreService] Generated virtual judge scores:', virtualJudgeScores);
+        parsedScores.push(...virtualJudgeScores);
+        console.log('🔍 [ScoreService] Total scores after adding virtual judge:', parsedScores.length);
+      }
+
       // Calculate vote scores for each team
       const voteScores = this.calculateVoteScores(parsedScores, match);
 
@@ -140,13 +155,13 @@ class ScoreService {
       });
 
       if (!judgeAssignment) {
-        // Check if user is admin - admins can score without being assigned
+        // Check if user is admin or moderator - they can score without being assigned
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
           select: { role: true }
         });
         
-        if (!user || user.role !== USER_ROLES.ADMIN) {
+        if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.MODERATOR)) {
           throw new Error('Judge is not assigned to this match');
         }
       }
@@ -311,13 +326,13 @@ class ScoreService {
       // Verify judge is assigned to this match
       const assignment = match.assignments[0];
       if (!assignment) {
-        // Check if user is admin - admins can score without being assigned
+        // Check if user is admin or moderator - they can score without being assigned
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
           select: { role: true }
         });
         
-        if (!user || user.role !== USER_ROLES.ADMIN) {
+        if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.MODERATOR)) {
           throw new Error('Judge is not assigned to this match');
         }
       }
@@ -446,37 +461,37 @@ class ScoreService {
       }
 
       if (score.judgeId !== judgeId) {
-        // Check if user is admin - admins can update any scores
+        // Check if user is admin or moderator - they can update any scores
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
           select: { role: true }
         });
         
-        if (!user || user.role !== USER_ROLES.ADMIN) {
+        if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.MODERATOR)) {
           throw new Error('You can only update your own scores');
         }
       }
 
       if (score.isSubmitted) {
-        // Check if user is admin - admins can update submitted scores
+        // Check if user is admin or moderator - they can update submitted scores
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
           select: { role: true }
         });
         
-        if (!user || user.role !== USER_ROLES.ADMIN) {
+        if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.MODERATOR)) {
           throw new Error('Cannot update submitted scores');
         }
       }
 
       if (!canJudgesScore(score.match.status)) {
-        // Check if user is admin - admins can update scores at any match stage
+        // Check if user is admin or moderator - they can update scores at any match stage
         const user = await prisma.user.findUnique({
           where: { id: judgeId },
           select: { role: true }
         });
         
-        if (!user || user.role !== USER_ROLES.ADMIN) {
+        if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.MODERATOR)) {
           throw new Error('Cannot update scores at this match stage');
         }
       }
@@ -1013,6 +1028,142 @@ class ScoreService {
       console.error('Error getting judge score statistics:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate virtual judge scores for two-judge cases
+   * @param {Object} match - Match object
+   * @param {Array} realScores - Real judge scores
+   * @returns {Array} Virtual judge scores
+   */
+  generateVirtualJudgeScores(match, realScores) {
+    const virtualJudgeScores = [];
+    
+    // Get teams
+    const teamA = match.teamA;
+    const teamB = match.teamB;
+    
+    if (!teamA || !teamB) {
+      return virtualJudgeScores;
+    }
+
+    // Group real scores by team
+    const teamAScores = realScores.filter(s => s.teamId === teamA.id);
+    const teamBScores = realScores.filter(s => s.teamId === teamB.id);
+
+    if (teamAScores.length === 0 || teamBScores.length === 0) {
+      return virtualJudgeScores;
+    }
+
+    // Calculate average scores for each team
+    const teamAAvgCriteria = this.calculateAverageCriteriaScores(teamAScores);
+    const teamAAvgComments = this.calculateAverageCommentScores(teamAScores);
+    
+    const teamBAvgCriteria = this.calculateAverageCriteriaScores(teamBScores);
+    const teamBAvgComments = this.calculateAverageCommentScores(teamBScores);
+
+    // Create virtual judge scores for both teams
+    const virtualJudgeId = 'virtual-judge-' + match.id;
+    
+    // Virtual judge score for Team A
+    const virtualScoreA = {
+      id: 'virtual-score-a-' + match.id,
+      matchId: match.id,
+      judgeId: virtualJudgeId,
+      teamId: teamA.id,
+      criteriaScores: teamAAvgCriteria,
+      commentScores: teamAAvgComments,
+      notes: 'Virtual Judge - Average of two real judges',
+      isSubmitted: true,
+      submittedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      judge: {
+        id: virtualJudgeId,
+        firstName: 'Virtual',
+        lastName: 'Judge',
+        email: 'virtual@judge.com'
+      },
+      team: teamA
+    };
+
+    // Virtual judge score for Team B
+    const virtualScoreB = {
+      id: 'virtual-score-b-' + match.id,
+      matchId: match.id,
+      judgeId: virtualJudgeId,
+      teamId: teamB.id,
+      criteriaScores: teamBAvgCriteria,
+      commentScores: teamBAvgComments,
+      notes: 'Virtual Judge - Average of two real judges',
+      isSubmitted: true,
+      submittedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      judge: {
+        id: virtualJudgeId,
+        firstName: 'Virtual',
+        lastName: 'Judge',
+        email: 'virtual@judge.com'
+      },
+      team: teamB
+    };
+
+    virtualJudgeScores.push(virtualScoreA, virtualScoreB);
+    return virtualJudgeScores;
+  }
+
+  /**
+   * Calculate average criteria scores from multiple scores
+   * @param {Array} scores - Array of score objects
+   * @returns {Object} Average criteria scores
+   */
+  calculateAverageCriteriaScores(scores) {
+    if (scores.length === 0) return {};
+    
+    const criteriaKeys = new Set();
+    scores.forEach(score => {
+      if (score.criteriaScores) {
+        Object.keys(score.criteriaScores).forEach(key => criteriaKeys.add(key));
+      }
+    });
+
+    const avgCriteria = {};
+    criteriaKeys.forEach(key => {
+      const values = scores
+        .map(score => score.criteriaScores?.[key] || 0)
+        .filter(val => val !== null && val !== undefined);
+      
+      if (values.length > 0) {
+        avgCriteria[key] = Math.round(values.reduce((sum, val) => sum + val, 0) / values.length);
+      }
+    });
+
+    return avgCriteria;
+  }
+
+  /**
+   * Calculate average comment scores from multiple scores
+   * @param {Array} scores - Array of score objects
+   * @returns {Array} Average comment scores
+   */
+  calculateAverageCommentScores(scores) {
+    if (scores.length === 0) return [];
+    
+    const maxComments = Math.max(...scores.map(score => score.commentScores?.length || 0));
+    const avgComments = [];
+
+    for (let i = 0; i < maxComments; i++) {
+      const values = scores
+        .map(score => score.commentScores?.[i] || 0)
+        .filter(val => val !== null && val !== undefined);
+      
+      if (values.length > 0) {
+        avgComments.push(Math.round(values.reduce((sum, val) => sum + val, 0) / values.length));
+      }
+    }
+
+    return avgComments;
   }
 }
 

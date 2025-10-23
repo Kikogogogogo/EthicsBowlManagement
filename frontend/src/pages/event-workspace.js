@@ -2070,7 +2070,7 @@ class EventWorkspacePage {
               </button>
             ` : ''}
 
-            ${isAdmin || isModerator ? `
+            ${isAdmin || effectiveRole === 'moderator' ? `
               <button data-action="view-scores" data-match-id="${match.id}" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors font-medium">
                 View Scores
               </button>
@@ -4447,6 +4447,13 @@ class EventWorkspacePage {
           console.log('Scores response for match', matchId, ':', scoresResponse);
           console.log('Parsed scores:', scores);
           console.log('Vote scores:', voteScores);
+          
+          // Debug: Check for virtual judge scores
+          const virtualJudgeScores = scores.filter(score => score.judge?.id?.startsWith('virtual-judge-'));
+          console.log('🔍 [EventWorkspace] Virtual judge scores found:', virtualJudgeScores.length);
+          if (virtualJudgeScores.length > 0) {
+            console.log('🔍 [EventWorkspace] Virtual judge scores details:', virtualJudgeScores);
+          }
 
           // Ensure scores is an array
           const scoresArray = Array.isArray(scores) ? scores : [];
@@ -5367,6 +5374,113 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Get team win display information for modal
+   */
+  getTeamWinDisplayForModal(match, scoresArray) {
+    // Check if current user is moderator or admin
+    const currentUser = this.authManager?.currentUser;
+    const isModeratorOrAdmin = currentUser?.role === 'moderator' || currentUser?.role === 'admin';
+    
+    if (!isModeratorOrAdmin) {
+      return null; // Don't show for judges
+    }
+
+    // Check if all judges have submitted scores
+    const allJudgesSubmitted = this.checkAllJudgesSubmittedForModal(match, scoresArray);
+    
+    if (!allJudgesSubmitted) {
+      return {
+        text: 'Not all scores submitted',
+        className: 'text-gray-600 bg-gray-100'
+      };
+    }
+
+    // Calculate winning team
+    const winner = this.calculateWinningTeamForModal(match, scoresArray);
+    
+    if (winner) {
+      return {
+        text: `TEAM ${winner.name.toUpperCase()} WINS`,
+        className: 'text-green-800 bg-green-100 font-bold'
+      };
+    }
+
+    return {
+      text: 'Tie',
+      className: 'text-yellow-800 bg-yellow-100 font-bold'
+    };
+  }
+
+  /**
+   * Check if all assigned judges have submitted their scores for modal
+   */
+  checkAllJudgesSubmittedForModal(match, scoresArray) {
+    if (!match?.assignments) {
+      return false;
+    }
+
+    const judgeAssignments = match.assignments.filter(a => a.judge);
+    const submittedScores = scoresArray.filter(s => s.isSubmitted);
+
+    // Check if we have submitted scores for all judges
+    const judgeIdsWithSubmittedScores = [...new Set(submittedScores.map(s => s.judge.id))];
+    const assignedJudgeIds = judgeAssignments.map(a => a.judge.id);
+
+    return assignedJudgeIds.length > 0 && 
+           assignedJudgeIds.every(judgeId => judgeIdsWithSubmittedScores.includes(judgeId));
+  }
+
+  /**
+   * Calculate which team wins based on submitted scores for modal
+   */
+  calculateWinningTeamForModal(match, scoresArray) {
+    const teamScores = {};
+    
+    // Get teams from match
+    const teamA = this.teams.find(t => t.id === match.teamAId);
+    const teamB = this.teams.find(t => t.id === match.teamBId);
+    const teams = [teamA, teamB].filter(t => t);
+    
+    // Calculate average scores for each team
+    teams.forEach(team => {
+      const teamScoresList = scoresArray.filter(s => s.team.id === team.id && s.isSubmitted);
+      
+      if (teamScoresList.length === 0) {
+        return;
+      }
+
+      const totalScores = teamScoresList.map(score => {
+        const criteriaTotal = Object.values(score.criteriaScores || {}).reduce((sum, val) => sum + (val || 0), 0);
+        const commentAverage = score.commentScores && score.commentScores.length > 0 
+          ? score.commentScores.reduce((sum, val) => sum + (val || 0), 0) / score.commentScores.length
+          : 0;
+        return criteriaTotal + commentAverage;
+      });
+
+      const averageScore = totalScores.reduce((sum, score) => sum + score, 0) / totalScores.length;
+      teamScores[team.id] = {
+        team: team,
+        score: averageScore
+      };
+    });
+
+    // Find team with highest score
+    const teamsWithScores = Object.values(teamScores);
+    if (teamsWithScores.length === 0) {
+      return null;
+    }
+
+    const sortedTeams = teamsWithScores.sort((a, b) => b.score - a.score);
+    
+    // Check if there's a clear winner (not a tie)
+    if (sortedTeams.length > 1 && sortedTeams[0].score === sortedTeams[1].score) {
+      return null; // Tie
+    }
+
+    return sortedTeams[0].team;
+  }
+
+  /**
    * Update scores modal content
    */
   updateScoresModalContent(match, scoresArray, voteScores = null) {
@@ -5381,8 +5495,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
     // Group scores by judge
     const scoresByJudge = {};
+    console.log('🔍 [EventWorkspace] updateScoresModalContent - scoresArray:', scoresArray);
     scoresArray.forEach(score => {
       const judgeId = score.judge.id;
+      console.log('🔍 [EventWorkspace] Processing score for judge:', judgeId, 'isVirtual:', judgeId.startsWith('virtual-judge-'));
       if (!scoresByJudge[judgeId]) {
         scoresByJudge[judgeId] = {
           judge: score.judge,
@@ -5390,6 +5506,27 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         };
       }
       scoresByJudge[judgeId].scores.push(score);
+    });
+    
+    console.log('🔍 [EventWorkspace] scoresByJudge keys:', Object.keys(scoresByJudge));
+
+    // Filter out virtual judges for non-admin/moderator users
+    const currentUser = this.authManager?.currentUser;
+    const isModeratorOrAdmin = currentUser?.role === 'moderator' || currentUser?.role === 'admin';
+    
+    let filteredJudgeIds = Object.keys(scoresByJudge);
+    if (!isModeratorOrAdmin) {
+      // Remove virtual judges for regular judges
+      filteredJudgeIds = filteredJudgeIds.filter(judgeId => !judgeId.startsWith('virtual-judge-'));
+    }
+
+    // Sort judges: real judges first, then virtual judge (if visible)
+    const sortedJudgeIds = filteredJudgeIds.sort((a, b) => {
+      const aIsVirtual = a.startsWith('virtual-judge-');
+      const bIsVirtual = b.startsWith('virtual-judge-');
+      if (aIsVirtual && !bIsVirtual) return 1;
+      if (!aIsVirtual && bIsVirtual) return -1;
+      return 0;
     });
 
     // Create modal content
@@ -5411,15 +5548,22 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           </div>
           
           <div class="p-6 overflow-y-auto flex-grow">
-            ${Object.values(scoresByJudge).map(judgeData => {
+            ${sortedJudgeIds.map(judgeId => {
+              const judgeData = scoresByJudge[judgeId];
               const { judge, scores } = judgeData;
               
               return `
                 <div class="mb-8 last:mb-0">
                   <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">
-                      ${judge.firstName} ${judge.lastName}
-                      <span class="text-sm text-gray-500">(${judge.email})</span>
+                      ${judge.id.startsWith('virtual-judge-') ? 
+                        'Virtual Judge' :
+                        `${judge.firstName} ${judge.lastName}`
+                      }
+                      ${judge.id.startsWith('virtual-judge-') ? 
+                        '<span class="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-200 text-purple-900">Average of Two Judges</span>' : 
+                        `<span class="text-sm text-gray-500">(${judge.email})</span>`
+                      }
                     </h3>
                     <div class="flex items-center gap-2">
                       ${scores.every(s => s.isSubmitted) ? `
@@ -5437,27 +5581,33 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                           Pending
                         </div>
                       `}
-                      ${this.getEffectiveRole() === 'admin' ? `
-                        <div class="flex gap-1">
-                          <button onclick="window.eventWorkspacePage.showModifyScoresModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
-                                  class="bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs px-2 py-1 rounded flex items-center gap-1"
-                                  title="Modify Judge Scores">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                            </svg>
-                            Modify Scores
-                          </button>
-                          ${match.status !== 'completed' && scores.length > 0 ? `
-                            <button onclick="window.eventWorkspacePage.showReplaceJudgeModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
-                                    class="bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs px-2 py-1 rounded flex items-center gap-1"
-                                    title="Replace Judge">
+                      ${this.getEffectiveRole() === 'admin' || this.getEffectiveRole() === 'moderator' ? `
+                        ${!judge.id.startsWith('virtual-judge-') ? `
+                          <div class="flex gap-1">
+                            <button onclick="window.eventWorkspacePage.showModifyScoresModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
+                                    class="bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+                                    title="Modify Judge Scores">
                               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                               </svg>
-                              Replace Judge
+                              Modify Scores
                             </button>
-                          ` : ''}
-                        </div>
+                            ${match.status !== 'completed' && scores.length > 0 ? `
+                              <button onclick="window.eventWorkspacePage.showReplaceJudgeModal('${match.id}', '${judge.id}', '${judge.firstName} ${judge.lastName}')" 
+                                      class="bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+                                      title="Replace Judge">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                                </svg>
+                                Replace Judge
+                              </button>
+                            ` : ''}
+                          </div>
+                        ` : `
+                          <div class="text-xs text-gray-500 italic">
+                            Virtual Judge - Cannot be modified
+                          </div>
+                        `}
                       ` : ''}
                     </div>
                   </div>
@@ -5479,9 +5629,14 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                       const commentAverage = commentScores.length > 0 ? commentTotal / commentScores.length : 0;
                       const grandTotal = criteriaTotal + commentAverage;
                       
+                      const isVirtualJudge = judge.id.startsWith('virtual-judge-');
+                      
                       return `
-                        <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                          <h4 class="font-medium text-gray-900 mb-2">${team?.name || 'Unknown Team'}</h4>
+                        <div class="border border-gray-100 rounded-lg p-3 ${isVirtualJudge ? 'bg-purple-50 border-purple-200' : 'bg-gray-50'}">
+                          <h4 class="font-medium text-gray-900 mb-2">
+                            ${team?.name || 'Unknown Team'}
+                            ${isVirtualJudge ? '<span class="ml-2 text-xs text-purple-700 font-medium">(Virtual Judge Score)</span>' : ''}
+                          </h4>
                           
                           <div class="space-y-3 text-sm">
                             <div>
@@ -5520,7 +5675,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                               </div>
                             </div>
                             
-                            <div class="flex justify-between text-base font-bold pt-2 mt-2 border-t border-gray-200">
+                            <div class="flex justify-between text-base font-bold pt-2 mt-2 border-t-2 ${isVirtualJudge ? 'border-purple-300' : 'border-gray-200'}">
                               <span>Grand Total:</span>
                               <span>${(criteriaTotal + commentAverage).toFixed(2)}</span>
                             </div>
@@ -5542,6 +5697,19 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                 </div>
               `;
             }).join('')}
+            
+            <!-- Team Win Display (Only for Moderator/Admin) -->
+            ${this.getTeamWinDisplayForModal(match, scoresArray) ? `
+              <div class="mt-6 pt-4 border-t border-gray-200">
+                <div class="bg-white border border-gray-200 rounded-lg p-4">
+                  <div class="flex items-center justify-center">
+                    <span class="inline-flex items-center px-4 py-2 rounded-full text-lg font-medium ${this.getTeamWinDisplayForModal(match, scoresArray).className}">
+                      ${this.getTeamWinDisplayForModal(match, scoresArray).text}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
             
             ${voteScores ? `
               <div class="mt-6 pt-4 border-t border-gray-200">
@@ -7693,7 +7861,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * Show modify scores modal (Admin only)
+   * Show modify scores modal (Admin and Moderator)
    */
   async showModifyScoresModal(matchId, judgeId, judgeName) {
     try {
@@ -7723,7 +7891,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
               <p class="text-sm text-gray-600 mb-4">Modify scores for ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'}</p>
               <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <p class="text-sm text-blue-800">
-                  <strong>Admin Note:</strong> As an administrator, you can modify scores even after they have been submitted by judges.
+                  <strong>${this.getEffectiveRole() === 'admin' ? 'Admin' : 'Moderator'} Note:</strong> As an ${this.getEffectiveRole() === 'admin' ? 'administrator' : 'moderator'}, you can modify scores even after they have been submitted by judges.
                 </p>
               </div>
               
@@ -7906,7 +8074,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * Remove judge scores (Admin only) - Keep this for backward compatibility
+   * Remove judge scores (Admin and Moderator) - Keep this for backward compatibility
    */
   async removeJudgeScores(matchId, judgeId) {
     try {

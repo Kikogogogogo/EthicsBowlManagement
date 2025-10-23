@@ -134,6 +134,22 @@ class ScoreMatchPage {
    * 获取状态样式类
    */
   getStatusClass(status) {
+    if (!status) return 'bg-gray-100 text-gray-800';
+    
+    // Handle specific status patterns
+    if (status.startsWith('judge_')) {
+      return 'bg-purple-100 text-purple-800';
+    }
+    if (status.startsWith('final_') || status.includes('final')) {
+      return 'bg-orange-100 text-orange-800';
+    }
+    if (status.startsWith('moderator_') || status.includes('moderator')) {
+      return 'bg-blue-100 text-blue-800';
+    }
+    if (status.includes('presentation') || status.includes('commentary')) {
+      return 'bg-green-100 text-green-800';
+    }
+    
     switch (status) {
       case 'draft':
         return 'bg-gray-100 text-gray-800';
@@ -141,15 +157,19 @@ class ScoreMatchPage {
         return 'bg-blue-100 text-blue-800';
       case 'team_a_presentation':
       case 'team_b_presentation':
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-green-100 text-green-800';
       case 'moderator_period_1':
       case 'moderator_period_2':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-blue-100 text-blue-800';
       case 'team_a_commentary':
       case 'team_b_commentary':
+        return 'bg-green-100 text-green-800';
+      case 'judge_stage':
+        return 'bg-purple-100 text-purple-800';
+      case 'final_scoring':
         return 'bg-orange-100 text-orange-800';
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return 'bg-black text-white';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -230,10 +250,10 @@ class ScoreMatchPage {
       });
     }
 
-    // Add input event listeners for all score inputs
+    // Add change event listeners for all score selects
     const scoreInputs = document.querySelectorAll('.criteria-score-input, .comment-score-input');
     scoreInputs.forEach(input => {
-      input.addEventListener('input', () => {
+      input.addEventListener('change', () => {
         this.updateTotalScores();
         this.updateSubmitButtonState();
       });
@@ -249,6 +269,12 @@ class ScoreMatchPage {
     const saveDraftButton = document.querySelector('#saveDraftBtn');
     if (saveDraftButton) {
       saveDraftButton.addEventListener('click', (e) => this.handleSaveDraft(e));
+    }
+
+    // Evaluation criteria toggle button
+    const evaluationCriteriaToggle = document.querySelector('#evaluationCriteriaToggle');
+    if (evaluationCriteriaToggle) {
+      evaluationCriteriaToggle.addEventListener('click', () => this.toggleEvaluationCriteria());
     }
   }
 
@@ -348,6 +374,8 @@ class ScoreMatchPage {
         this.scores = [];
       }
       
+      console.log('🔍 [ScoreMatch] loadExistingScores - loaded scores:', this.scores);
+      
       // Check if current judge has already submitted scores
       const currentJudgeScores = this.scores.filter(
         score => score.judgeId === this.authManager.currentUser.id
@@ -394,41 +422,22 @@ class ScoreMatchPage {
       // Check criteria scores
       const criteriaInputs = document.querySelectorAll(`[name^="criteriaScore_${team.id}_"]`);
       criteriaInputs.forEach(input => {
-        const value = input.value.trim();
+        const value = input.value;
         const criteriaKey = input.dataset.criteriaKey;
         const criteriaName = criteriaKey?.replace(/_/g, ' ') || 'criteria';
-        const maxScore = criteria[criteriaKey]?.maxScore || 0;
         
-        if (value === '') {
+        if (value === '' || value === null) {
           errors.push(`${teamName}: ${criteriaName} score is required`);
-        } else if (isNaN(value)) {
-          errors.push(`${teamName}: ${criteriaName} score must be a number`);
-        } else {
-          const numValue = parseFloat(value);
-          if (numValue < 0) {
-            errors.push(`${teamName}: ${criteriaName} score cannot be negative`);
-          } else if (numValue > maxScore) {
-            errors.push(`${teamName}: ${criteriaName} score cannot exceed ${maxScore}`);
-          }
         }
       });
       
       // Check comment scores
       const commentInputs = document.querySelectorAll(`[name^="commentScore_${team.id}_"]`);
       commentInputs.forEach((input, index) => {
-        const value = input.value.trim();
+        const value = input.value;
         
-        if (value === '') {
+        if (value === '' || value === null) {
           errors.push(`${teamName}: Judge question ${index + 1} score is required`);
-        } else if (isNaN(value)) {
-          errors.push(`${teamName}: Judge question ${index + 1} score must be a number`);
-        } else {
-          const numValue = parseFloat(value);
-          if (numValue < 0) {
-            errors.push(`${teamName}: Judge question ${index + 1} score cannot be negative`);
-          } else if (numValue > commentMaxScore) {
-            errors.push(`${teamName}: Judge question ${index + 1} score cannot exceed ${commentMaxScore}`);
-          }
         }
       });
     }
@@ -486,7 +495,7 @@ class ScoreMatchPage {
         
         criteriaInputs.forEach(input => {
           const criteriaKey = input.dataset.criteriaKey;
-          criteriaScores[criteriaKey] = parseFloat(input.value) || 0;
+          criteriaScores[criteriaKey] = input.value ? parseFloat(input.value) : 0;
         });
 
         // Collect comment scores
@@ -495,7 +504,7 @@ class ScoreMatchPage {
         
         for (let i = 0; i < commentQuestionsCount; i++) {
           const input = document.querySelector(`[name="commentScore_${team.id}_${i}"]`);
-          commentScores.push(parseFloat(input?.value) || 0);
+          commentScores.push(input?.value ? parseFloat(input.value) : 0);
         }
 
         // Get notes
@@ -742,6 +751,21 @@ class ScoreMatchPage {
           </div>
         </div>
 
+        <!-- Team Win Display (Only for Moderator/Admin) - Top of Page -->
+        ${this.getTeamWinDisplay() ? `
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="bg-white border border-gray-200 rounded-lg mb-6">
+              <div class="px-6 py-4">
+                <div class="flex items-center justify-center">
+                  <span class="inline-flex items-center px-4 py-2 rounded-full text-lg font-medium ${this.getTeamWinDisplay().className}">
+                    ${this.getTeamWinDisplay().text}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Scoring Interface -->
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <!-- Judge Assignment Notice -->
@@ -785,35 +809,53 @@ class ScoreMatchPage {
             </div>
           </div>
 
-          <!-- Judge Questions Instructions -->
-          ${commentInstructions ? `
-            <div class="bg-white border border-gray-200 rounded-lg mb-8">
-              <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-medium text-gray-900">Judge Questions Scoring Guide</h3>
-              </div>
-              <div class="p-6">
-                <div class="text-sm text-gray-700 whitespace-pre-line">${commentInstructions}</div>
+          <!-- Current Stage Display -->
+          <div class="bg-white border border-gray-200 rounded-lg mb-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <div class="flex items-center">
+                <h3 class="text-lg font-medium text-gray-900 mr-3">Current Stage:</h3>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${this.getStatusClass(this.currentMatch?.status)}">
+                  ${this.getCurrentStageDisplay()}
+                </span>
               </div>
             </div>
-          ` : ''}
+            <div class="p-6">
+              <div class="text-sm text-gray-700">
+                <ul class="list-disc list-inside space-y-1">
+                  <li>You can save your scoring results anytime by clicking the "Save Draft" button at the bottom of the page.</li>
+                  <li>You can only submit your final scores during the Final Scoring Stage by clicking the "Submit Scores" button at the bottom of the page.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
 
           <!-- Scoring Criteria Reference -->
           ${Object.keys(criteria).length > 0 ? `
             <div class="bg-white border border-gray-200 rounded-lg mb-8">
               <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-medium text-gray-900">Evaluation Criteria</h3>
+                <button 
+                  id="evaluationCriteriaToggle" 
+                  class="flex items-center justify-between w-full text-left hover:bg-gray-50 -mx-6 px-6 py-4 transition-colors"
+                >
+                  <h3 class="text-lg font-medium text-gray-900">Evaluation Criteria Descriptions (Open to See More)</h3>
+                  <svg id="evaluationCriteriaIcon" class="w-5 h-5 text-gray-500 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </button>
               </div>
-              <div class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  ${Object.entries(criteria).map(([name, data]) => `
-                    <div class="border border-gray-200 rounded-lg p-4">
-                      <div class="flex justify-between items-start mb-2">
-                        <h4 class="font-medium text-gray-900 capitalize">${name.replace(/_/g, ' ')}</h4>
-                        <span class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">${data.maxScore} points</span>
+              <div id="evaluationCriteriaContent" class="hidden">
+                <div class="p-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    ${Object.entries(criteria).map(([name, data]) => `
+                      <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                          <h4 class="font-medium text-gray-900 capitalize">${name.replace(/_/g, ' ')}</h4>
+                          <span class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">${data.maxScore} points</span>
+                        </div>
+                        <p class="text-sm text-gray-600">${data.description || 'No description provided'}</p>
                       </div>
-                      <p class="text-sm text-gray-600">${data.description || 'No description provided'}</p>
-                    </div>
-                  `).join('')}
+                    `).join('')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -838,11 +880,49 @@ class ScoreMatchPage {
             </div>
           ` : ''}
 
+          <!-- All Judges Scores Display (for Moderator/Admin, or for all users in 2-judge cases) -->
+          ${this.shouldShowAllJudgesScores() ? `
+            <div class="bg-white border border-gray-200 rounded-lg mb-8">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">All Judges Scores</h3>
+                ${this.isTwoJudgeCase() ? `
+                  <p class="text-sm text-gray-600 mt-1">
+                    Two-judge format: System automatically generates a third virtual judge with scores averaged from the two real judges
+                  </p>
+                ` : ''}
+              </div>
+              <div class="p-6">
+                ${this.renderAllJudgesScores()}
+              </div>
+            </div>
+          ` : ''}
+
           <!-- Scoring Form -->
           <form id="scoreForm" class="space-y-8">
-            ${this.teams.map((team, index) => this.renderTeamScoreCard(team, index)).join('')}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              ${this.teams.map((team, index) => this.renderTeamScoreCard(team, index)).join('')}
+            </div>
             
-            <div class="flex justify-end">
+            <!-- Incomplete sections warning -->
+            ${this.shouldShowIncompleteWarning() ? `
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <h3 class="text-sm font-medium text-yellow-800">Incomplete Scoring Sections</h3>
+                    <div class="mt-2 text-sm text-yellow-700">
+                      <p>You must complete all scoring sections before submitting your final scores.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+            
+            <div class="flex justify-center mt-8">
               ${this.scoresSubmitted ? `
                 <button type="button" disabled class="bg-gray-400 text-white px-6 py-2 rounded-md cursor-not-allowed">
                   <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -888,7 +968,7 @@ class ScoreMatchPage {
     }
 
     return `
-      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden h-fit">
         <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div class="flex justify-between items-center">
             <h3 class="text-lg font-medium text-gray-900">
@@ -915,20 +995,19 @@ class ScoreMatchPage {
                       <span class="text-xs text-gray-500">(Max: ${data.maxScore} points)</span>
                     </label>
                     <div class="relative">
-                      <input 
-                        type="number" 
+                      <select 
                         name="criteriaScore_${team?.id}_${key}"
                         class="criteria-score-input block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium ${this.scoresSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}"
-                        min="0" 
-                        max="${data.maxScore}" 
-                        step="1"
-                        value="${existingScore?.criteriaScores?.[key] || ''}"
-                        placeholder="Enter score"
                         required
                         data-criteria-key="${key}"
                         data-team-id="${team?.id}"
-                        ${this.scoresSubmitted ? 'disabled readonly' : ''}
+                        ${this.scoresSubmitted ? 'disabled' : ''}
                       >
+                        <option value="">Select score</option>
+                        ${Array.from({length: data.maxScore + 1}, (_, i) => `
+                          <option value="${i}" ${existingScore?.criteriaScores?.[key] == i ? 'selected' : ''}>${i}</option>
+                        `).join('')}
+                      </select>
                     </div>
                   </div>
                 `).join('')}
@@ -948,20 +1027,19 @@ class ScoreMatchPage {
                     ${label} Question Score
                   </label>
                   <div class="relative">
-                    <input 
-                      type="number" 
+                    <select 
                       name="commentScore_${team?.id}_${i}"
                       class="comment-score-input block w-full border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-lg font-medium ${this.scoresSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}"
-                      min="0" 
-                      max="${commentMaxScore}" 
-                      step="1"
-                      value="${existingScore?.commentScores?.[i] || ''}"
-                      placeholder="Enter score"
                       required
                       data-comment-index="${i}"
                       data-team-id="${team?.id}"
-                      ${this.scoresSubmitted ? 'disabled readonly' : ''}
+                      ${this.scoresSubmitted ? 'disabled' : ''}
                     >
+                      <option value="">Select score</option>
+                      ${Array.from({length: commentMaxScore + 1}, (_, j) => `
+                        <option value="${j}" ${existingScore?.commentScores?.[i] == j ? 'selected' : ''}>${j}</option>
+                      `).join('')}
+                    </select>
                   </div>
                 </div>
               `).join('')}
@@ -1004,6 +1082,26 @@ class ScoreMatchPage {
     } else {
       submitButton.title = '';
     }
+
+    // Update incomplete warning visibility
+    this.updateIncompleteWarning();
+  }
+
+  /**
+   * Update incomplete warning visibility
+   */
+  updateIncompleteWarning() {
+    const warningElement = document.querySelector('.bg-yellow-50.border.border-yellow-200');
+    const shouldShow = this.shouldShowIncompleteWarning();
+    
+    if (warningElement && !shouldShow) {
+      // Hide warning if it exists but shouldn't be shown
+      warningElement.style.display = 'none';
+    } else if (!warningElement && shouldShow) {
+      // Warning should be shown but doesn't exist - trigger a re-render
+      // This will be handled by the form change event listeners
+      this.renderScorePage();
+    }
   }
 
   /**
@@ -1042,7 +1140,7 @@ class ScoreMatchPage {
         
         criteriaInputs.forEach(input => {
           const criteriaKey = input.dataset.criteriaKey;
-          criteriaScores[criteriaKey] = parseFloat(input.value) || 0;
+          criteriaScores[criteriaKey] = input.value ? parseFloat(input.value) : 0;
         });
 
         // Collect comment scores
@@ -1051,7 +1149,7 @@ class ScoreMatchPage {
         
         for (let i = 0; i < commentQuestionsCount; i++) {
           const input = document.querySelector(`[name="commentScore_${team.id}_${i}"]`);
-          commentScores.push(parseFloat(input?.value) || 0);
+          commentScores.push(input?.value ? parseFloat(input.value) : 0);
         }
 
         // Get notes
@@ -1099,6 +1197,223 @@ class ScoreMatchPage {
   }
 
   /**
+   * Check if current user is moderator or admin
+   */
+  isModeratorOrAdmin() {
+    const currentUser = this.authManager?.currentUser;
+    const result = currentUser?.role === 'moderator' || currentUser?.role === 'admin';
+    console.log('🔍 [ScoreMatch] isModeratorOrAdmin called');
+    console.log('🔍 [ScoreMatch] currentUser:', currentUser);
+    console.log('🔍 [ScoreMatch] isModeratorOrAdmin result:', result);
+    return result;
+  }
+
+  /**
+   * Check if this is a two-judge case
+   */
+  isTwoJudgeCase() {
+    const judgeCount = this.currentMatch?.assignments?.length || 0;
+    return judgeCount === 2;
+  }
+
+  /**
+   * Check if all judges scores should be shown
+   * Only show for moderator/admin - judges should not see virtual judge scores
+   */
+  shouldShowAllJudgesScores() {
+    // Only show for moderator/admin - judges should not see virtual judge scores
+    return this.isModeratorOrAdmin();
+  }
+
+  /**
+   * Check if should show incomplete sections warning
+   * Show warning when in final scoring stage and form is incomplete
+   */
+  shouldShowIncompleteWarning() {
+    // Only show if scores are not already submitted
+    if (this.scoresSubmitted) {
+      return false;
+    }
+
+    // Check if we're in final scoring stage
+    const isFinalScoring = this.currentMatch?.status === 'final_scoring' || 
+                          this.currentMatch?.status?.includes('final');
+    
+    if (!isFinalScoring) {
+      return false;
+    }
+
+    // Check if form validation fails (incomplete sections)
+    const validationErrors = this.validateForm();
+    return validationErrors.length > 0;
+  }
+
+  /**
+   * Get team win display information
+   */
+  getTeamWinDisplay() {
+    if (!this.isModeratorOrAdmin()) {
+      return null; // Don't show for judges
+    }
+
+    // Always show something for moderator/admin, even if not all scores submitted
+    // Check if all judges have submitted scores
+    const allJudgesSubmitted = this.checkAllJudgesSubmitted();
+    
+    if (!allJudgesSubmitted) {
+      return {
+        text: 'Not all scores submitted',
+        className: 'text-gray-600 bg-gray-100'
+      };
+    }
+
+    // Calculate winning team
+    const winner = this.calculateWinningTeam();
+    
+    if (winner) {
+      return {
+        text: `TEAM ${winner.name.toUpperCase()} WINS`,
+        className: 'text-green-800 bg-green-100 font-bold'
+      };
+    }
+
+    return {
+      text: 'Tie',
+      className: 'text-yellow-800 bg-yellow-100 font-bold'
+    };
+  }
+
+  /**
+   * Check if all assigned judges have submitted their scores
+   */
+  checkAllJudgesSubmitted() {
+    if (!this.currentMatch?.assignments) {
+      return false;
+    }
+
+    const judgeAssignments = this.currentMatch.assignments.filter(a => a.judge);
+    const submittedScores = this.scores.filter(s => s.isSubmitted);
+
+    // Check if we have submitted scores for all judges
+    const judgeIdsWithSubmittedScores = [...new Set(submittedScores.map(s => s.judgeId))];
+    const assignedJudgeIds = judgeAssignments.map(a => a.judge.id);
+
+    // For two-judge cases, virtual judge scores are automatically included
+    const hasVirtualJudge = assignedJudgeIds.length === 2 && submittedScores.some(s => s.judgeId.startsWith('virtual-judge-'));
+
+    return assignedJudgeIds.length > 0 && 
+           assignedJudgeIds.every(judgeId => judgeIdsWithSubmittedScores.includes(judgeId)) &&
+           (assignedJudgeIds.length !== 2 || hasVirtualJudge);
+  }
+
+  /**
+   * Calculate which team wins based on submitted scores
+   */
+  calculateWinningTeam() {
+    const teamScores = {};
+    
+    // Calculate average scores for each team
+    this.teams.forEach(team => {
+      const teamScoresList = this.scores.filter(s => s.teamId === team.id && s.isSubmitted);
+      
+      if (teamScoresList.length === 0) {
+        return;
+      }
+
+      const totalScores = teamScoresList.map(score => {
+        const criteriaTotal = Object.values(score.criteriaScores || {}).reduce((sum, val) => sum + val, 0);
+        const commentAverage = score.commentScores && score.commentScores.length > 0 
+          ? score.commentScores.reduce((sum, val) => sum + val, 0) / score.commentScores.length
+          : 0;
+        return criteriaTotal + commentAverage;
+      });
+
+      const averageScore = totalScores.reduce((sum, score) => sum + score, 0) / totalScores.length;
+      teamScores[team.id] = {
+        team: team,
+        score: averageScore
+      };
+    });
+
+    // Find team with highest score
+    const teams = Object.values(teamScores);
+    if (teams.length === 0) {
+      return null;
+    }
+
+    const sortedTeams = teams.sort((a, b) => b.score - a.score);
+    
+    // Check if there's a clear winner (not a tie)
+    if (sortedTeams.length > 1 && sortedTeams[0].score === sortedTeams[1].score) {
+      return null; // Tie
+    }
+
+    return sortedTeams[0].team;
+  }
+
+  /**
+   * Get current stage display text
+   */
+  getCurrentStageDisplay() {
+    if (!this.currentMatch?.status) {
+      return 'Unknown Stage';
+    }
+    
+    const status = this.currentMatch.status;
+    
+    // Handle specific status patterns
+    if (status.startsWith('judge_')) {
+      return 'Judge Stage';
+    }
+    if (status.startsWith('final_') || status.includes('final')) {
+      return 'Final Scoring';
+    }
+    if (status.startsWith('moderator_') || status.includes('moderator')) {
+      return 'Moderator Period';
+    }
+    if (status.includes('presentation')) {
+      return 'Team Presentation';
+    }
+    if (status.includes('commentary')) {
+      return 'Team Commentary';
+    }
+    
+    const statusMap = {
+      'draft': 'Draft',
+      'prep_period': 'Preparation Period',
+      'team_a_presentation': 'Team A Presentation',
+      'team_b_presentation': 'Team B Presentation',
+      'moderator_period_1': 'Moderator Period 1',
+      'moderator_period_2': 'Moderator Period 2',
+      'team_a_commentary': 'Team A Commentary',
+      'team_b_commentary': 'Team B Commentary',
+      'completed': 'Completed'
+    };
+    
+    return statusMap[status] || status;
+  }
+
+  /**
+   * Toggle evaluation criteria section
+   */
+  toggleEvaluationCriteria() {
+    const content = document.getElementById('evaluationCriteriaContent');
+    const icon = document.getElementById('evaluationCriteriaIcon');
+    
+    if (content && icon) {
+      if (content.classList.contains('hidden')) {
+        // Show content
+        content.classList.remove('hidden');
+        icon.style.transform = 'rotate(180deg)';
+      } else {
+        // Hide content
+        content.classList.add('hidden');
+        icon.style.transform = 'rotate(0deg)';
+      }
+    }
+  }
+
+  /**
    * Update total score calculations
    */
   updateTotalScores() {
@@ -1110,7 +1425,7 @@ class ScoreMatchPage {
       let criteriaTotal = 0;
       
       criteriaInputs.forEach(input => {
-        const score = parseFloat(input.value) || 0;
+        const score = input.value ? parseFloat(input.value) : 0;
         criteriaTotal += score;
       });
 
@@ -1120,7 +1435,7 @@ class ScoreMatchPage {
       let commentCount = 0;
       
       commentInputs.forEach(input => {
-        const score = parseFloat(input.value) || 0;
+        const score = input.value ? parseFloat(input.value) : 0;
         commentSum += score;
         commentCount++;
       });
@@ -1135,6 +1450,178 @@ class ScoreMatchPage {
         totalDisplay.textContent = totalScore.toFixed(1);
       }
     });
+  }
+
+  /**
+   * Render all judges scores for moderator/admin view
+   */
+  renderAllJudgesScores() {
+    console.log('🔍 [ScoreMatch] renderAllJudgesScores called');
+    console.log('🔍 [ScoreMatch] scores:', this.scores);
+    
+    if (!this.scores || this.scores.length === 0) {
+      console.log('🔍 [ScoreMatch] No scores available');
+      return '<p class="text-gray-500">No scores available.</p>';
+    }
+
+    // Group scores by judge
+    const scoresByJudge = {};
+    this.scores.forEach(score => {
+      const judgeId = score.judgeId;
+      if (!scoresByJudge[judgeId]) {
+        scoresByJudge[judgeId] = {
+          judge: score.judge,
+          scores: []
+        };
+      }
+      scoresByJudge[judgeId].scores.push(score);
+    });
+
+    // Sort judges: real judges first (by judge number if available), then virtual judge
+    const sortedJudgeIds = Object.keys(scoresByJudge).sort((a, b) => {
+      const aIsVirtual = a.startsWith('virtual-judge-');
+      const bIsVirtual = b.startsWith('virtual-judge-');
+      if (aIsVirtual && !bIsVirtual) return 1;
+      if (!aIsVirtual && bIsVirtual) return -1;
+      
+      // For real judges, try to sort by judge number from assignment
+      const aAssignment = this.currentMatch?.assignments?.find(assignment => assignment.judgeId === a);
+      const bAssignment = this.currentMatch?.assignments?.find(assignment => assignment.judgeId === b);
+      if (aAssignment?.judgeNumber && bAssignment?.judgeNumber) {
+        return aAssignment.judgeNumber - bAssignment.judgeNumber;
+      }
+      
+      return 0;
+    });
+
+    return sortedJudgeIds.map((judgeId, index) => {
+      const judgeData = scoresByJudge[judgeId];
+      const { judge, scores } = judgeData;
+      const isVirtualJudge = judge.id.startsWith('virtual-judge-');
+      
+      // Get judge number for display
+      let judgeDisplayName = `${judge.firstName} ${judge.lastName}`;
+      if (!isVirtualJudge) {
+        const assignment = this.currentMatch?.assignments?.find(a => a.judgeId === judgeId);
+        if (assignment?.judgeNumber) {
+          judgeDisplayName = `Judge ${assignment.judgeNumber}`;
+        }
+      } else {
+        judgeDisplayName = 'Virtual Judge';
+      }
+      
+      return `
+        <div class="mb-8 last:mb-0 ${isVirtualJudge ? 'border-2 border-purple-300 rounded-lg p-4 bg-purple-50' : ''}">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-lg font-medium text-gray-900">
+              ${judgeDisplayName}
+              ${isVirtualJudge ? 
+                '<span class="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-200 text-purple-900">Average of Two Judges</span>' : 
+                `<span class="text-sm text-gray-500">(${judge.email})</span>`
+              }
+            </h4>
+            <div class="flex items-center gap-2">
+              ${scores.every(s => s.isSubmitted) ? `
+                <div class="bg-green-100 text-green-800 text-sm px-2 py-1 rounded-full flex items-center">
+                  <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  Submitted
+                </div>
+              ` : `
+                <div class="bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded-full flex items-center">
+                  <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                  </svg>
+                  Pending
+                </div>
+              `}
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${scores.map(score => {
+              const team = score.team;
+              const criteriaScores = score.criteriaScores || {};
+              let commentScores = score.commentScores || [];
+              
+              // Ensure commentScores is an array
+              if (!Array.isArray(commentScores)) {
+                commentScores = [];
+              }
+              
+              // Calculate totals
+              const criteriaTotal = Object.values(criteriaScores).reduce((sum, val) => sum + (val || 0), 0);
+              const commentTotal = commentScores.reduce((sum, val) => sum + (val || 0), 0);
+              const commentAverage = commentScores.length > 0 ? commentTotal / commentScores.length : 0;
+              const grandTotal = criteriaTotal + commentAverage;
+              
+              return `
+                <div class="border border-gray-100 rounded-lg p-3 ${isVirtualJudge ? 'bg-purple-50 border-purple-200' : 'bg-gray-50'}">
+                  <h5 class="font-medium text-gray-900 mb-2">
+                    ${team?.name || 'Unknown Team'}
+                    ${isVirtualJudge ? '<span class="ml-2 text-xs text-purple-700 font-medium">(Virtual Judge Score)</span>' : ''}
+                  </h5>
+                  
+                  <div class="space-y-3 text-sm">
+                    <div>
+                      <h6 class="font-medium text-gray-700 mb-1">Criteria Scores:</h6>
+                      <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                        ${Object.entries(criteriaScores).map(([key, value]) => `
+                          <div class="flex justify-between">
+                            <span class="capitalize">${key.replace(/_/g, ' ')}:</span>
+                            <span class="font-medium">${value || 0}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                      <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                        <span>Criteria Total:</span>
+                        <span>${criteriaTotal}</span>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h6 class="font-medium text-gray-700 mb-1">Judge Questions:</h6>
+                      <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+                        ${commentScores.map((score, index) => `
+                          <div class="flex justify-between">
+                            <span>Question ${index + 1}:</span>
+                            <span class="font-medium">${score || 0}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                      <div class="flex justify-between font-medium pt-1 mt-1 border-t">
+                        <span>Questions Average:</span>
+                        <span>${commentAverage.toFixed(2)}</span>
+                      </div>
+                      <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Questions Total:</span>
+                        <span>${commentTotal}</span>
+                      </div>
+                    </div>
+                    
+                    <div class="flex justify-between text-base font-bold pt-2 mt-2 border-t-2 ${isVirtualJudge ? 'border-purple-300' : 'border-gray-200'}">
+                      <span>Grand Total:</span>
+                      <span>${(criteriaTotal + commentAverage).toFixed(2)}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1 text-center">
+                      (Criteria Total + Questions Average)
+                    </div>
+                    
+                    ${score.notes ? `
+                      <div class="mt-3 pt-3 border-t border-gray-200">
+                        <h6 class="font-medium text-gray-700 mb-1">Notes:</h6>
+                        <p class="text-gray-600 whitespace-pre-line">${score.notes}</p>
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 }
 
