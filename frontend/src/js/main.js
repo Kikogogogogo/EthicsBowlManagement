@@ -200,7 +200,7 @@ class UIManager {
   /**
    * Show specific page
    */
-  showPage(pageName) {
+  showPage(pageName, skipHistoryUpdate = false) {
     console.log(`UIManager.showPage(${pageName}) called`);
     
     // Show main content if hidden
@@ -213,6 +213,10 @@ class UIManager {
       if (el && el.id && el.id.endsWith('-page')) {
         console.log(`Hiding page: ${el.id}`);
         el.classList.add('hidden');
+        // Clear inline display style to ensure hidden class works
+        if (el.style.display) {
+          el.style.display = '';
+        }
       }
     });
 
@@ -220,6 +224,10 @@ class UIManager {
     if (this.elements.eventWorkspacePage) {
       console.log('Hiding event-workspace-page');
       this.elements.eventWorkspacePage.classList.add('hidden');
+      // Clear inline display style
+      if (this.elements.eventWorkspacePage.style.display) {
+        this.elements.eventWorkspacePage.style.display = '';
+      }
     }
 
     // Show requested page
@@ -238,6 +246,15 @@ class UIManager {
       console.log(`Showing page: ${page.id}`);
       page.classList.remove('hidden');
       this.currentPage = pageName;
+      
+      // Update URL hash for navigation persistence (skip for landing/login/pending pages)
+      if (!skipHistoryUpdate && pageName !== 'landing' && pageName !== 'login' && pageName !== 'pending') {
+        // Only skip URL update if we're currently showing the event-workspace page
+        // This allows navigation away from event-workspace to update the URL correctly
+        if (pageName !== 'event-workspace') {
+          window.history.replaceState({ page: pageName }, '', `#/${pageName}`);
+        }
+      }
       
       // Force hide all desktop navigation on mobile
       if (window.innerWidth < 768) {
@@ -932,6 +949,14 @@ class App {
     authManager.addListener((authState) => {
       this.handleAuthStateChange(authState);
     });
+    
+    // Handle browser back/forward buttons
+    window.addEventListener('popstate', async (event) => {
+      console.log('🔙 [MainApp] Browser back/forward button pressed');
+      if (authManager.currentUser) {
+        await this.restoreRoute();
+      }
+    });
   }
 
   /**
@@ -951,6 +976,10 @@ class App {
    */
   async initialize() {
     try {
+      // Store the initial URL for debugging
+      console.log('🌐 [MainApp] Initial URL:', window.location.href);
+      console.log('🌐 [MainApp] Initial hash:', window.location.hash);
+      
       // Make services globally available
       window.authService = authService;
       window.eventService = eventService;
@@ -986,14 +1015,15 @@ class App {
         const wsClient = initWebSocket();
         window.wsClient = wsClient;
         
-        await this.showDashboard();
+        // Restore route from URL hash or show dashboard
+        await this.restoreRoute();
       } else if (result.status === 'pending_approval') {
-        this.ui.showPage('pending');
+        this.ui.showPage('pending', true);
         this.ui.hideLoading();
       } else {
         // Show landing page for unauthenticated users or errors
         console.log('🔓 用户未认证，显示落地页面');
-        this.ui.showPage('landing');
+        this.ui.showPage('landing', true);
         this.ui.hideLoading();
       }
     } catch (error) {
@@ -1173,6 +1203,121 @@ class App {
         // Clear user info from localStorage
         localStorage.removeItem('user');
         this.ui.showPage('login');
+    }
+  }
+
+  /**
+   * Restore route from URL hash
+   */
+  async restoreRoute() {
+    const hash = window.location.hash;
+    console.log('🔄 [MainApp] Restoring route from hash:', hash);
+    
+    if (!hash || hash === '#' || hash === '#/') {
+      // No hash, show dashboard
+      console.log('🔄 [MainApp] No hash found, showing dashboard');
+      await this.showDashboard();
+      return;
+    }
+    
+    // Parse hash
+    const path = hash.substring(1); // Remove #
+    const parts = path.split('/').filter(p => p);
+    
+    console.log('🔄 [MainApp] Parsed path parts:', parts);
+    
+    if (parts.length === 0) {
+      console.log('🔄 [MainApp] Empty path, showing dashboard');
+      await this.showDashboard();
+      return;
+    }
+    
+    const page = parts[0];
+    console.log('🔄 [MainApp] Parsed page from hash:', page);
+    
+    try {
+      switch (page) {
+        case 'dashboard':
+          await this.showDashboard();
+          break;
+        case 'events':
+          await this.showEventsPage();
+          break;
+        case 'teams':
+          await this.showTeamsPage();
+          break;
+        case 'users':
+          await this.showUsersPage();
+          break;
+        case 'test-users':
+          await this.showTestUsersPage();
+          break;
+        case 'event-workspace':
+          // event-workspace has format: #/event-workspace/{eventId}/{tab}
+          if (parts.length >= 2) {
+            const eventId = parts[1];
+            const tab = parts[2] || 'overview'; // Default to overview if no tab specified
+            console.log('🔄 [MainApp] Restoring event workspace for event:', eventId, 'tab:', tab);
+            
+            try {
+              // Ensure eventWorkspacePage is available
+              if (!window.eventWorkspacePage) {
+                console.error('❌ [MainApp] eventWorkspacePage not initialized!');
+                await this.showDashboard();
+                break;
+              }
+              
+              // Call show() to restore the page
+              await window.eventWorkspacePage.show(eventId);
+              console.log('✅ [MainApp] Event workspace restored successfully');
+              // The show method will handle loading data and showing the correct tab
+            } catch (error) {
+              console.error('❌ [MainApp] Failed to restore event workspace:', error);
+              // Fall back to dashboard on error
+              await this.showDashboard();
+            }
+          } else {
+            await this.showDashboard();
+          }
+          break;
+        case 'score-match':
+          // score-match has format: #/score-match/{matchId}
+          if (parts.length >= 2) {
+            const matchId = parts[1];
+            console.log('🔄 [MainApp] Restoring score match page for match:', matchId);
+            
+            try {
+              // Ensure ScoreMatchPage is available
+              if (!window.ScoreMatchPage) {
+                console.error('❌ [MainApp] ScoreMatchPage not initialized!');
+                await this.showDashboard();
+                break;
+              }
+              
+              // Create scoreMatchPage instance if not exists
+              if (!window.scoreMatchPage) {
+                window.scoreMatchPage = new window.ScoreMatchPage(this.ui);
+              }
+              
+              // Call show() to restore the page
+              await window.scoreMatchPage.show(matchId);
+              console.log('✅ [MainApp] Score match page restored successfully');
+            } catch (error) {
+              console.error('❌ [MainApp] Failed to restore score match page:', error);
+              // Fall back to dashboard on error
+              await this.showDashboard();
+            }
+          } else {
+            await this.showDashboard();
+          }
+          break;
+        default:
+          console.warn('🔄 [MainApp] Unknown page in hash, showing dashboard:', page);
+          await this.showDashboard();
+      }
+    } catch (error) {
+      console.error('🔄 [MainApp] Error restoring route:', error);
+      await this.showDashboard();
     }
   }
 

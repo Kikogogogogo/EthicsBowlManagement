@@ -210,7 +210,8 @@ class DashboardPage {
       }
       
       // Show workspace page via UI manager
-      this.uiManager.showPage('event-workspace');
+      // Don't update URL here, let event workspace handle it with the event ID
+      this.uiManager.showPage('event-workspace', false);
       
       // Navigate to event workspace
       await window.eventWorkspacePage.show(eventId);

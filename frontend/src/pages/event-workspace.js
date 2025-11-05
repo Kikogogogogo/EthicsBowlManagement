@@ -284,10 +284,19 @@ class EventWorkspacePage {
         e.preventDefault();
         e.stopPropagation(); // Prevent event bubbling
         e.stopImmediatePropagation(); // Prevent other listeners
-        console.log('🔙 [EventWorkspace] Back to Events button clicked - refreshing page');
+        console.log('🔙 [EventWorkspace] Back to Events button clicked - navigating to dashboard');
         
-        // Simple solution: refresh the page to reset everything
-        window.location.reload();
+        // Set cleanup flag to prevent further event processing
+        this.isCleaningUp = true;
+        
+        // Navigate back to dashboard
+        if (window.app && window.app.showDashboard) {
+          window.app.showDashboard();
+        } else {
+          // Fallback: navigate to root URL
+          window.history.pushState({ page: 'dashboard' }, '', '/');
+          window.location.reload();
+        }
       }
     };
     document.addEventListener('click', backToEventsHandler);
@@ -749,12 +758,25 @@ class EventWorkspacePage {
       await this.loadEventData();
       console.log('✅ [EventWorkspace] Event data loaded successfully');
       
-      // Set default tab based on user role
-      const currentUser = this.authManager.currentUser;
-      if (currentUser.role === 'judge' || currentUser.role === 'moderator') {
-        this.currentTab = 'matches'; // Show matches tab for judge/moderator
+      // Check if there's a tab in the URL path (for refresh support)
+      // URL format: #/event-workspace/{eventId}/{tab}
+      const hash = window.location.hash;
+      const parts = hash.substring(1).split('/').filter(p => p); // Remove # and split
+      const validTabs = ['overview', 'matches', 'teams', 'schedule', 'settings'];
+      const urlTab = parts.length >= 3 ? parts[2] : null;
+      
+      if (urlTab && validTabs.includes(urlTab)) {
+        // Restore tab from URL
+        this.currentTab = urlTab;
+        console.log(`📍 [EventWorkspace] Restoring tab from URL: ${urlTab}`);
       } else {
-        this.currentTab = 'overview'; // Show overview tab for admin
+        // Set default tab based on user role
+        const currentUser = this.authManager.currentUser;
+        if (currentUser.role === 'judge' || currentUser.role === 'moderator') {
+          this.currentTab = 'matches'; // Show matches tab for judge/moderator
+        } else {
+          this.currentTab = 'overview'; // Show overview tab for admin
+        }
       }
       
       // Render the workspace
@@ -782,11 +804,15 @@ class EventWorkspacePage {
             console.log('✅ [EventWorkspace] Loading screen hidden');
           }
           
-          // Then show the specific page
+          // Then show the specific page with event ID in URL
           if (typeof window.app.ui.showPage === 'function') {
             console.log('📱 [EventWorkspace] Calling UIManager.showPage...');
-            window.app.ui.showPage('event-workspace');
-            console.log('✅ [EventWorkspace] UIManager.showPage called');
+            // Don't let showPage update the URL, we'll do it ourselves with the event ID
+            window.app.ui.showPage('event-workspace', true);
+            // Update URL to include event ID and current tab (hash-based routing)
+            const urlWithTab = `#/event-workspace/${eventId}/${this.currentTab}`;
+            window.history.replaceState({ page: 'event-workspace', eventId: eventId, tab: this.currentTab }, '', urlWithTab);
+            console.log('✅ [EventWorkspace] UIManager.showPage called and URL updated to ' + urlWithTab);
           }
         }
       } else {
@@ -1395,6 +1421,13 @@ class EventWorkspacePage {
 
       // Update active tab
       this.currentTab = tabName;
+
+      // Update URL hash to include tab (for refresh support)
+      if (this.currentEventId) {
+        const newUrl = `#/event-workspace/${this.currentEventId}/${tabName}`;
+        window.history.replaceState({ page: 'event-workspace', eventId: this.currentEventId, tab: tabName }, '', newUrl);
+        console.log(`📍 [EventWorkspace] URL updated to: ${newUrl}`);
+      }
 
       // Update tab buttons
       document.querySelectorAll('[data-tab]').forEach(tab => {

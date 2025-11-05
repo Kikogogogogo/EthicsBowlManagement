@@ -17,6 +17,8 @@ class ScoreMatchPage {
     this.scoresSubmitted = false;
     this.isSubmitting = false;
     this.isSaving = false;
+    this.stageRefreshTimer = null; // Timer for auto-refreshing stage status
+    this.highlightUpdateTimer = null; // Timer for debouncing highlight updates
   }
 
   /**
@@ -117,10 +119,17 @@ class ScoreMatchPage {
     try {
       // 重新获取现有分数
       const scores = await this.scoreService.getMatchScores(this.currentMatch.id);
-      this.existingScores = scores.data;
+      
+      // Handle different response formats
+      if (scores.data && scores.data.scores) {
+        this.scores = scores.data.scores;
+      } else if (Array.isArray(scores.data)) {
+        this.scores = scores.data;
+      } else {
+        this.scores = [];
+      }
       
       // 更新UI显示
-      this.populateExistingScores();
       this.updateTotalScores();
       this.updateSubmitButtonState();
       
@@ -128,6 +137,286 @@ class ScoreMatchPage {
     } catch (error) {
       console.error('❌ 刷新分数数据失败:', error);
     }
+  }
+  
+  /**
+   * 启动stage状态自动刷新定时器 (每30秒)
+   */
+  startStageRefreshTimer() {
+    console.log('🔄 启动stage状态自动刷新定时器...');
+    
+    // 清除现有定时器（如果有）
+    this.stopStageRefreshTimer();
+    
+    // 设置30秒定时器
+    this.stageRefreshTimer = setInterval(async () => {
+      await this.refreshCurrentStage();
+    }, 30000); // 30秒 = 30000毫秒
+  }
+  
+  /**
+   * 停止stage状态自动刷新定时器
+   */
+  stopStageRefreshTimer() {
+    if (this.stageRefreshTimer) {
+      console.log('🛑 停止stage状态自动刷新定时器');
+      clearInterval(this.stageRefreshTimer);
+      this.stageRefreshTimer = null;
+    }
+  }
+  
+  /**
+   * 刷新当前比赛的stage状态
+   */
+  async refreshCurrentStage() {
+    try {
+      console.log('🔄 正在刷新stage状态...');
+      
+      // 获取最新的比赛信息
+      const myMatchesResponse = await this.matchService.getMyMatches();
+      const myMatches = myMatchesResponse.data?.matches || [];
+      
+      // 找到当前比赛
+      const updatedMatch = myMatches.find(match => match.id === this.currentMatch.id);
+      
+      if (!updatedMatch) {
+        console.warn('⚠️ 未找到当前比赛信息');
+        return;
+      }
+      
+      // 检查status是否发生变化
+      if (updatedMatch.status !== this.currentMatch.status) {
+        console.log(`🔄 Stage状态已更新: ${this.currentMatch.status} -> ${updatedMatch.status}`);
+        
+        // 更新本地存储的比赛状态
+        const oldStatus = this.currentMatch.status;
+        this.currentMatch.status = updatedMatch.status;
+        
+        // 更新UI显示
+        this.updateStageDisplay(updatedMatch.status);
+        
+        // 显示通知
+        this.showStageChangeNotification(oldStatus, updatedMatch.status);
+      } else {
+        console.log(`✅ Stage状态未变化: ${this.currentMatch.status}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ 刷新stage状态失败:', error);
+    }
+  }
+  
+  /**
+   * 更新页面上的stage状态显示
+   */
+  updateStageDisplay(newStatus) {
+    // 更新status标签
+    const statusElements = document.querySelectorAll('[class*="inline-flex items-center px-2.5 py-0.5 rounded-full"]');
+    statusElements.forEach(element => {
+      // 只更新显示当前stage的元素
+      if (element.textContent.includes('Current Stage') || 
+          element.parentElement?.textContent?.includes('Current Stage')) {
+        const statusSpan = element.querySelector('span') || element;
+        statusSpan.textContent = this.getCurrentStageDisplay();
+        statusSpan.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${this.getStatusClass(newStatus)}`;
+      }
+    });
+    
+    // 查找并更新stage显示区域
+    const stageContainer = document.querySelector('.bg-white.border.border-gray-200.rounded-lg.mb-8');
+    if (stageContainer && stageContainer.textContent.includes('Current Stage')) {
+      const statusBadge = stageContainer.querySelector('span[class*="inline-flex"]');
+      if (statusBadge) {
+        statusBadge.textContent = this.getCurrentStageDisplay();
+        statusBadge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${this.getStatusClass(newStatus)}`;
+      }
+    }
+    
+    // 更新section highlights
+    this.updateSectionHighlights();
+  }
+  
+  /**
+   * 清除所有现有的highlight标记（防止重复）
+   */
+  clearAllHighlights() {
+    console.log('🧹 开始清除所有highlights...');
+    
+    // 方法1: 通过class清除提示文字
+    const allHintSpans = document.querySelectorAll('.highlight-hint');
+    console.log(`🧹 通过class找到 ${allHintSpans.length} 个提示文字`);
+    allHintSpans.forEach(span => span.remove());
+    
+    // 方法2: 通过内容查找并清除所有包含特定文字的span（更强力）
+    const allSpans = document.querySelectorAll('span');
+    let removedByContent = 0;
+    allSpans.forEach(span => {
+      if (span.textContent && span.textContent.includes('You should be able to mark this section at current stage')) {
+        span.remove();
+        removedByContent++;
+      }
+    });
+    console.log(`🧹 通过内容找到并清除 ${removedByContent} 个提示文字`);
+    
+    // 清除所有带有橙色背景的元素
+    const allHighlightedElements = document.querySelectorAll('.bg-orange-100, [class*="bg-orange-100"]');
+    console.log(`🧹 找到 ${allHighlightedElements.length} 个highlight元素需要清除`);
+    allHighlightedElements.forEach(element => {
+      element.classList.remove('bg-orange-100', 'border-2', 'border-orange-400', 'rounded-lg', 'p-3', 'p-4', '-mx-2', '-mx-3');
+    });
+    
+    console.log('🧹 Highlights清除完成');
+  }
+
+  /**
+   * 动态更新section highlights（无需重新渲染整个页面）
+   */
+  updateSectionHighlights() {
+    // 防抖：如果短时间内多次调用，只执行最后一次
+    if (this.highlightUpdateTimer) {
+      console.log('⏱️ 取消之前的highlight更新');
+      clearTimeout(this.highlightUpdateTimer);
+    }
+    
+    this.highlightUpdateTimer = setTimeout(() => {
+      console.log('🎨 更新section highlights...');
+      console.log(`📊 当前match status: ${this.currentMatch?.status}`);
+      
+      // 首先清除所有现有的highlight，防止重复
+      this.clearAllHighlights();
+      
+      this._performHighlightUpdate();
+      
+      this.highlightUpdateTimer = null;
+    }, 100); // 100ms防抖延迟
+  }
+  
+  /**
+   * 执行实际的highlight更新
+   */
+  _performHighlightUpdate() {
+    
+    // 遍历每个team的scoring card
+    this.teams.forEach((team, index) => {
+      if (!team?.id) return;
+      
+      // 获取当前team应该highlight的sections
+      const highlights = this.getSectionHighlights(index);
+      console.log(`📋 Team ${index === 0 ? 'A' : 'B'} (${team.name}) 应该highlight的sections:`, highlights);
+      
+      // 更新Criteria Scores的highlights
+      const criteria = this.currentEvent.scoringCriteria?.criteria || {};
+      console.log(`🔍 检查Team ${index === 0 ? 'A' : 'B'}的 ${Object.keys(criteria).length} 个criteria`);
+      
+      Object.keys(criteria).forEach(key => {
+        // 找到select元素，然后找到它的父div（包含label和select的容器）
+        const selectElement = document.querySelector(`[name="criteriaScore_${team.id}_${key}"]`);
+        if (!selectElement) {
+          console.warn(`⚠️ 找不到Team ${index === 0 ? 'A' : 'B'}的${key}对应的select元素`);
+          return;
+        }
+        
+        // 向上查找，找到包含label和select的外层div
+        const criteriaElement = selectElement.closest('div').parentElement;
+        
+        if (criteriaElement && criteriaElement.querySelector('label')) {
+          const isHighlighted = highlights.criteria[key] || false;
+          const label = criteriaElement.querySelector('label');
+          
+          if (isHighlighted) {
+            console.log(`🎨 为Team ${index === 0 ? 'A' : 'B'}的${key}添加highlight`);
+            // 添加highlight
+            criteriaElement.classList.add('bg-orange-100', 'border-2', 'border-orange-400', 'rounded-lg', 'p-3', '-mx-3');
+            
+            // 添加提示文字
+            const hintSpan = document.createElement('span');
+            hintSpan.className = 'highlight-hint ml-2 text-xs font-medium text-orange-700';
+            hintSpan.textContent = '（You should be able to mark this section at current stage）';
+            label?.appendChild(hintSpan);
+          } else {
+            console.log(`⚪ Team ${index === 0 ? 'A' : 'B'}的${key}不需要highlight`);
+          }
+        }
+      });
+      
+      // 更新Judge Questions的highlight
+      // 找到第一个judge question的select，然后向上找到包含所有questions的容器
+      const firstQuestionSelect = document.querySelector(`[name="commentScore_${team.id}_0"]`);
+      if (firstQuestionSelect) {
+        // 向上查找，找到包含"Judge Questions"标题的外层容器
+        let judgeQuestionsContainer = firstQuestionSelect;
+        let searchDepth = 0;
+        const maxDepth = 10; // 防止无限循环
+        
+        while (judgeQuestionsContainer && judgeQuestionsContainer.parentElement && searchDepth < maxDepth) {
+          const parentElement = judgeQuestionsContainer.parentElement;
+          const parentLabel = parentElement.querySelector(':scope > label');
+          
+          if (parentLabel && parentLabel.textContent.includes('Judge Questions')) {
+            judgeQuestionsContainer = parentElement;
+            console.log(`✅ 找到Team ${index === 0 ? 'A' : 'B'}的Judge Questions容器`);
+            break;
+          }
+          judgeQuestionsContainer = parentElement;
+          searchDepth++;
+        }
+        
+        if (judgeQuestionsContainer && searchDepth < maxDepth) {
+          const isHighlighted = highlights.judgeQuestions;
+          const label = judgeQuestionsContainer.querySelector(':scope > label');
+          
+          if (isHighlighted) {
+            console.log(`🎨 为Team ${index === 0 ? 'A' : 'B'}添加Judge Questions highlight`);
+            // 添加highlight
+            judgeQuestionsContainer.classList.add('bg-orange-100', 'border-2', 'border-orange-400', 'rounded-lg', 'p-4', '-mx-2');
+            
+            // 添加提示文字
+            const hintSpan = document.createElement('span');
+            hintSpan.className = 'highlight-hint ml-2 text-xs font-medium text-orange-700';
+            hintSpan.textContent = '（You should be able to mark this section at current stage）';
+            label?.appendChild(hintSpan);
+          } else {
+            console.log(`⚪ Team ${index === 0 ? 'A' : 'B'}的Judge Questions不需要highlight`);
+          }
+        } else {
+          console.warn(`⚠️ 无法找到Team ${index === 0 ? 'A' : 'B'}的Judge Questions容器`);
+        }
+      }
+    });
+    
+    console.log('✅ Section highlights已更新');
+  }
+  
+  /**
+   * 显示stage变化通知
+   */
+  showStageChangeNotification(oldStatus, newStatus) {
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center animate-fade-in';
+    notification.innerHTML = `
+      <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+      </svg>
+      <div>
+        <div class="font-medium">Stage Status Updated</div>
+        <div class="text-sm opacity-90">New Status: ${this.getCurrentStageDisplay()}</div>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // 5秒后移除通知
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }
+    }, 5000);
   }
   
   /**
@@ -193,6 +482,9 @@ class ScoreMatchPage {
     if (window.wsClient && this.currentMatch) {
       window.wsClient.leaveMatch(this.currentMatch.id);
     }
+    
+    // 停止stage状态自动刷新定时器
+    this.stopStageRefreshTimer();
   }
 
   /**
@@ -218,7 +510,8 @@ class ScoreMatchPage {
             
             if (window.eventWorkspacePage) {
               // Use the same reliable method as the submit success
-              window.app.ui.showPage('event-workspace');
+              // Don't update URL here, let event workspace handle it
+              window.app.ui.showPage('event-workspace', false);
               await new Promise(resolve => setTimeout(resolve, 50));
               
               const success = await window.eventWorkspacePage.show(this.currentMatch.eventId);
@@ -299,6 +592,9 @@ class ScoreMatchPage {
       await this.loadMatchData(matchId);
       await this.loadExistingScores();
       
+      // Set URL hash for proper routing on refresh
+      window.location.hash = `#/score-match/${matchId}`;
+      
       // Cache original app markup to allow navigation back later
       const appEl = document.getElementById('app');
       if (appEl && !window._appOriginalHTML) {
@@ -312,10 +608,14 @@ class ScoreMatchPage {
       // Initialize WebSocket listeners for real-time updates
       this.initializeWebSocketListeners();
       
-      // Initialize total score calculations and submit button state
+      // Start auto-refresh timer for stage status (every 30 seconds)
+      this.startStageRefreshTimer();
+      
+      // Initialize total score calculations, submit button state, and section highlights
       setTimeout(() => {
         this.updateTotalScores();
         this.updateSubmitButtonState();
+        this.updateSectionHighlights(); // 初始化时更新highlights
       }, 100);
       
     } catch (error) {
@@ -664,7 +964,8 @@ class ScoreMatchPage {
 
       // Show the workspace page first
       console.log('Showing event-workspace page');
-      window.app.ui.showPage('event-workspace');
+      // Don't update URL here, let event workspace handle it
+      window.app.ui.showPage('event-workspace', false);
       
       // Small delay to ensure page is shown
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -951,6 +1252,86 @@ class ScoreMatchPage {
   }
 
   /**
+   * Determine which sections should be highlighted for the current stage
+   * @param {number} teamIndex - 0 for Team A, 1 for Team B
+   * @returns {object} - Object with flags for which sections to highlight
+   */
+  getSectionHighlights(teamIndex) {
+    const status = this.currentMatch?.status || '';
+    const isTeamA = teamIndex === 0;
+    const isTeamB = teamIndex === 1;
+    
+    const highlights = {
+      criteria: {
+        clarity_systematicity: false,
+        moral_dimension: false,
+        opposing_viewpoints: false,
+        response: false,
+        commentary: false,
+        respectful_dialogue: false
+      },
+      judgeQuestions: false
+    };
+    
+    // Team A Presentation - highlight Clarity, Moral Dimension, Opposing Viewpoints for Team A
+    if (status === 'team_a_presentation' && isTeamA) {
+      highlights.criteria.clarity_systematicity = true;
+      highlights.criteria.moral_dimension = true;
+      highlights.criteria.opposing_viewpoints = true;
+    }
+    
+    // Team B Commentary - highlight Commentary for Team B
+    if (status === 'team_b_commentary' && isTeamB) {
+      highlights.criteria.commentary = true;
+    }
+    
+    // Team A Response - highlight Response for Team A
+    if (status === 'team_a_response' && isTeamA) {
+      highlights.criteria.response = true;
+    }
+    
+    // Team B Presentation - highlight Clarity, Moral Dimension, Opposing Viewpoints for Team B
+    if (status === 'team_b_presentation' && isTeamB) {
+      highlights.criteria.clarity_systematicity = true;
+      highlights.criteria.moral_dimension = true;
+      highlights.criteria.opposing_viewpoints = true;
+    }
+    
+    // Team A Commentary - highlight Commentary for Team A
+    if (status === 'team_a_commentary' && isTeamA) {
+      highlights.criteria.commentary = true;
+    }
+    
+    // Team B Response - highlight Response for Team B
+    if (status === 'team_b_response' && isTeamB) {
+      highlights.criteria.response = true;
+    }
+    
+    // Judge stages (judge_1_1, judge_1_2, etc.) - highlight Judge Questions based on judge number
+    if (status.startsWith('judge_')) {
+      // 解析judge stage格式：judge_X_Y，其中X是judge编号
+      const judgeMatch = status.match(/^judge_(\d+)_/);
+      if (judgeMatch) {
+        const judgeNumber = parseInt(judgeMatch[1]);
+        // judge_1_x -> highlight Team A (left side, index 0)
+        // judge_2_x -> highlight Team B (right side, index 1)
+        if (judgeNumber === 1 && isTeamA) {
+          highlights.judgeQuestions = true;
+        } else if (judgeNumber === 2 && isTeamB) {
+          highlights.judgeQuestions = true;
+        }
+      }
+    }
+    
+    // Respectful Dialogue stage - highlight Respectful Dialogue for both teams
+    if (status === 'respectful_dialogue') {
+      highlights.criteria.respectful_dialogue = true;
+    }
+    
+    return highlights;
+  }
+
+  /**
    * Render team score card
    */
   renderTeamScoreCard(team, index) {
@@ -960,6 +1341,9 @@ class ScoreMatchPage {
     // Only get existing scores from the current judge to ensure clean form for each judge
     const existingScore = this.scores.find(s => s.teamId === team?.id && s.judgeId === this.authManager.currentUser.id);
 
+    // Get section highlights for current stage
+    const highlights = this.getSectionHighlights(index);
+
     // Generate question labels dynamically
     const questionLabels = [];
     for (let i = 0; i < commentQuestionsCount; i++) {
@@ -967,14 +1351,22 @@ class ScoreMatchPage {
       questionLabels.push(ordinals[i] || `Question ${i + 1}`);
     }
 
+    // Determine team label (Team A or Team B)
+    const teamLabel = index === 0 ? 'Team A' : 'Team B';
+
     return `
       <div class="bg-white border border-gray-200 rounded-lg overflow-hidden h-fit">
         <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div class="flex justify-between items-center">
-            <h3 class="text-lg font-medium text-gray-900">
-              ${team?.name || `Team ${index + 1}`}
-              ${team?.school ? `<span class="text-sm text-gray-500">(${team.school})</span>` : ''}
-            </h3>
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">
+                ${teamLabel}
+              </h3>
+              <p class="text-sm text-gray-600 mt-1">
+                ${team?.name || 'Unknown Team'}
+                ${team?.school ? ` • ${team.school}` : ''}
+              </p>
+            </div>
             <div class="text-right">
               <div class="text-sm text-gray-500">Total Score</div>
               <div id="totalScore_${team?.id}" class="text-2xl font-bold">0.0</div>
@@ -988,11 +1380,14 @@ class ScoreMatchPage {
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-4">Criteria Scores</label>
               <div class="space-y-4">
-                ${Object.entries(criteria).map(([key, data]) => `
-                  <div>
+                ${Object.entries(criteria).map(([key, data]) => {
+                  const isHighlighted = highlights.criteria[key] || false;
+                  return `
+                  <div class="${isHighlighted ? 'bg-orange-100 border-2 border-orange-400 rounded-lg p-3 -mx-3' : ''}">
                     <label class="block text-sm text-gray-600 mb-2">
                       ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       <span class="text-xs text-gray-500">(Max: ${data.maxScore} points)</span>
+                      ${isHighlighted ? '<span class="ml-2 text-xs font-medium text-orange-700">（You should be able to mark this section at current stage）</span>' : ''}
                     </label>
                     <div class="relative">
                       <select 
@@ -1010,15 +1405,17 @@ class ScoreMatchPage {
                       </select>
                     </div>
                   </div>
-                `).join('')}
+                `;
+                }).join('')}
               </div>
             </div>
           ` : ''}
 
           <!-- Judge Questions Scores -->
-          <div>
+          <div class="${highlights.judgeQuestions ? 'bg-orange-100 border-2 border-orange-400 rounded-lg p-4 -mx-2' : ''}">
             <label class="block text-sm font-medium text-gray-700 mb-4">
               Judge Questions (0 - ${commentMaxScore} points each)
+              ${highlights.judgeQuestions ? '<span class="ml-2 text-xs font-medium text-orange-700">（You should be able to mark this section at current stage）</span>' : ''}
             </label>
             <div class="space-y-4">
               ${questionLabels.map((label, i) => `
