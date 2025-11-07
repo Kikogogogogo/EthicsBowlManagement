@@ -368,25 +368,34 @@ class ScoreService {
 
       let score;
       if (existingScore) {
-        // Update existing score (only if not submitted, or if user is admin)
+        // Update existing score
         if (existingScore.isSubmitted) {
-          // Check if user is admin - admins can update submitted scores
+          // Check if user is admin - admins can always update submitted scores
           const user = await prisma.user.findUnique({
             where: { id: judgeId },
             select: { role: true }
           });
           
+          // Allow judges to "unsubmit" and modify scores if not in final_scoring stage
+          // This handles cases where admin moved the match back to earlier stages
           if (!user || user.role !== USER_ROLES.ADMIN) {
-            throw new Error('Cannot update already submitted scores');
+            if (match.status === 'final_scoring') {
+              throw new Error('Cannot update already submitted scores during final scoring stage');
+            }
+            // If not in final_scoring stage, allow unsubmitting the score
+            console.log(`🔄 [ScoreService] Allowing judge to unsubmit score - match status is ${match.status}, not final_scoring`);
           }
         }
 
+        // When updating as draft, always set isSubmitted to false
+        // This allows judges to "unsubmit" their scores if match was moved back
         score = await prisma.score.update({
           where: { id: existingScore.id },
           data: {
             criteriaScores: criteriaScores ? JSON.stringify(criteriaScores) : null,
             commentScores: commentScores ? JSON.stringify(commentScores) : null,
             notes,
+            isSubmitted: false, // Always set to false when saving as draft
             updatedAt: new Date()
           },
           include: {

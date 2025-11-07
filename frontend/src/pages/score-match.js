@@ -689,12 +689,18 @@ class ScoreMatchPage {
       const allSubmitted = currentJudgeScores.length > 0 && 
                          currentJudgeScores.every(score => score.isSubmitted);
       
-      // Update submitted state
-      this.scoresSubmitted = allSubmitted;
+      // Only enforce read-only mode if scores are submitted AND we're in final_scoring stage
+      // This allows judges to modify their scores if admin moved the match back to earlier stages
+      const isFinalScoringStage = this.currentMatch?.status === 'final_scoring';
+      this.scoresSubmitted = allSubmitted && isFinalScoringStage;
       
-      // If we have submitted scores, make sure we're in read-only mode
-      if (this.scoresSubmitted) {
-        console.log('Scores are already submitted, enabling read-only mode');
+      // If we have submitted scores but not in final_scoring stage, allow editing
+      if (allSubmitted && !isFinalScoringStage) {
+        console.log('⚠️ Scores were submitted, but match is not in final_scoring stage. Allowing editing...');
+        console.log(`Current match status: ${this.currentMatch?.status}`);
+        // Scores will be automatically unsubmitted when saved as draft
+      } else if (this.scoresSubmitted) {
+        console.log('Scores are submitted in final_scoring stage, enabling read-only mode');
         // Update UI to reflect submitted state
         setTimeout(() => this.updateSubmitButtonState(), 100);
       } else if (hasTeamAScore || hasTeamBScore) {
@@ -943,6 +949,10 @@ class ScoreMatchPage {
     try {
       console.log('Navigating back to event workspace...');
       
+      // 🔧 清理定时器和监听器
+      console.log('🧹 Cleaning up timers and listeners before navigation...');
+      this.cleanupWebSocketListeners();
+      
       // Check if we have the required globals
       if (!window.app || !window.app.ui) {
         console.error('App or UI manager not found, forcing reload');
@@ -1180,6 +1190,25 @@ class ScoreMatchPage {
               </div>
             </div>
           ` : ''}
+          
+          <!-- Previously Submitted Scores Can Be Edited -->
+          ${!this.scoresSubmitted && this.scores.some(s => s.judgeId === this.authManager.currentUser.id && s.isSubmitted) ? `
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <h3 class="text-sm font-medium text-blue-800">Previously Submitted Scores Loaded</h3>
+                  <div class="mt-2 text-sm text-blue-700">
+                    <p>Your previously submitted scores have been loaded. You can modify and re-submit them since the match is not in the final scoring stage.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
 
           <!-- All Judges Scores Display (for Moderator/Admin, or for all users in 2-judge cases) -->
           ${this.shouldShowAllJudgesScores() ? `
@@ -1325,6 +1354,11 @@ class ScoreMatchPage {
     
     // Respectful Dialogue stage - highlight Respectful Dialogue for both teams
     if (status === 'respectful_dialogue') {
+      highlights.criteria.respectful_dialogue = true;
+    }
+    
+    // Final Scoring stage - highlight Respectful Dialogue for both teams
+    if (status === 'final_scoring') {
       highlights.criteria.respectful_dialogue = true;
     }
     
@@ -1591,6 +1625,15 @@ class ScoreMatchPage {
       saveButton.textContent = originalText;
       saveButton.className = originalClasses.join(' ');
     }
+  }
+
+  /**
+   * Hide/cleanup the page
+   * This is called when the page is being hidden/destroyed
+   */
+  hide() {
+    console.log('🧹 [ScoreMatch] hide() called - cleaning up resources...');
+    this.cleanupWebSocketListeners();
   }
 
   /**

@@ -230,6 +230,14 @@ class UIManager {
       }
     }
 
+    // 🧹 Clean up score-match page if we're leaving it
+    if (this.currentPage === 'score-match' && pageName !== 'score-match') {
+      console.log('🧹 [MainApp] Leaving score-match page, cleaning up...');
+      if (window.scoreMatchPage && typeof window.scoreMatchPage.hide === 'function') {
+        window.scoreMatchPage.hide();
+      }
+    }
+
     // Show requested page
     let page;
     if (pageName === 'event-workspace') {
