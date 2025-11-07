@@ -577,6 +577,54 @@ class MatchController {
       });
     }
   };
+
+  /**
+   * POST /matches/:matchId/swap-teams
+   * Swap Team A and Team B positions (Moderator and Admin only)
+   */
+  swapTeams = async (req, res) => {
+    try {
+      const { matchId } = req.params;
+      
+      if (!matchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Match ID is required',
+          error: 'MISSING_MATCH_ID'
+        });
+      }
+
+      const match = await this.matchService.swapTeams(matchId, req.user.id);
+      
+      res.json({
+        success: true,
+        data: match,
+        message: 'Teams swapped successfully'
+      });
+    } catch (error) {
+      console.error('Swap teams error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'SWAP_TEAMS_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'MATCH_NOT_FOUND';
+      } else if (error.message.includes('permission') || error.message.includes('not assigned')) {
+        statusCode = 403;
+        errorCode = 'FORBIDDEN';
+      } else if (error.message.includes('completed')) {
+        statusCode = 400;
+        errorCode = 'MATCH_COMPLETED';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to swap teams',
+        error: errorCode
+      });
+    }
+  };
 }
 
 module.exports = MatchController; 

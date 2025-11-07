@@ -97,4 +97,10 @@ router.delete('/matches/:matchId/judges/:judgeId', requireRole(USER_ROLES.ADMIN)
  */
 router.post('/events/:eventId/matches/apply-round-schedule/:roundNumber', requireRole(USER_ROLES.ADMIN), matchController.applyRoundScheduleToMatches);
 
+/**
+ * POST /matches/:matchId/swap-teams
+ * Swap Team A and Team B positions (Moderator and Admin only)
+ */
+router.post('/matches/:matchId/swap-teams', requireRole(USER_ROLES.MODERATOR, USER_ROLES.ADMIN), matchController.swapTeams);
+
 module.exports = router; 

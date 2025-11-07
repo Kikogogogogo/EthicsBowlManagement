@@ -2093,6 +2093,9 @@ class EventWorkspacePage {
               <button data-action="manage-match-status" data-match-id="${match.id}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium">
                 Manage Status
               </button>
+              <button data-action="swap-teams" data-match-id="${match.id}" class="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700 transition-colors font-medium">
+                Swap Teams
+              </button>
             ` : ''}
 
             ${isAssignedJudge && effectiveRole === 'judge' && !hasSubmittedScores ? `
@@ -3180,6 +3183,10 @@ class EventWorkspacePage {
           await this.manageMatchStatus(element.getAttribute('data-match-id'));
           break;
 
+        case 'swap-teams':
+          await this.swapTeams(element.getAttribute('data-match-id'));
+          break;
+
         case 'view-scores':
           await this.viewMatchScores(element.getAttribute('data-match-id'));
           break;
@@ -4216,6 +4223,101 @@ class EventWorkspacePage {
       }
       
       this.ui.showError('Error', errorMessage);
+    }
+  }
+
+  /**
+   * Swap Team A and Team B positions
+   */
+  async swapTeams(matchId) {
+    try {
+      // Find the match
+      const match = this.matches.find(m => m.id === matchId);
+      if (!match) {
+        this.ui.showError('Error', 'Match not found');
+        return;
+      }
+
+      // Check if match is completed
+      if (match.status === 'completed') {
+        this.ui.showError('Error', 'Cannot swap teams in a completed match');
+        return;
+      }
+
+      // Create confirmation modal
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+      modal.innerHTML = `
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Swap Teams</h3>
+            <p class="text-sm text-gray-600 mb-4">
+              Are you sure you want to swap the positions of Team A and Team B?
+            </p>
+            <div class="bg-gray-50 p-3 rounded mb-4">
+              <div class="text-sm">
+                <div class="mb-2">
+                  <span class="font-medium">Team A:</span> ${match.teamA?.name || 'Unknown'}
+                  <span class="text-gray-500 ml-2">→ Will become Team B</span>
+                </div>
+                <div>
+                  <span class="font-medium">Team B:</span> ${match.teamB?.name || 'Unknown'}
+                  <span class="text-gray-500 ml-2">→ Will become Team A</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+              <button id="cancelSwap" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200">
+                Cancel
+              </button>
+              <button id="confirmSwap" class="px-4 py-2 text-sm font-medium text-white bg-orange-600 border border-transparent rounded-md hover:bg-orange-700">
+                Swap Teams
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Handle modal interactions
+      const cancelBtn = document.getElementById('cancelSwap');
+      const confirmBtn = document.getElementById('confirmSwap');
+
+      const closeModal = () => {
+        document.body.removeChild(modal);
+      };
+
+      cancelBtn.addEventListener('click', closeModal);
+
+      confirmBtn.addEventListener('click', async () => {
+        try {
+          // Call backend API to swap teams
+          await this.matchService.swapTeams(matchId);
+
+          closeModal();
+          this.ui.showSuccess('Success', 'Teams swapped successfully');
+          
+          // Reload matches data
+          await this.loadEventData();
+          document.getElementById('workspace-content').innerHTML = this.renderTabContent();
+          
+        } catch (error) {
+          console.error('Failed to swap teams:', error);
+          this.ui.showError('Error', 'Failed to swap teams: ' + error.message);
+        }
+      });
+
+      // Close modal when clicking outside
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+    } catch (error) {
+      console.error('Failed to swap teams:', error);
+      this.ui.showError('Error', 'Failed to swap teams: ' + error.message);
     }
   }
 

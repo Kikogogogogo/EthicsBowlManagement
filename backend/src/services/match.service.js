@@ -1615,6 +1615,80 @@ class MatchService {
       throw new Error('Failed to apply round schedule to matches');
     }
   }
+
+  /**
+   * Swap Team A and Team B positions
+   * @param {string} matchId - Match ID
+   * @param {string} userId - User ID (moderator or admin)
+   * @returns {Object} Updated match
+   */
+  async swapTeams(matchId, userId) {
+    try {
+      // Verify match exists
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          moderator: true
+        }
+      });
+
+      if (!match) {
+        throw new Error('Match not found');
+      }
+
+      // Check if match is completed
+      if (match.status === 'completed') {
+        throw new Error('Cannot swap teams in a completed match');
+      }
+
+      // Verify user has permission (moderator or admin)
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true }
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Check if user is moderator for this match or is admin
+      if (user.role !== USER_ROLES.ADMIN && match.moderatorId !== userId) {
+        throw new Error('You do not have permission to swap teams for this match');
+      }
+
+      // Swap the teams
+      const updatedMatch = await prisma.match.update({
+        where: { id: matchId },
+        data: {
+          teamAId: match.teamBId,
+          teamBId: match.teamAId
+        },
+        include: {
+          teamA: {
+            select: { id: true, name: true, school: true }
+          },
+          teamB: {
+            select: { id: true, name: true, school: true }
+          },
+          moderator: {
+            select: { id: true, firstName: true, lastName: true, email: true }
+          },
+          assignments: {
+            include: {
+              judge: {
+                select: { id: true, firstName: true, lastName: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      return updatedMatch;
+    } catch (error) {
+      console.error('Error swapping teams:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = MatchService; 

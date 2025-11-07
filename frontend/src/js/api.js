@@ -48,7 +48,8 @@ const ENDPOINTS = {
     replaceJudgeFlexible: (matchId) => `${API_BASE_URL}/matches/${matchId}/judges/replace`,
     removeJudgeFromMatch: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/judges/${judgeId}`,
     removeJudgeScores: (matchId, judgeId) => `${API_BASE_URL}/matches/${matchId}/judges/${judgeId}/scores`,
-    applyRoundSchedule: (eventId, roundNumber) => `${API_BASE_URL}/events/${eventId}/matches/apply-round-schedule/${roundNumber}`
+    applyRoundSchedule: (eventId, roundNumber) => `${API_BASE_URL}/events/${eventId}/matches/apply-round-schedule/${roundNumber}`,
+    swapTeams: (matchId) => `${API_BASE_URL}/matches/${matchId}/swap-teams`
   },
   rooms: {
     list: `${API_BASE_URL}/rooms`,
@@ -713,6 +714,13 @@ class MatchService {
   async applyRoundSchedule(eventId, roundNumber) {
     const response = await this.api.post(ENDPOINTS.matches.applyRoundSchedule(eventId, roundNumber));
     return response.data;
+  }
+
+  /**
+   * Swap Team A and Team B positions (Moderator and Admin only)
+   */
+  async swapTeams(matchId) {
+    return this.api.post(ENDPOINTS.matches.swapTeams(matchId));
   }
 }
 
