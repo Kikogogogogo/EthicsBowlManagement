@@ -5645,15 +5645,11 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     
     console.log('🔍 [EventWorkspace] scoresByJudge keys:', Object.keys(scoresByJudge));
 
-    // Filter out virtual judges for non-admin/moderator users
+    // Get current user info
     const currentUser = this.authManager?.currentUser;
-    const isModeratorOrAdmin = currentUser?.role === 'moderator' || currentUser?.role === 'admin';
     
+    // Show all judges (including virtual judges) to all roles
     let filteredJudgeIds = Object.keys(scoresByJudge);
-    if (!isModeratorOrAdmin) {
-      // Remove virtual judges for regular judges
-      filteredJudgeIds = filteredJudgeIds.filter(judgeId => !judgeId.startsWith('virtual-judge-'));
-    }
 
     // Sort judges: real judges first, then virtual judge (if visible)
     const sortedJudgeIds = filteredJudgeIds.sort((a, b) => {
@@ -5670,7 +5666,11 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         <div class="bg-white rounded-lg shadow-lg max-h-[90vh] flex flex-col">
           <div class="px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <div class="flex justify-between items-center">
-              <h2 class="text-xl font-bold text-gray-900">Match Scores</h2>
+              <div>
+                <h2 class="text-xl font-bold text-gray-900">
+                  Match Scores
+                </h2>
+              </div>
               <button onclick="window.eventWorkspacePage.closeScoresModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -5683,7 +5683,17 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           </div>
           
           <div class="p-6 overflow-y-auto flex-grow">
-            ${sortedJudgeIds.map(judgeId => {
+            ${sortedJudgeIds.length === 0 ? `
+              <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No scores found</h3>
+                <p class="mt-1 text-sm text-gray-500">
+                  No judge has submitted scores for this match yet.
+                </p>
+              </div>
+            ` : sortedJudgeIds.map(judgeId => {
               const judgeData = scoresByJudge[judgeId];
               const { judge, scores } = judgeData;
               
@@ -6615,6 +6625,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opponent</th>
                 <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Result</th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Room</th>
+                <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Scores</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -6635,6 +6646,18 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                     </span>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-500">${detail.room}</td>
+                  <td class="px-4 py-3 text-center">
+                    <button 
+                      data-action="view-scores" 
+                      data-match-id="${detail.match.id}"
+                      class="inline-flex items-center px-3 py-1 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors"
+                    >
+                      <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                      </svg>
+                      View
+                    </button>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
@@ -7859,8 +7882,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     }
 
     // Check if using two-judge protocol
+    // Only use virtual third judge if EXACTLY 2 judges were assigned to this match
     const actualJudges = assignments.length;
     const useThreeJudgeProtocol = actualJudges === 2;
+    
+    // Count judges who have submitted scores for BOTH teams
+    const judgesWithBothScores = [];
 
     assignments.forEach(assignment => {
       const judgeId = assignment.judgeId;
@@ -7870,6 +7897,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       const opponentScore = opponentScores.find(s => s.judgeId === judgeId);
       
       if (teamScore && opponentScore) {
+        judgesWithBothScores.push(judgeId);
+        
         const teamTotalScore = this.calculateTotalScore(teamScore);
         const opponentTotalScore = this.calculateTotalScore(opponentScore);
         
@@ -7889,8 +7918,11 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       }
     });
 
-    // If using two-judge protocol, simulate third judge
-    if (useThreeJudgeProtocol && assignments.length === 2) {
+    // If using two-judge protocol AND both judges have submitted, simulate third judge
+    // Don't simulate if 3+ judges assigned but only 2 have submitted
+    const shouldSimulateThirdJudge = useThreeJudgeProtocol && judgesWithBothScores.length === 2;
+    
+    if (shouldSimulateThirdJudge) {
       const avgTeamScore = teamTotal / 2;
       const avgOpponentScore = opponentTotal / 2;
       

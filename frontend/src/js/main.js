@@ -93,15 +93,32 @@ class UIManager {
       userName: document.getElementById('user-name'),
       userRole: document.getElementById('user-role'),
       logoutBtn: document.getElementById('logout-btn'),
+      userDropdownBtn: document.getElementById('user-dropdown-btn'),
+      userDropdown: document.getElementById('user-dropdown'),
       mainNav: document.getElementById('main-nav'),
       navDashboard: document.getElementById('nav-dashboard'),
       navEvents: document.getElementById('nav-events'),
       navTeams: document.getElementById('nav-teams'),
       navUsers: document.getElementById('nav-users'),
       navTestUsers: document.getElementById('nav-test-users'),
+      userMenuChangeDisplayName: document.getElementById('menu-change-display-name'),
       
       // Event Management page
       eventWorkspacePage: document.getElementById('event-workspace-page'),
+      
+      // Change name page
+      changeNamePage: document.getElementById('change-name-page'),
+      navDashboardFromChangeName: document.getElementById('nav-dashboard-from-change-name'),
+      userNameChange: document.getElementById('user-name-change'),
+      userRoleChange: document.getElementById('user-role-change'),
+      currentDisplayName: document.getElementById('current-display-name'),
+      changeNameForm: document.getElementById('change-name-form'),
+      firstNameInput: document.getElementById('first-name-input'),
+      lastNameInput: document.getElementById('last-name-input'),
+      saveDisplayNameBtn: document.getElementById('save-display-name-btn'),
+      cancelDisplayNameBtn: document.getElementById('cancel-display-name-btn'),
+      changeNameError: document.getElementById('change-name-error'),
+      changeNameSuccess: document.getElementById('change-name-success'),
       
       // Events page
       eventsPage: document.getElementById('events-page'),
@@ -244,6 +261,8 @@ class UIManager {
       page = this.elements.eventWorkspacePage;
     } else if (pageName === 'test-users') {
       page = this.elements.testUsersPage;
+    } else if (pageName === 'change-name') {
+      page = this.elements.changeNamePage;
     } else {
       page = this.elements[pageName + 'Page'];
     }
@@ -508,8 +527,11 @@ class UIManager {
    * Update dashboard with user info
    */
   updateDashboard(user) {
+    const displayOverride = user?.id ? localStorage.getItem(`displayName:${user.id}`) : null;
+    const combinedName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    const displayName = displayOverride || combinedName || user.name || user.email;
     if (this.elements.userName) {
-      this.elements.userName.textContent = user.name || user.email;
+      this.elements.userName.textContent = displayName;
     }
     if (this.elements.userRole) {
       this.elements.userRole.textContent = user.role?.toUpperCase() || 'USER';
@@ -519,7 +541,7 @@ class UIManager {
     const userNameMobile = document.getElementById('user-name-mobile');
     const userRoleMobile = document.getElementById('user-role-mobile');
     if (userNameMobile) {
-      userNameMobile.textContent = user.name || user.email;
+      userNameMobile.textContent = displayName;
     }
     if (userRoleMobile) {
       userRoleMobile.textContent = user.role?.toUpperCase() || 'USER';
@@ -533,7 +555,7 @@ class UIManager {
       const isVirtualTestUser = user.email && user.email.endsWith('@virtual.test');
       
       // Show/hide navigation buttons based on user role
-      if (user.role === 'admin' || isVirtualTestUser) {
+        if (user.role === 'admin' || (isVirtualTestUser && user.role !== 'judge' && user.role !== 'moderator')) {
         // Admin and virtual test users see all tabs
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'block';
         if (this.elements.navTeams) this.elements.navTeams.style.display = 'block';
@@ -549,6 +571,22 @@ class UIManager {
         if (navTeamsMobile) navTeamsMobile.style.display = 'block';
         if (navUsersMobile) navUsersMobile.style.display = 'block';
         if (navTestUsersMobile) navTestUsersMobile.style.display = 'block';
+        } else if (user.role === 'judge' || user.role === 'moderator') {
+          // Judges and Moderators only see Dashboard + Test Users
+          if (this.elements.navEvents) this.elements.navEvents.style.display = 'none';
+          if (this.elements.navTeams) this.elements.navTeams.style.display = 'none';
+          if (this.elements.navUsers) this.elements.navUsers.style.display = 'none';
+          if (this.elements.navTestUsers) this.elements.navTestUsers.style.display = 'block';
+          
+          // Mobile navigation buttons for judge
+          const navEventsMobile = document.getElementById('nav-events-mobile');
+          const navTeamsMobile = document.getElementById('nav-teams-mobile');
+          const navUsersMobile = document.getElementById('nav-users-mobile');
+          const navTestUsersMobile = document.getElementById('nav-test-users-mobile');
+          if (navEventsMobile) navEventsMobile.style.display = 'none';
+          if (navTeamsMobile) navTeamsMobile.style.display = 'none';
+          if (navUsersMobile) navUsersMobile.style.display = 'none';
+          if (navTestUsersMobile) navTestUsersMobile.style.display = 'block';
       } else {
         // Non-admin only sees Dashboard
         if (this.elements.navEvents) this.elements.navEvents.style.display = 'none';
@@ -573,8 +611,11 @@ class UIManager {
    * Update events page with user info
    */
   updateEventsPage(user) {
+    const displayOverride = user?.id ? localStorage.getItem(`displayName:${user.id}`) : null;
+    const combinedName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    const displayName = displayOverride || combinedName || user.name || user.email;
     if (this.elements.userNameEvents) {
-      this.elements.userNameEvents.textContent = user.name || user.email;
+      this.elements.userNameEvents.textContent = displayName;
     }
     if (this.elements.userRoleEvents) {
       this.elements.userRoleEvents.textContent = user.role?.toUpperCase() || 'USER';
@@ -584,7 +625,7 @@ class UIManager {
     const userNameEventsMobile = document.getElementById('user-name-events-mobile');
     const userRoleEventsMobile = document.getElementById('user-role-events-mobile');
     if (userNameEventsMobile) {
-      userNameEventsMobile.textContent = user.name || user.email;
+      userNameEventsMobile.textContent = displayName;
     }
     if (userRoleEventsMobile) {
       userRoleEventsMobile.textContent = user.role?.toUpperCase() || 'USER';
@@ -595,8 +636,11 @@ class UIManager {
    * Update teams page with user info
    */
   updateTeamsPage(user) {
+    const displayOverride = user?.id ? localStorage.getItem(`displayName:${user.id}`) : null;
+    const combinedName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    const displayName = displayOverride || combinedName || user.name || user.email;
     if (this.elements.userNameTeams) {
-      this.elements.userNameTeams.textContent = user.name || user.email;
+      this.elements.userNameTeams.textContent = displayName;
     }
     if (this.elements.userRoleTeams) {
       this.elements.userRoleTeams.textContent = user.role?.toUpperCase() || 'USER';
@@ -606,7 +650,7 @@ class UIManager {
     const userNameTeamsMobile = document.getElementById('user-name-teams-mobile');
     const userRoleTeamsMobile = document.getElementById('user-role-teams-mobile');
     if (userNameTeamsMobile) {
-      userNameTeamsMobile.textContent = user.name || user.email;
+      userNameTeamsMobile.textContent = displayName;
     }
     if (userRoleTeamsMobile) {
       userRoleTeamsMobile.textContent = user.role?.toUpperCase() || 'USER';
@@ -617,8 +661,11 @@ class UIManager {
    * Update users page with user info
    */
   updateUsersPage(user) {
+    const displayOverride = user?.id ? localStorage.getItem(`displayName:${user.id}`) : null;
+    const combinedName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    const displayName = displayOverride || combinedName || user.name || user.email;
     if (this.elements.userNameUsers) {
-      this.elements.userNameUsers.textContent = user.name || user.email;
+      this.elements.userNameUsers.textContent = displayName;
     }
     if (this.elements.userRoleUsers) {
       this.elements.userRoleUsers.textContent = user.role?.toUpperCase() || 'USER';
@@ -628,7 +675,7 @@ class UIManager {
     const userNameUsersMobile = document.getElementById('user-name-users-mobile');
     const userRoleUsersMobile = document.getElementById('user-role-users-mobile');
     if (userNameUsersMobile) {
-      userNameUsersMobile.textContent = user.name || user.email;
+      userNameUsersMobile.textContent = displayName;
     }
     if (userRoleUsersMobile) {
       userRoleUsersMobile.textContent = user.role?.toUpperCase() || 'USER';
@@ -736,6 +783,37 @@ class App {
     }
     
     // Google Sign In button
+    // User dropdown toggle
+    if (this.ui.elements.userDropdownBtn && this.ui.elements.userDropdown) {
+      const toggle = (e) => {
+        e.stopPropagation();
+        const dd = this.ui.elements.userDropdown;
+        dd.classList.toggle('hidden');
+      };
+      this.ui.elements.userDropdownBtn.addEventListener('click', toggle);
+      document.addEventListener('click', (e) => {
+        const dropdown = this.ui.elements.userDropdown;
+        const btn = this.ui.elements.userDropdownBtn;
+        if (!dropdown || !btn) return;
+        if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.add('hidden');
+        }
+      });
+    }
+    
+    // Change display name menu
+    if (this.ui.elements.userMenuChangeDisplayName) {
+      const handler = () => this.showChangeNamePage();
+      this.ui.elements.userMenuChangeDisplayName.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.userMenuChangeDisplayName, event: 'click', handler });
+    }
+    
+    // Back to dashboard from change-name
+    if (this.ui.elements.navDashboardFromChangeName) {
+      const handler = () => this.showDashboard();
+      this.ui.elements.navDashboardFromChangeName.addEventListener('click', handler);
+      this.navigationListeners.push({ element: this.ui.elements.navDashboardFromChangeName, event: 'click', handler });
+    }
     if (this.ui.elements.googleSigninBtn) {
       const handler = () => this.handleGoogleSignin();
       this.ui.elements.googleSigninBtn.addEventListener('click', handler);
@@ -1473,12 +1551,12 @@ class App {
       return;
     }
     
-    // Allow access for admin users and virtual test users
+    // Allow access for admin users, judges, moderators, and virtual test users
     const isVirtualTestUser = authManager.currentUser && 
       authManager.currentUser.email && 
       authManager.currentUser.email.endsWith('@virtual.test');
     
-    if (authManager.currentUser && (authManager.currentUser.role === 'admin' || isVirtualTestUser)) {
+    if (authManager.currentUser && (authManager.currentUser.role === 'admin' || authManager.currentUser.role === 'judge' || authManager.currentUser.role === 'moderator' || isVirtualTestUser)) {
       this.ui.showPage('test-users');
       
       // Initialize the page first (this loads the data but doesn't bind events)
@@ -1503,6 +1581,89 @@ class App {
   showLoginPage() {
     console.log('🔓 [Landing] Navigating to login page...');
     this.ui.showPage('login');
+  }
+
+  /**
+   * Show change name page (for judges/moderators/test users)
+   */
+  async showChangeNamePage() {
+    if (!authManager.currentUser) return;
+    
+    // Only allow judge/moderator/admin; but shown only via dropdown for judge/moderator
+    const user = authManager.currentUser;
+    const displayOverride = localStorage.getItem(`displayName:${user.id}`);
+    const currentDisplayName = displayOverride || user.name || user.email;
+    
+    if (this.ui.elements.userNameChange) {
+      this.ui.elements.userNameChange.textContent = currentDisplayName;
+    }
+    if (this.ui.elements.userRoleChange) {
+      this.ui.elements.userRoleChange.textContent = user.role?.toUpperCase() || 'USER';
+    }
+    if (this.ui.elements.currentDisplayName) {
+      this.ui.elements.currentDisplayName.textContent = currentDisplayName;
+    }
+    // Prefill inputs using simple split
+    const parts = (currentDisplayName || '').split(' ');
+    if (this.ui.elements.firstNameInput) this.ui.elements.firstNameInput.value = parts[0] || '';
+    if (this.ui.elements.lastNameInput) this.ui.elements.lastNameInput.value = parts.slice(1).join(' ') || '';
+    if (this.ui.elements.changeNameError) this.ui.elements.changeNameError.classList.add('hidden');
+    if (this.ui.elements.changeNameSuccess) this.ui.elements.changeNameSuccess.classList.add('hidden');
+    
+    // Bind form submit
+    if (this.ui.elements.changeNameForm) {
+      this.ui.elements.changeNameForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const first = this.ui.elements.firstNameInput?.value?.trim() || '';
+        const last = this.ui.elements.lastNameInput?.value?.trim() || '';
+        if (!first || !last) {
+          if (this.ui.elements.changeNameError) {
+            this.ui.elements.changeNameError.textContent = 'Please enter both first and last name.';
+            this.ui.elements.changeNameError.classList.remove('hidden');
+          }
+          return;
+        }
+        const newDisplay = `${first} ${last}`.trim();
+        try {
+          // Try backend update (may be restricted)
+          try {
+            await userService.updateUser(user.id, { firstName: first, lastName: last });
+          } catch (err) {
+            // Ignore permission errors; fall back to local override
+            console.warn('Update via API failed or not permitted, using local override:', err?.message || err);
+          }
+          // Save local override to persist display
+          if (user.id) {
+            localStorage.setItem(`displayName:${user.id}`, newDisplay);
+            // reflect immediately
+            authManager.currentUser.firstName = first;
+            authManager.currentUser.lastName = last;
+            this.ui.updateDashboard(authManager.currentUser);
+          }
+          if (this.ui.elements.changeNameSuccess) {
+            this.ui.elements.changeNameSuccess.textContent = 'Display name saved.';
+            this.ui.elements.changeNameSuccess.classList.remove('hidden');
+          }
+          // Navigate back to dashboard after short delay
+          setTimeout(() => {
+            this.showDashboard();
+          }, 600);
+        } catch (error) {
+          if (this.ui.elements.changeNameError) {
+            this.ui.elements.changeNameError.textContent = error?.message || 'Failed to save display name.';
+            this.ui.elements.changeNameError.classList.remove('hidden');
+          }
+        }
+      };
+    }
+    
+    // Cancel button
+    if (this.ui.elements.cancelDisplayNameBtn) {
+      this.ui.elements.cancelDisplayNameBtn.onclick = () => this.showDashboard();
+    }
+    
+    this.ui.showPage('change-name');
+    this.updateNavigation('dashboard'); // keep Dashboard highlighted
   }
 
   /**

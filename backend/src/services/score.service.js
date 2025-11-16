@@ -41,7 +41,7 @@ class ScoreService {
         if (!isAssigned) {
           throw new Error('You are not assigned to this match');
         }
-        whereClause.judgeId = userId;
+        // Judge can see all scores for the match they are assigned to (no filtering by judgeId)
       } else if (userRole === USER_ROLES.MODERATOR) {
         // Moderators can see all scores for their matches (Admin can see all)
         if (match.moderatorId !== userId) {
@@ -103,13 +103,32 @@ class ScoreService {
         return parsedScore;
       });
 
-      // For all users, if there are only 2 judges, add virtual judge scores
-      if (match.assignments.length === 2) {
+      // For all users, if there are only 2 judges WHO HAVE SUBMITTED SCORES, add virtual judge scores
+      // Count judges who have submitted scores for both teams
+      const judgesWithSubmittedScores = new Set();
+      parsedScores.forEach(score => {
+        if (score.isSubmitted) {
+          judgesWithSubmittedScores.add(score.judgeId);
+        }
+      });
+      
+      // Only generate virtual judge if:
+      // 1. Exactly 2 judges assigned to this match, OR
+      // 2. More judges assigned but only 2 have submitted complete scores for both teams
+      const shouldGenerateVirtualJudge = match.assignments.length === 2 && judgesWithSubmittedScores.size === 2;
+      
+      if (shouldGenerateVirtualJudge) {
         console.log('🔍 [ScoreService] Generating virtual judge scores for 2-judge match');
+        console.log('  - Total assignments:', match.assignments.length);
+        console.log('  - Judges with submitted scores:', judgesWithSubmittedScores.size);
         const virtualJudgeScores = this.generateVirtualJudgeScores(match, parsedScores);
         console.log('🔍 [ScoreService] Generated virtual judge scores:', virtualJudgeScores);
         parsedScores.push(...virtualJudgeScores);
         console.log('🔍 [ScoreService] Total scores after adding virtual judge:', parsedScores.length);
+      } else {
+        console.log('🔍 [ScoreService] Not generating virtual judge:');
+        console.log('  - Total assignments:', match.assignments.length);
+        console.log('  - Judges with submitted scores:', judgesWithSubmittedScores.size);
       }
 
       // Calculate vote scores for each team
@@ -828,9 +847,15 @@ class ScoreService {
       }
     });
     
-    // Apply virtual third judge logic for 2-judge matches
-    if (judgesWithBothScores.length === 2) {
+    // Apply virtual third judge logic ONLY for matches with exactly 2 judges assigned
+    // Don't apply if 3+ judges assigned but only 2 have submitted
+    const totalAssignments = match.assignments ? match.assignments.length : 0;
+    const shouldApplyVirtualJudge = totalAssignments === 2 && judgesWithBothScores.length === 2;
+    
+    if (shouldApplyVirtualJudge) {
       console.log('🔍 [ScoreService] Applying virtual third judge logic for 2-judge match');
+      console.log('  - Total assignments:', totalAssignments);
+      console.log('  - Judges with both scores:', judgesWithBothScores.length);
       
       // Calculate average scores for both teams
       const teamATotalScores = teamAScores
@@ -865,6 +890,10 @@ class ScoreService {
       
       console.log('  - teamAVotes after:', teamAVotes);
       console.log('  - teamBVotes after:', teamBVotes);
+    } else {
+      console.log('🔍 [ScoreService] Not applying virtual third judge:');
+      console.log('  - Total assignments:', totalAssignments);
+      console.log('  - Judges with both scores:', judgesWithBothScores.length);
     }
     
     return {

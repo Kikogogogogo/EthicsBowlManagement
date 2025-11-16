@@ -182,12 +182,23 @@ class StatisticsService {
     let opponentTotal = 0;
 
     // Check if using two-judge protocol
+    // Only use virtual third judge if EXACTLY 2 judges were assigned to this match
     const actualJudges = assignments.length;
     const useThreeJudgeProtocol = actualJudges === 2;
+    
+    // Count judges who have submitted scores for BOTH teams
+    const judgesWithBothScores = new Set();
+    teamScores.forEach(score => judgesWithBothScores.add(score.judgeId));
+    const judgesWithOpponentScores = new Set();
+    opponentScores.forEach(score => judgesWithOpponentScores.add(score.judgeId));
+    
+    // Only count judges who submitted for both teams
+    const submittedJudges = [...judgesWithBothScores].filter(id => judgesWithOpponentScores.has(id));
     
     // Debug logging
     console.log('🔍 [Statistics] calculateJudgeVotes called with:');
     console.log('  - assignments.length:', actualJudges);
+    console.log('  - judges with both scores:', submittedJudges.length);
     console.log('  - useThreeJudgeProtocol:', useThreeJudgeProtocol);
     console.log('  - teamScores count:', teamScores.length);
     console.log('  - opponentScores count:', opponentScores.length);
@@ -220,7 +231,10 @@ class StatisticsService {
     });
 
     // If using two-judge protocol, simulate third judge
-    if (useThreeJudgeProtocol && assignments.length === 2) {
+    // Only simulate if EXACTLY 2 judges assigned AND both have submitted scores for both teams
+    const shouldSimulateThirdJudge = useThreeJudgeProtocol && submittedJudges.length === 2;
+    
+    if (shouldSimulateThirdJudge) {
       const avgTeamScore = teamTotal / 2;
       const avgOpponentScore = opponentTotal / 2;
       
@@ -249,7 +263,8 @@ class StatisticsService {
     } else {
       console.log('🔍 [Statistics] Not simulating third judge:', {
         useThreeJudgeProtocol,
-        assignmentsLength: assignments.length
+        assignmentsLength: assignments.length,
+        submittedJudges: submittedJudges.length
       });
     }
 
@@ -421,8 +436,12 @@ class StatisticsService {
       });
     });
     
-    // If using two-judge protocol, add simulated third judge
-    if (assignments.length === 2) {
+    // If using two-judge protocol AND both judges have submitted, add simulated third judge
+    // Count judges who have actually submitted scores
+    const judgesWithScores = new Set(scores.map(s => s.judgeId));
+    const shouldAddSimulatedJudge = assignments.length === 2 && judgesWithScores.size === 2;
+    
+    if (shouldAddSimulatedJudge) {
       const judgeNames = Object.keys(judgeScores);
       const simulatedJudge = 'Simulated Judge 3';
       
