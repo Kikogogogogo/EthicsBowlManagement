@@ -68,6 +68,16 @@ class MatchService {
             },
             orderBy: { judgeNumber: 'asc' }
           },
+          scores: {
+            select: {
+              id: true,
+              judgeId: true,
+              teamId: true,
+              criteriaScores: true,
+              commentScores: true,
+              isSubmitted: true
+            }
+          },
           _count: {
             select: { scores: true }
           }

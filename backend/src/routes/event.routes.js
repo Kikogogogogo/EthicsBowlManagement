@@ -72,6 +72,13 @@ router.get('/:eventId/export/full', requireEventAccess('eventId'), exportControl
 router.get('/:eventId/standings', requireEventAccess('eventId'), exportController.getEventStandings);
 
 /**
+ * GET /events/:eventId/standings/logs
+ * Get detailed ranking calculation logs
+ * Access: Users can only view ranking logs for events they have access to
+ */
+router.get('/:eventId/standings/logs', requireEventAccess('eventId'), exportController.getRankingLogs);
+
+/**
  * PUT /events/:eventId/round-schedules
  * Update round schedules for an event (Admin only)
  */

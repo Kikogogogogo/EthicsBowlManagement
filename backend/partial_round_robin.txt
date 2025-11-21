@@ -1,0 +1,25 @@
+4.2.3 Partial round-robin tournaments
+A partial round-robin tournament is a competition in which each team meets only some of the other teams. A partial round-robin tournament is what would result if, for whatever reason, a full round-robin tournament ended prematurely, i.e., after the completion of only some of the rounds. For example, in a tournament with 12 teams, a full round-robin would require 11 rounds. But since Ethics Bowl competitions typically have 5 rounds, an organizer may assign the tournament structure as the first 5 rounds of what can be regarded as a prematurely ended round-robin. This would constitute a 5-round partial round-robin tournament.
+
+If a partial round-robin tournament has an odd number of teams, one team receives a “bye” for a round. A team receiving a bye is not assigned an opponent, as none is available. In a round in which a team receives a bye, the team will be considered to have won the match 3-0, and their score differential for the match (only required for tiebreaks, if any) will be the largest of the following two numbers:
++3.0 points
+The average of their score differential in the rest of the event prior to qualification rounds (if any).
+No team can receive more than one bye in a given tournament. For the assignment of the bye, it is recommended that organizers simply generate a schedule as above, randomly assigning positions to the teams where one of the teams is labeled "bye".
+
+Just as for full round-robin tournaments, this tournament structure is easy to understand and practically unproblematic. However, it is somewhat problematic regarding both fairness and theoretical considerations. The problems stem from the fact that teams have different schedules, i.e., teams have different sets of opponents. This has important implications that have been closely examined by game theorists. Firstly, the quality of a team’s performance cannot be accurately assessed only on the basis of their result. Instead, the difficulty of the teams’ schedules (i.e., how strongly their opponents performed) must also be taken into account. Secondly, and perhaps surprisingly, using a team’s result as main ranking criterion in such tournaments may not accurately reflect the quality of the teams’ performance (contrary to full round-robins). Again, the difficulty of a team’s schedule must be taken into account. Thirdly, it is hard to get an unbiased assessment of the difficulty of a team’s schedule without engaging in extensive calculations that would make this format impractical. But the extent of the problems associated with this format should not be overestimated; though not perfect, the ranking rules presented below constitute a practical compromise.
+
+The final ranking of a partial round-robin tournament is determined by the cumulative result of each team: the higher the cumulative result the better.
+
+The ordered list of tiebreakers for partial round-robin tournaments is the following:
+If two or more teams have an equal cumulative result, their position in the ranking shall be determined by the following tie-breaking procedure. The tiebreakers must be used in the specified order. If a tiebreaker isolates a single team as best in a group of tied teams, this team is placed in the ranking and the procedure to break the tie between the remaining teams starts over at step 1. If a tiebreaker isolates more than one team as better in a group of tied teams, the group of teams is split in two, and the procedure to break the tie between the teams in each subgroup starts over at step 1. (See 4.2.2 Full round-robin tournaments for an example.)
+The ordered list of tiebreakers for partial round-robin tournaments is the following:
+If all the tied teams have faced each other, then:
+considering only the matches between the tied teams, the team with the best cumulative result wins the tiebreaker.
+If all the tied teams have faced each other, then:
+considering only the matches between the tied teams, the team that has received the highest cumulative number of votes wins the tiebreaker.
+The team with the best cumulative number of votes wins the tiebreaker.
+The team whose opponents have the best total result (i.e., the sum of the cumulative results of the team’s opponents) wins the tiebreaker.
+The team with the best cumulative score differential wins the tiebreaker.
+The tie is broken by random draw (such as a coin flip, if two teams are tied).
+Consider the following example of a 5-round event with 9 teams (an entry of the form “1 (3.0)” on the first line and “+5” on the second line indicates that the team won with three votes, and that their score differential for the match is +5.0):
+

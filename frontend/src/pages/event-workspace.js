@@ -1743,6 +1743,9 @@ class EventWorkspacePage {
           <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
             <h3 class="text-xl font-medium text-gray-900">Current Standings</h3>
             <div class="flex space-x-3">
+              <button onclick="window.eventWorkspacePage.showRankingLogs()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium">
+                📋 Log
+              </button>
               <button onclick="window.eventWorkspacePage.refreshStandings()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium">
                 🔄 Refresh
               </button>
@@ -3089,6 +3092,23 @@ class EventWorkspacePage {
       <div id="viewScoresModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <!-- Content will be dynamically inserted by renderViewScoresModal -->
+        </div>
+      </div>
+
+      <!-- Ranking Logs Modal -->
+      <div id="rankingLogsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
+            <h3 class="text-lg font-medium text-gray-900">排名计算日志</h3>
+            <button onclick="window.eventWorkspacePage.hideModal('rankingLogsModal')" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="rankingLogsContent" class="p-6 max-h-[70vh] overflow-y-auto">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+          </div>
         </div>
       </div>
     `;
@@ -6106,29 +6126,23 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   renderWideStandingRow(standing, index) {
     const teamId = standing.team.id;
     
-    // Calculate actual wins, losses, and draws from match results
-    const teamMatches = this.matches.filter(m => 
-      (m.teamAId === teamId || m.teamBId === teamId) && m.status === 'completed'
-    );
+    // Use backend-provided wins data directly (most reliable!)
+    // Backend returns wins as decimal: full win = 1, draw = 0.5, loss = 0
+    const backendWins = standing.wins || 0;
+    const totalMatches = standing.totalMatches || 0;
     
-    let actualWins = 0;
-    let actualLosses = 0;
-    let actualDraws = 0;
+    // Convert backend wins (decimal) to W-L-T format
+    // Count how many 1.0 wins, 0.5 wins (draws), and losses
+    const wholeWins = Math.floor(backendWins);
+    const hasHalfWin = (backendWins % 1) >= 0.4; // Check if there's a .5 (allowing small float errors)
     
-    teamMatches.forEach(match => {
-      const matchResult = this.calculateMatchResultForTeam(match, teamId);
-      if (matchResult.isWinner) {
-        actualWins++;
-      } else if (matchResult.isDraw) {
-        actualDraws++;
-      } else {
-        actualLosses++;
-      }
-    });
+    const wins = wholeWins + (hasHalfWin ? 0 : 0); // Integer wins
+    const draws = hasHalfWin ? 1 : 0; // Draws (半局)
+    const losses = totalMatches - wins - draws;
     
-    // Calculate win rate based on actual results (including draws as 0.5)
-    const winRate = teamMatches.length > 0 ? 
-      ((actualWins + actualDraws * 0.5) / teamMatches.length * 100).toFixed(1) : 0;
+    // Calculate win rate from backend data
+    const winRate = totalMatches > 0 ? 
+      (backendWins / totalMatches * 100).toFixed(1) : 0;
     
     return `
       <tr class="hover:bg-gray-50 transition-colors ${index < 3 ? 'bg-yellow-50' : ''}">
@@ -6152,8 +6166,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           </div>
         </td>
         <td class="px-6 py-4 whitespace-nowrap text-center">
-          <div class="text-sm font-medium text-gray-900">${actualWins}-${actualLosses}</div>
-          <div class="text-xs text-gray-500">${teamMatches.length} matches</div>
+          <div class="text-sm font-medium text-gray-900">${wins}-${losses}${draws > 0 ? `-${draws}` : ''}</div>
+          <div class="text-xs text-gray-500">${totalMatches} matches</div>
         </td>
         <td class="px-6 py-4 whitespace-nowrap text-center">
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -6253,10 +6267,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         <!-- Expandable detailed section -->
         <div class="hidden bg-gray-50 border-t border-gray-200">
           <div class="p-4">
-            <h4 class="font-medium text-gray-900 mb-3">比赛记录 (${matchDetails.length} 场比赛)</h4>
+            <h4 class="font-medium text-gray-900 mb-3">Match History (${matchDetails.length} matches)</h4>
             
             ${matchDetails.length === 0 ? 
-              '<div class="text-gray-500 text-sm italic">暂无比赛记录</div>' :
+              '<div class="text-gray-500 text-sm italic">No match history available</div>' :
               `<div class="space-y-2">
                 ${matchDetails.map(detail => `
                   <div class="flex items-center justify-between py-2 px-3 bg-white rounded border ${
@@ -6391,6 +6405,171 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Show ranking logs modal
+   */
+  async showRankingLogs() {
+    try {
+      // Show modal
+      this.showModal('rankingLogsModal');
+      
+      // Set loading state
+      const logsContent = document.getElementById('rankingLogsContent');
+      if (logsContent) {
+        logsContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
+      }
+      
+      // Fetch ranking logs directly using fetch
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/standings/logs`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.data && data.data.logs) {
+        logsContent.innerHTML = this.renderRankingLogs(data.data.logs);
+      } else {
+        logsContent.innerHTML = '<div class="text-red-500 text-center py-8">Unable to load ranking logs</div>';
+      }
+      
+    } catch (error) {
+      console.error('Error showing ranking logs:', error);
+      const logsContent = document.getElementById('rankingLogsContent');
+      if (logsContent) {
+        logsContent.innerHTML = '<div class="text-red-500 text-center py-8">Failed to load: ' + error.message + '</div>';
+      }
+    }
+  }
+
+  /**
+   * Render ranking logs
+   */
+  renderRankingLogs(logs) {
+    if (!logs || logs.length === 0) {
+      return '<div class="text-gray-500 text-center py-8">No ranking logs available</div>';
+    }
+
+    return logs.map(log => {
+      let content = '';
+      
+      switch (log.type) {
+        case 'intro':
+          content = `
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 class="text-lg font-semibold text-blue-900 mb-2">${log.title}</h4>
+              <p class="text-blue-800">${log.content}</p>
+            </div>
+          `;
+          break;
+          
+        case 'rules':
+          content = `
+            <div class="bg-gray-50 border border-gray-300 rounded-lg p-4">
+              <h4 class="text-lg font-semibold text-gray-900 mb-2">${log.title}</h4>
+              <pre class="text-sm text-gray-700 whitespace-pre-wrap font-mono">${log.content}</pre>
+            </div>
+          `;
+          break;
+          
+        case 'reference':
+          content = `
+            <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <h4 class="text-lg font-semibold text-purple-900 mb-2">${log.title}</h4>
+              <p class="text-purple-800 mb-2">${log.content}</p>
+              ${log.link ? `<a href="${log.link}" target="_blank" class="text-purple-600 hover:text-purple-800 underline">View Detailed Rules →</a>` : ''}
+            </div>
+          `;
+          break;
+          
+        case 'calculation':
+          content = `
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 class="text-lg font-semibold text-green-900 mb-2">${log.title}</h4>
+              <pre class="text-sm text-green-800 whitespace-pre-wrap font-mono">${log.content}</pre>
+            </div>
+          `;
+          break;
+          
+        case 'tie-breaking-start':
+          content = `
+            <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+              <h4 class="text-lg font-bold text-yellow-900 mb-2">${log.title}</h4>
+              <p class="text-yellow-800">${log.content}</p>
+            </div>
+          `;
+          break;
+          
+        case 'tie-breaking':
+          content = `
+            <div class="bg-orange-50 border border-orange-300 rounded-lg p-4">
+              <h4 class="text-md font-semibold text-orange-900 mb-2">${log.title}</h4>
+              <p class="text-orange-800">${log.content}</p>
+            </div>
+          `;
+          break;
+          
+        case 'tie-breaking-step':
+          content = `
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 ml-4">
+              <h5 class="text-md font-semibold text-blue-900 mb-1">${log.title}</h5>
+              <pre class="text-sm text-blue-800 whitespace-pre-wrap">${log.content}</pre>
+            </div>
+          `;
+          break;
+          
+        case 'tie-breaking-result':
+          content = `
+            <div class="bg-green-50 border-l-4 border-green-500 p-4 ml-4">
+              <h5 class="text-md font-bold text-green-900 mb-1">${log.title}</h5>
+              <p class="text-green-800">${log.content}</p>
+            </div>
+          `;
+          break;
+          
+        case 'final-ranking':
+          content = `
+            <div class="bg-indigo-50 border-2 border-indigo-400 rounded-lg p-4">
+              <h4 class="text-lg font-bold text-indigo-900 mb-2">${log.title}</h4>
+              <pre class="text-sm text-indigo-800 whitespace-pre-wrap font-mono">${log.content}</pre>
+            </div>
+          `;
+          break;
+          
+        default:
+          content = `
+            <div class="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 class="text-md font-semibold text-gray-900 mb-2">${log.title || 'Log'}</h4>
+              <p class="text-gray-700">${log.content}</p>
+            </div>
+          `;
+      }
+      
+      return content;
+    }).join('<div class="my-4"></div>');
+  }
+
+  /**
+   * Hide modal (alias for closeModal)
+   */
+  hideModal(modalId) {
+    this.closeModal(modalId);
+  }
+
+  /**
    * Auto-refresh standings (called after match completion)
    */
   async autoRefreshStandings() {
@@ -6477,7 +6656,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * Calculate match result for a team (simplified version of backend logic)
+   * Calculate match result for a team (based on judge votes, same as backend)
    */
   calculateMatchResultForTeam(match, teamId) {
     const isTeamA = match.teamAId === teamId;
@@ -6488,73 +6667,91 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const opponentScores = match.scores?.filter(score => score.teamId === opponentId) || [];
     
     if (teamScores.length === 0 || opponentScores.length === 0) {
-      // No scores available, use simple winner logic
-      const isWinner = match.winnerId === teamId;
+      // No scores available, cannot determine result
       return {
-        result: isWinner ? 'W' : 'L',
-        isWinner,
+        result: '-',
+        isWinner: false,
         isDraw: false
       };
     }
     
-    // Calculate total scores using the same formula as backend
-    const teamTotal = teamScores.reduce((sum, score) => {
-      let total = 0;
-      
-      // Add criteria scores
-      if (score.criteriaScores) {
-        const criteriaScores = typeof score.criteriaScores === 'string' 
-          ? JSON.parse(score.criteriaScores) 
-          : score.criteriaScores;
-        total += Object.values(criteriaScores).reduce((s, value) => s + (value || 0), 0);
-      }
-      
-      // Add average of comment scores
-      if (score.commentScores) {
-        const commentScores = typeof score.commentScores === 'string' 
-          ? JSON.parse(score.commentScores) 
-          : score.commentScores;
-        if (Array.isArray(commentScores) && commentScores.length > 0) {
-          const commentAverage = commentScores.reduce((s, value) => s + (value || 0), 0) / commentScores.length;
-          total += commentAverage;
-        }
-      }
-      
-      return sum + total;
-    }, 0);
+    // Get unique judge IDs from match assignments
+    const judgeIds = new Set();
+    if (match.assignments && match.assignments.length > 0) {
+      match.assignments.forEach(assignment => judgeIds.add(assignment.judgeId));
+    }
     
-    const opponentTotal = opponentScores.reduce((sum, score) => {
-      let total = 0;
-      
-      // Add criteria scores
-      if (score.criteriaScores) {
-        const criteriaScores = typeof score.criteriaScores === 'string' 
-          ? JSON.parse(score.criteriaScores) 
-          : score.criteriaScores;
-        total += Object.values(criteriaScores).reduce((s, value) => s + (value || 0), 0);
-      }
-      
-      // Add average of comment scores
-      if (score.commentScores) {
-        const commentScores = typeof score.commentScores === 'string' 
-          ? JSON.parse(score.commentScores) 
-          : score.commentScores;
-        if (Array.isArray(commentScores) && commentScores.length > 0) {
-          const commentAverage = commentScores.reduce((s, value) => s + (value || 0), 0) / commentScores.length;
-          total += commentAverage;
-        }
-      }
-      
-      return sum + total;
-    }, 0);
+    if (judgeIds.size === 0) {
+      // No judge assignments, fall back to comparing total scores
+      return {
+        result: '-',
+        isWinner: false,
+        isDraw: false
+      };
+    }
     
-    // Determine result
-    if (teamTotal > opponentTotal) {
+    // Calculate judge votes (each judge votes based on their scores)
+    let teamVotes = 0;
+    let opponentVotes = 0;
+    
+    judgeIds.forEach(judgeId => {
+      // Get this judge's scores for both teams
+      const teamScore = teamScores.find(s => s.judgeId === judgeId);
+      const opponentScore = opponentScores.find(s => s.judgeId === judgeId);
+      
+      if (!teamScore || !opponentScore) {
+        return; // Skip this judge if scores are missing
+      }
+      
+      // Calculate total score for this judge using same formula as backend
+      const calculateTotal = (score) => {
+        let total = 0;
+        
+        // Add criteria scores
+        if (score.criteriaScores) {
+          const criteriaScores = typeof score.criteriaScores === 'string' 
+            ? JSON.parse(score.criteriaScores) 
+            : score.criteriaScores;
+          total += Object.values(criteriaScores).reduce((s, value) => s + (value || 0), 0);
+        }
+        
+        // Add average of comment scores
+        if (score.commentScores) {
+          const commentScores = typeof score.commentScores === 'string' 
+            ? JSON.parse(score.commentScores) 
+            : score.commentScores;
+          if (Array.isArray(commentScores) && commentScores.length > 0) {
+            const commentAverage = commentScores.reduce((s, value) => s + (value || 0), 0) / commentScores.length;
+            total += commentAverage;
+          }
+        }
+        
+        return total;
+      };
+      
+      const teamTotal = calculateTotal(teamScore);
+      const opponentTotal = calculateTotal(opponentScore);
+      
+      // This judge's vote
+      if (teamTotal > opponentTotal) {
+        teamVotes += 1;
+      } else if (opponentTotal > teamTotal) {
+        opponentVotes += 1;
+      } else {
+        // Tie - each team gets 0.5 votes
+        teamVotes += 0.5;
+        opponentVotes += 0.5;
+      }
+    });
+    
+    // Determine result based on votes
+    if (teamVotes > opponentVotes) {
       return { result: 'W', isWinner: true, isDraw: false };
-    } else if (teamTotal < opponentTotal) {
+    } else if (opponentVotes > teamVotes) {
       return { result: 'L', isWinner: false, isDraw: false };
     } else {
-      return { result: 'D', isWinner: false, isDraw: true };
+      // Equal votes = draw
+      return { result: 'T', isWinner: false, isDraw: true };
     }
   }
 
@@ -6592,23 +6789,28 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     }
 
     // Get detailed match information for this team
+    // Note: If match doesn't have scores/assignments data, we show placeholders
     const matchDetails = teamMatches.map(match => {
       const isTeamA = match.teamAId === teamId;
       const opponent = isTeamA ? 
         this.teams.find(t => t.id === match.teamBId) :
         this.teams.find(t => t.id === match.teamAId);
       
-      // Calculate match result using the same logic as backend
+      // Try to calculate match result using scores/assignments
       const matchResult = this.calculateMatchResultForTeam(match, teamId);
+      
+      // If no data available (result is '-'), scores haven't been submitted yet
+      const hasData = matchResult.result !== '-';
       
       return {
         match,
         opponent: opponent || { name: 'Unknown Team', school: '' },
-        result: matchResult.result,
+        result: matchResult.result, // Keep '-' as is, don't replace with 'N/A'
         isWinner: matchResult.isWinner,
         isDraw: matchResult.isDraw,
         round: match.roundNumber,
-        room: match.location || 'No location assigned'
+        room: match.location || 'No location assigned',
+        hasData: hasData
       };
     }).sort((a, b) => a.round - b.round);
 
@@ -6630,7 +6832,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               ${matchDetails.map(detail => `
-                <tr class="${detail.isWinner ? 'bg-green-50' : detail.isDraw ? 'bg-yellow-50' : 'bg-red-50'}">
+                <tr class="${!detail.hasData ? '' : detail.isWinner ? 'bg-green-50' : detail.isDraw ? 'bg-yellow-50' : 'bg-red-50'}">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900">Round ${detail.round}</td>
                   <td class="px-4 py-3">
                     <div class="text-sm font-medium text-gray-900">${detail.opponent.name}</div>
@@ -6638,11 +6840,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                   </td>
                   <td class="px-4 py-3 text-center">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      !detail.hasData ? 'bg-gray-100 text-gray-600' :
                       detail.isWinner ? 'bg-green-100 text-green-800' : 
                       detail.isDraw ? 'bg-yellow-100 text-yellow-800' : 
                       'bg-red-100 text-red-800'
                     }">
-                      ${detail.result}
+                      ${detail.hasData ? detail.result : '未评分'}
                     </span>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-500">${detail.room}</td>
@@ -6667,19 +6870,23 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         <!-- Summary Statistics -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
           <div class="text-center">
-            <div class="text-xl font-bold text-green-600">${matchDetails.filter(d => d.isWinner).length}</div>
+            <div class="text-xl font-bold text-green-600">${matchDetails.filter(d => d.hasData && d.isWinner).length}</div>
             <div class="text-xs text-gray-500">Wins</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-red-600">${matchDetails.filter(d => !d.isWinner && !d.isDraw).length}</div>
+            <div class="text-xl font-bold text-red-600">${matchDetails.filter(d => d.hasData && !d.isWinner && !d.isDraw).length}</div>
             <div class="text-xs text-gray-500">Losses</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-yellow-600">${matchDetails.filter(d => d.isDraw).length}</div>
+            <div class="text-xl font-bold text-yellow-600">${matchDetails.filter(d => d.hasData && d.isDraw).length}</div>
             <div class="text-xs text-gray-500">Draws</div>
           </div>
           <div class="text-center">
-            <div class="text-xl font-bold text-blue-600">${matchDetails.length > 0 ? ((matchDetails.filter(d => d.isWinner).length + matchDetails.filter(d => d.isDraw).length * 0.5) / matchDetails.length * 100).toFixed(1) : 0}%</div>
+            <div class="text-xl font-bold text-blue-600">${
+              matchDetails.filter(d => d.hasData).length > 0 ? 
+              ((matchDetails.filter(d => d.hasData && d.isWinner).length + matchDetails.filter(d => d.hasData && d.isDraw).length * 0.5) / matchDetails.filter(d => d.hasData).length * 100).toFixed(1) : 
+              0
+            }%</div>
             <div class="text-xs text-gray-500">Win Rate</div>
           </div>
         </div>

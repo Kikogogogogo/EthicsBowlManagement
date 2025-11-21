@@ -69,6 +69,7 @@ const ENDPOINTS = {
   },
   statistics: {
     eventStandings: (eventId) => `${API_BASE_URL}/events/${eventId}/standings`,
+    rankingLogs: (eventId) => `${API_BASE_URL}/events/${eventId}/standings/logs`,
     matchResults: (eventId, matchId) => `${API_BASE_URL}/events/${eventId}/matches/${matchId}/results`,
     eventStatistics: (eventId) => `${API_BASE_URL}/events/${eventId}/statistics`,
     roundResults: (eventId, roundNumber) => `${API_BASE_URL}/events/${eventId}/rounds/${roundNumber}/results`,
@@ -798,6 +799,13 @@ class StatisticsService {
    */
   async getEventStandings(eventId) {
     return this.api.get(ENDPOINTS.statistics.eventStandings(eventId));
+  }
+
+  /**
+   * Get ranking calculation logs for an event
+   */
+  async getRankingLogs(eventId) {
+    return this.api.get(ENDPOINTS.statistics.rankingLogs(eventId));
   }
 
   /**

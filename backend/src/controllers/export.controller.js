@@ -1,8 +1,8 @@
-const StatisticsService = require('../services/statistics.service');
+const statisticsService = require('../services/statistics.service');
 
 class ExportController {
   constructor() {
-    this.statisticsService = new StatisticsService();
+    this.statisticsService = statisticsService;
   }
 
   /**
@@ -167,6 +167,57 @@ class ExportController {
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Failed to get event standings',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * GET /events/:eventId/standings/logs
+   * 获取排名日志 - 详细的排名计算过程
+   */
+  getRankingLogs = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      // First, ensure statistics are calculated (this will populate the logs)
+      await this.statisticsService.getEventStatistics(eventId);
+
+      // Then retrieve the logs
+      const logs = this.statisticsService.getRankingLogs(eventId);
+
+      res.json({
+        success: true,
+        data: {
+          eventId,
+          logs,
+          timestamp: new Date().toISOString()
+        },
+        message: 'Ranking logs retrieved successfully'
+      });
+
+    } catch (error) {
+      console.error('Get ranking logs error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'RANKING_LOGS_FETCH_FAILED';
+      
+      if (error.message.includes('Event not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to get ranking logs',
         error: errorCode
       });
     }
