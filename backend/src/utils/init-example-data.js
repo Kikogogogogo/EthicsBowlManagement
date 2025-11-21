@@ -107,7 +107,7 @@ async function createExampleTournament() {
           respect: 20
         }),
         roundNames: JSON.stringify(Array.from({ length: TOTAL_ROUNDS }, (_, i) => `Round ${i + 1}`)),
-        allowedJudges: { set: judges.map(j => j.id) }
+        allowedJudges: JSON.stringify(judges.map(j => j.id)) // Fix: Convert to JSON string
       }
     });
 

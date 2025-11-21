@@ -79,6 +79,8 @@ if (config.nodeEnv === 'production') {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    // Trust proxy configuration for deployment platforms like Render
+    validate: { trustProxy: false } // Disable trust proxy validation for cloud deployments
   });
   app.use(limiter);
   console.log('Rate limiting enabled for production');
