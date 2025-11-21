@@ -3099,7 +3099,7 @@ class EventWorkspacePage {
       <div id="rankingLogsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4">
           <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
-            <h3 class="text-lg font-medium text-gray-900">排名计算日志</h3>
+            <h3 class="text-lg font-medium text-gray-900">Ranking Calculation Log</h3>
             <button onclick="window.eventWorkspacePage.hideModal('rankingLogsModal')" class="text-gray-400 hover:text-gray-600">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
