@@ -179,6 +179,11 @@ async function startServer() {
       process.exit(1);
     }
     
+    // Initialize example tournament data (if not exists)
+    console.log('🎬 Checking for example tournament data...');
+    const { initializeExampleData } = require('./utils/init-example-data');
+    await initializeExampleData();
+    
     // Start HTTP server with Socket.IO
     server.listen(config.port, () => {
       console.log(`Server running on port ${config.port}`);
