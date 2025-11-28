@@ -161,3 +161,16 @@ model PreApprovedEmail {
 
   @@map("pre_approved_emails")
 }
+
+model VoteLog {
+  id          String   @id @default(uuid())
+  eventId     String   @map("event_id")
+  teamId      String   @map("team_id")
+  adjustment  Float    // Positive or negative adjustment value
+  adminId     String   @map("admin_id")
+  adminName   String   @map("admin_name")
+  reason      String?  // Optional reason for adjustment
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("vote_logs")
+}

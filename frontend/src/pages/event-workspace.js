@@ -1746,6 +1746,11 @@ class EventWorkspacePage {
               <button onclick="window.eventWorkspacePage.showRankingLogs()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium">
                 📋 Log
               </button>
+              ${isAdmin ? `
+                <button onclick="window.eventWorkspacePage.showVoteAdjustmentModal()" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-medium">
+                  ⚖️ Vote Adjustment
+                </button>
+              ` : ''}
               <button onclick="window.eventWorkspacePage.refreshStandings()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium">
                 🔄 Refresh
               </button>
@@ -2726,8 +2731,10 @@ class EventWorkspacePage {
             
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700">Moderator</label>
-                <select name="moderatorId" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" id="editModeratorId">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Moderator</label>
+                
+                <!-- Quick select from loaded moderators -->
+                <select name="moderatorId" class="mb-3 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" id="editModeratorId">
                   <option value="">Select Moderator</option>
                   ${this.users && this.users.length > 0 ? 
                     this.getFilteredUsers('moderator').map(user => 
@@ -2736,6 +2743,30 @@ class EventWorkspacePage {
                     '<option disabled>No moderators available</option>'
                   }
                 </select>
+                
+                <!-- Or search all moderators in system (Admin only) -->
+                <div class="relative">
+                  <div class="text-xs text-gray-500 mb-1">Or search all moderators/admins:</div>
+                  <div class="relative">
+                    <input 
+                      type="text" 
+                      id="moderatorSearchInput" 
+                      placeholder="Search moderators and admins..." 
+                      class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm pl-3 pr-10"
+                      autocomplete="off"
+                    />
+                    <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                  </div>
+                  
+                  <!-- Search Results Dropdown -->
+                  <div id="moderatorSearchResults" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div class="p-2 text-sm text-gray-500 text-center">
+                      Start typing to search for moderators...
+                    </div>
+                  </div>
+                </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700">Scheduled Time</label>
@@ -2758,7 +2789,9 @@ class EventWorkspacePage {
               <!-- Add Judge Section -->
               <div class="mb-4">
                 <h4 class="text-sm font-medium text-gray-700 mb-2">Add Judge</h4>
-                <div class="flex gap-2 items-end">
+                
+                <!-- Quick select from loaded judges -->
+                <div class="flex gap-2 items-end mb-3">
                   <div class="flex-1">
                     <select id="availableJudgesSelect" class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm">
                       <option value="">Select a judge to add</option>
@@ -2773,6 +2806,32 @@ class EventWorkspacePage {
                   <button type="button" id="addJudgeBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium whitespace-nowrap">
                     Add
                   </button>
+                </div>
+                
+                <!-- Or search all judges in system (Admin only) -->
+                <div class="relative">
+                  <div class="text-xs text-gray-500 mb-1">Or search all judges/admins in system:</div>
+                  <div class="flex gap-2 items-center">
+                    <div class="flex-1 relative">
+                      <input 
+                        type="text" 
+                        id="judgeSearchInput" 
+                        placeholder="Search judges and admins by name or email..." 
+                        class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm pl-3 pr-10"
+                        autocomplete="off"
+                      />
+                      <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <!-- Search Results Dropdown -->
+                  <div id="judgeSearchResults" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div class="p-2 text-sm text-gray-500 text-center">
+                      Start typing to search for judges...
+                    </div>
+                  </div>
                 </div>
               </div>
               
@@ -3099,14 +3158,39 @@ class EventWorkspacePage {
       <div id="rankingLogsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-4">
           <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
-            <h3 class="text-lg font-medium text-gray-900">Ranking Calculation Log</h3>
+            <h3 class="text-lg font-medium text-gray-900">Logs</h3>
             <button onclick="window.eventWorkspacePage.hideModal('rankingLogsModal')" class="text-gray-400 hover:text-gray-600">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
             </button>
           </div>
+          
+          <!-- Tabs -->
+          <div class="border-b border-gray-200">
+            <nav class="flex -mb-px">
+              <button 
+                id="rankingLogTab"
+                onclick="window.eventWorkspacePage.switchLogTab('ranking')"
+                class="log-tab py-4 px-6 text-sm font-medium border-b-2 border-transparent hover:border-gray-300 transition-colors"
+              >
+                Ranking Calculation
+              </button>
+              <button 
+                id="voteLogTab"
+                onclick="window.eventWorkspacePage.switchLogTab('vote')"
+                class="log-tab py-4 px-6 text-sm font-medium border-b-2 border-transparent hover:border-gray-300 transition-colors"
+              >
+                Vote Adjustments
+              </button>
+            </nav>
+          </div>
+          
           <div id="rankingLogsContent" class="p-6 max-h-[70vh] overflow-y-auto">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+          </div>
+          
+          <div id="voteLogsContent" class="p-6 max-h-[70vh] overflow-y-auto hidden">
             <div class="text-gray-500 text-center py-8">Loading...</div>
           </div>
         </div>
@@ -3817,6 +3901,9 @@ class EventWorkspacePage {
 
       // Initialize judge selection
       this.initializeEditJudgeSelection(match);
+      
+      // Initialize moderator search
+      this.setupModeratorSearchEventListeners();
 
       this.showModal('editMatchModal');
       
@@ -3832,11 +3919,17 @@ class EventWorkspacePage {
   initializeEditJudgeSelection(match) {
     const currentJudgesList = document.getElementById('currentJudgesList');
     const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    const judgeSearchInput = document.getElementById('judgeSearchInput');
     const hiddenInput = document.getElementById('editJudgeIds');
     const counter = document.getElementById('editJudgeSelectionCounter');
     
     // Clear current judges list
     currentJudgesList.innerHTML = '';
+    
+    // Clear search input
+    if (judgeSearchInput) {
+      judgeSearchInput.value = '';
+    }
     
     // Store current judge IDs
     this.currentEditJudgeIds = [];
@@ -3857,7 +3950,7 @@ class EventWorkspacePage {
     // Update available judges dropdown
     this.updateAvailableJudgesDropdown();
     
-    // Add event listeners
+    // Add event listeners for both select and search
     this.setupEditJudgeEventListeners();
   }
 
@@ -3937,13 +4030,16 @@ class EventWorkspacePage {
    */
   updateAvailableJudgesDropdown() {
     const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    if (!availableJudgesSelect) return;
+    
     const options = availableJudgesSelect.querySelectorAll('option[value]');
     
     options.forEach(option => {
       const judgeId = option.value;
       if (this.currentEditJudgeIds.includes(judgeId)) {
         option.disabled = true;
-        option.textContent = option.textContent + ' (Already assigned)';
+        const originalText = option.getAttribute('data-name') + ' (' + option.getAttribute('data-email') + ')';
+        option.textContent = originalText + ' (Already assigned)';
       } else {
         option.disabled = false;
         option.textContent = option.getAttribute('data-name') + ' (' + option.getAttribute('data-email') + ')';
@@ -3957,36 +4053,397 @@ class EventWorkspacePage {
   setupEditJudgeEventListeners() {
     const addJudgeBtn = document.getElementById('addJudgeBtn');
     const availableJudgesSelect = document.getElementById('availableJudgesSelect');
+    const judgeSearchInput = document.getElementById('judgeSearchInput');
+    const judgeSearchResults = document.getElementById('judgeSearchResults');
     
-    // Add judge button
-    addJudgeBtn.addEventListener('click', () => {
-      const selectedJudgeId = availableJudgesSelect.value;
-      if (!selectedJudgeId) return;
+    // Add judge button for select dropdown
+    if (addJudgeBtn && availableJudgesSelect) {
+      // Remove existing event listeners by cloning
+      const newAddJudgeBtn = addJudgeBtn.cloneNode(true);
+      addJudgeBtn.parentNode.replaceChild(newAddJudgeBtn, addJudgeBtn);
       
-      const selectedOption = availableJudgesSelect.querySelector(`option[value="${selectedJudgeId}"]`);
-      const judge = {
-        id: selectedJudgeId,
-        firstName: selectedOption.getAttribute('data-name').split(' ')[0],
-        lastName: selectedOption.getAttribute('data-name').split(' ').slice(1).join(' '),
-        email: selectedOption.getAttribute('data-email')
-      };
+      newAddJudgeBtn.addEventListener('click', () => {
+        const selectedJudgeId = availableJudgesSelect.value;
+        if (!selectedJudgeId) return;
+        
+        const selectedOption = availableJudgesSelect.querySelector(`option[value="${selectedJudgeId}"]`);
+        if (!selectedOption) return;
+        
+        const judge = {
+          id: selectedJudgeId,
+          firstName: selectedOption.getAttribute('data-name').split(' ')[0],
+          lastName: selectedOption.getAttribute('data-name').split(' ').slice(1).join(' '),
+          email: selectedOption.getAttribute('data-email')
+        };
+        
+        // Add to current judges
+        this.currentEditJudgeIds.push(selectedJudgeId);
+        
+        // Update hidden input
+        document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
+        
+        // Update counter
+        document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+        
+        // Update UI
+        this.addJudgeToCurrentList(judge);
+        this.updateAvailableJudgesDropdown();
+        
+        // Reset selection
+        availableJudgesSelect.value = '';
+      });
+    }
+    
+    // Search input for searching all judges
+    if (judgeSearchInput && judgeSearchResults) {
+      // Remove existing event listeners by replacing the element
+      const newSearchInput = judgeSearchInput.cloneNode(true);
+      judgeSearchInput.parentNode.replaceChild(newSearchInput, judgeSearchInput);
       
-      // Add to current judges
-      this.currentEditJudgeIds.push(selectedJudgeId);
+      let searchTimeout = null;
       
-      // Update hidden input
-      document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
+      // Add search input listener
+      newSearchInput.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.trim();
+        
+        // Clear previous timeout
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+        
+        if (searchTerm.length === 0) {
+          judgeSearchResults.classList.add('hidden');
+          return;
+        }
+        
+        // Debounce search
+        searchTimeout = setTimeout(async () => {
+          await this.searchJudgesForMatch(searchTerm);
+        }, 300);
+      });
       
-      // Update counter
-      document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+      // Close search results when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!newSearchInput.contains(e.target) && !judgeSearchResults.contains(e.target)) {
+          judgeSearchResults.classList.add('hidden');
+        }
+      });
       
-      // Update UI
-      this.addJudgeToCurrentList(judge);
-      this.updateAvailableJudgesDropdown();
+      // Show search results when focusing on input
+      newSearchInput.addEventListener('focus', () => {
+        if (newSearchInput.value.trim().length > 0) {
+          judgeSearchResults.classList.remove('hidden');
+        }
+      });
+    }
+  }
+
+  /**
+   * Search judges for match
+   */
+  async searchJudgesForMatch(searchTerm) {
+    const judgeSearchResults = document.getElementById('judgeSearchResults');
+    
+    try {
+      // Check if user is admin
+      const effectiveRole = this.getEffectiveRole();
+      if (effectiveRole !== 'admin') {
+        judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Only admins can search and add judges</div>';
+        judgeSearchResults.classList.remove('hidden');
+        return;
+      }
       
-      // Reset selection
-      availableJudgesSelect.value = '';
+      // Show loading state
+      judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
+      judgeSearchResults.classList.remove('hidden');
+      
+      // Search for judges and admins using the UserService API
+      // We need to search both roles, so we'll make two requests and combine results
+      const [judgeResults, adminResults] = await Promise.all([
+        this.userService.getAllUsers({ 
+          role: 'judge', 
+          search: searchTerm 
+        }, { page: 1, limit: 20 }),
+        this.userService.getAllUsers({ 
+          role: 'admin', 
+          search: searchTerm 
+        }, { page: 1, limit: 20 })
+      ]);
+      
+      // Combine and deduplicate results
+      const judgesMap = new Map();
+      [...(judgeResults.users || []), ...(adminResults.users || [])].forEach(user => {
+        if (!judgesMap.has(user.id)) {
+          judgesMap.set(user.id, user);
+        }
+      });
+      const judges = Array.from(judgesMap.values());
+      
+      if (judges.length === 0) {
+        judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No judges or admins found</div>';
+        return;
+      }
+      
+      // Filter out already assigned judges
+      const availableJudges = judges.filter(judge => !this.currentEditJudgeIds.includes(judge.id));
+      
+      if (availableJudges.length === 0) {
+        judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">All matching users are already assigned</div>';
+        return;
+      }
+      
+      // Render search results with role badges
+      judgeSearchResults.innerHTML = availableJudges.map(judge => `
+        <div 
+          class="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 judge-search-result"
+          data-judge-id="${judge.id}"
+          data-judge-firstname="${this.escapeHtml(judge.firstName)}"
+          data-judge-lastname="${this.escapeHtml(judge.lastName)}"
+          data-judge-email="${this.escapeHtml(judge.email)}"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-medium text-gray-900">${this.escapeHtml(judge.firstName)} ${this.escapeHtml(judge.lastName)}</div>
+                <span class="px-2 py-0.5 text-xs font-medium rounded ${judge.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
+                  ${judge.role === 'admin' ? 'Admin' : 'Judge'}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500">${this.escapeHtml(judge.email)}</div>
+            </div>
+            <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+      
+      // Add click event listeners to search results
+      judgeSearchResults.querySelectorAll('.judge-search-result').forEach(element => {
+        element.addEventListener('click', () => {
+          const judgeId = element.getAttribute('data-judge-id');
+          const firstName = element.getAttribute('data-judge-firstname');
+          const lastName = element.getAttribute('data-judge-lastname');
+          const email = element.getAttribute('data-judge-email');
+          this.addJudgeFromSearch(judgeId, firstName, lastName, email);
+        });
+      });
+      
+    } catch (error) {
+      console.error('Error searching judges:', error);
+      judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Error searching judges</div>';
+    }
+  }
+
+  /**
+   * Add judge from search results
+   */
+  addJudgeFromSearch(judgeId, firstName, lastName, email) {
+    // Check if user is admin
+    const effectiveRole = this.getEffectiveRole();
+    if (effectiveRole !== 'admin') {
+      this.ui.showError('Permission Denied', 'Only admins can add judges to matches');
+      return;
+    }
+    
+    const judge = {
+      id: judgeId,
+      firstName: firstName,
+      lastName: lastName,
+      email: email
+    };
+    
+    // Check if already added
+    if (this.currentEditJudgeIds.includes(judgeId)) {
+      return;
+    }
+    
+    // Add to current judges
+    this.currentEditJudgeIds.push(judgeId);
+    
+    // Update hidden input
+    document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
+    
+    // Update counter
+    document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+    
+    // Update UI
+    this.addJudgeToCurrentList(judge);
+    
+    // Clear search input and hide results
+    const judgeSearchInput = document.getElementById('judgeSearchInput');
+    const judgeSearchResults = document.getElementById('judgeSearchResults');
+    if (judgeSearchInput) {
+      judgeSearchInput.value = '';
+    }
+    if (judgeSearchResults) {
+      judgeSearchResults.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Setup event listeners for moderator search
+   */
+  setupModeratorSearchEventListeners() {
+    const moderatorSearchInput = document.getElementById('moderatorSearchInput');
+    const moderatorSearchResults = document.getElementById('moderatorSearchResults');
+    
+    if (!moderatorSearchInput || !moderatorSearchResults) return;
+    
+    // Remove existing event listeners by replacing the element
+    const newSearchInput = moderatorSearchInput.cloneNode(true);
+    moderatorSearchInput.parentNode.replaceChild(newSearchInput, moderatorSearchInput);
+    
+    let searchTimeout = null;
+    
+    // Add search input listener
+    newSearchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.trim();
+      
+      // Clear previous timeout
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+      
+      if (searchTerm.length === 0) {
+        moderatorSearchResults.classList.add('hidden');
+        return;
+      }
+      
+      // Debounce search
+      searchTimeout = setTimeout(async () => {
+        await this.searchModeratorsForMatch(searchTerm);
+      }, 300);
     });
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!newSearchInput.contains(e.target) && !moderatorSearchResults.contains(e.target)) {
+        moderatorSearchResults.classList.add('hidden');
+      }
+    });
+    
+    // Show search results when focusing on input
+    newSearchInput.addEventListener('focus', () => {
+      if (newSearchInput.value.trim().length > 0) {
+        moderatorSearchResults.classList.remove('hidden');
+      }
+    });
+  }
+
+  /**
+   * Search moderators for match
+   */
+  async searchModeratorsForMatch(searchTerm) {
+    const moderatorSearchResults = document.getElementById('moderatorSearchResults');
+    
+    try {
+      // Check if user is admin
+      const effectiveRole = this.getEffectiveRole();
+      if (effectiveRole !== 'admin') {
+        moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Only admins can search and add moderators</div>';
+        moderatorSearchResults.classList.remove('hidden');
+        return;
+      }
+      
+      // Show loading state
+      moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
+      moderatorSearchResults.classList.remove('hidden');
+      
+      // Search for moderators and admins using the UserService API
+      const [moderatorResults, adminResults] = await Promise.all([
+        this.userService.getAllUsers({ 
+          role: 'moderator', 
+          search: searchTerm 
+        }, { page: 1, limit: 20 }),
+        this.userService.getAllUsers({ 
+          role: 'admin', 
+          search: searchTerm 
+        }, { page: 1, limit: 20 })
+      ]);
+      
+      // Combine and deduplicate results
+      const moderatorsMap = new Map();
+      [...(moderatorResults.users || []), ...(adminResults.users || [])].forEach(user => {
+        if (!moderatorsMap.has(user.id)) {
+          moderatorsMap.set(user.id, user);
+        }
+      });
+      const moderators = Array.from(moderatorsMap.values());
+      
+      if (moderators.length === 0) {
+        moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No moderators or admins found</div>';
+        return;
+      }
+      
+      // Render search results with role badges
+      moderatorSearchResults.innerHTML = moderators.map(moderator => `
+        <div 
+          class="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 moderator-search-result"
+          data-moderator-id="${moderator.id}"
+          data-moderator-firstname="${this.escapeHtml(moderator.firstName)}"
+          data-moderator-lastname="${this.escapeHtml(moderator.lastName)}"
+          data-moderator-email="${this.escapeHtml(moderator.email)}"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-medium text-gray-900">${this.escapeHtml(moderator.firstName)} ${this.escapeHtml(moderator.lastName)}</div>
+                <span class="px-2 py-0.5 text-xs font-medium rounded ${moderator.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}">
+                  ${moderator.role === 'admin' ? 'Admin' : 'Moderator'}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500">${this.escapeHtml(moderator.email)}</div>
+            </div>
+            <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+      
+      // Add click event listeners to search results
+      moderatorSearchResults.querySelectorAll('.moderator-search-result').forEach(element => {
+        element.addEventListener('click', () => {
+          const moderatorId = element.getAttribute('data-moderator-id');
+          const firstName = element.getAttribute('data-moderator-firstname');
+          const lastName = element.getAttribute('data-moderator-lastname');
+          this.selectModeratorFromSearch(moderatorId, firstName, lastName);
+        });
+      });
+      
+    } catch (error) {
+      console.error('Error searching moderators:', error);
+      moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Error searching moderators</div>';
+    }
+  }
+
+  /**
+   * Select moderator from search results
+   */
+  selectModeratorFromSearch(moderatorId, firstName, lastName) {
+    // Check if user is admin
+    const effectiveRole = this.getEffectiveRole();
+    if (effectiveRole !== 'admin') {
+      this.ui.showError('Permission Denied', 'Only admins can select moderators');
+      return;
+    }
+    
+    // Update the moderator select dropdown
+    const moderatorSelect = document.getElementById('editModeratorId');
+    if (moderatorSelect) {
+      moderatorSelect.value = moderatorId;
+    }
+    
+    // Clear search input and hide results
+    const moderatorSearchInput = document.getElementById('moderatorSearchInput');
+    const moderatorSearchResults = document.getElementById('moderatorSearchResults');
+    if (moderatorSearchInput) {
+      moderatorSearchInput.value = '';
+    }
+    if (moderatorSearchResults) {
+      moderatorSearchResults.classList.add('hidden');
+    }
   }
 
   /**
@@ -6412,7 +6869,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Show modal
       this.showModal('rankingLogsModal');
       
-      // Set loading state
+      // Set active tab to ranking by default
+      this.switchLogTab('ranking');
+      
+      // Set loading state for ranking logs
       const logsContent = document.getElementById('rankingLogsContent');
       if (logsContent) {
         logsContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
@@ -6453,6 +6913,139 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         logsContent.innerHTML = '<div class="text-red-500 text-center py-8">Failed to load: ' + error.message + '</div>';
       }
     }
+  }
+
+  /**
+   * Switch between log tabs
+   */
+  async switchLogTab(tab) {
+    const rankingLogTab = document.getElementById('rankingLogTab');
+    const voteLogTab = document.getElementById('voteLogTab');
+    const rankingLogsContent = document.getElementById('rankingLogsContent');
+    const voteLogsContent = document.getElementById('voteLogsContent');
+    
+    // Update tab styles
+    const allTabs = document.querySelectorAll('.log-tab');
+    allTabs.forEach(t => {
+      t.classList.remove('border-purple-600', 'text-purple-600');
+      t.classList.add('text-gray-500');
+    });
+    
+    if (tab === 'ranking') {
+      rankingLogTab.classList.remove('text-gray-500');
+      rankingLogTab.classList.add('border-purple-600', 'text-purple-600');
+      rankingLogsContent.classList.remove('hidden');
+      voteLogsContent.classList.add('hidden');
+    } else if (tab === 'vote') {
+      voteLogTab.classList.remove('text-gray-500');
+      voteLogTab.classList.add('border-purple-600', 'text-purple-600');
+      voteLogsContent.classList.remove('hidden');
+      rankingLogsContent.classList.add('hidden');
+      
+      // Load vote logs if not already loaded
+      if (voteLogsContent.querySelector('.text-gray-500')) {
+        await this.loadVoteLogs();
+      }
+    }
+  }
+
+  /**
+   * Load vote logs
+   */
+  async loadVoteLogs() {
+    const voteLogsContent = document.getElementById('voteLogsContent');
+    
+    try {
+      voteLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
+      
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/vote-logs`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log('📊 [VoteLogs] API Response:', data);
+      console.log('📊 [VoteLogs] Logs array:', data.data?.logs);
+      console.log('📊 [VoteLogs] Number of logs:', data.data?.logs?.length || 0);
+      
+      if (data.success && data.data && data.data.logs) {
+        voteLogsContent.innerHTML = this.renderVoteLogs(data.data.logs);
+      } else {
+        voteLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">No vote adjustments found</div>';
+      }
+      
+    } catch (error) {
+      console.error('Error loading vote logs:', error);
+      voteLogsContent.innerHTML = '<div class="text-red-500 text-center py-8">Failed to load vote logs</div>';
+    }
+  }
+
+  /**
+   * Render vote logs
+   */
+  renderVoteLogs(logs) {
+    console.log('🎨 [renderVoteLogs] Called with logs:', logs);
+    console.log('🎨 [renderVoteLogs] Logs type:', typeof logs);
+    console.log('🎨 [renderVoteLogs] Logs is array:', Array.isArray(logs));
+    console.log('🎨 [renderVoteLogs] Logs length:', logs?.length);
+    
+    if (!logs || logs.length === 0) {
+      return '<div class="text-gray-500 text-center py-8">No vote adjustments have been made yet</div>';
+    }
+
+    const html = `
+      <div class="space-y-3">
+        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+          <h4 class="text-lg font-semibold text-purple-900 mb-2">Vote Adjustment History</h4>
+          <p class="text-sm text-purple-800">This log shows all manual vote adjustments made by administrators.</p>
+        </div>
+        
+        ${logs.map(log => {
+          console.log('🎨 [renderVoteLogs] Rendering log:', log);
+          const adjustmentColor = log.adjustment > 0 ? 'text-green-600' : 'text-red-600';
+          const adjustmentSign = log.adjustment > 0 ? '+' : '';
+          const adjustmentBg = log.adjustment > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200';
+          
+          return `
+            <div class="border ${adjustmentBg} rounded-lg p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-2">
+                    <span class="font-semibold text-gray-900">${this.escapeHtml(log.teamName)}</span>
+                    <span class="px-2 py-1 text-sm font-bold ${adjustmentColor} rounded">
+                      ${adjustmentSign}${log.adjustment} vote${Math.abs(log.adjustment) !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    <div>Admin: <span class="font-medium">${this.escapeHtml(log.adminName)}</span></div>
+                    <div>Time: <span class="font-medium">${new Date(log.createdAt).toLocaleString()}</span></div>
+                    ${log.reason ? `<div class="mt-1">Reason: <span class="italic">${this.escapeHtml(log.reason)}</span></div>` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    
+    console.log('🎨 [renderVoteLogs] Generated HTML length:', html.length);
+    return html;
   }
 
   /**
@@ -8883,6 +9476,196 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       'conclusion': 'Conclusion'
     };
     return stageNames[stage] || stage;
+  }
+
+  /**
+   * Show vote adjustment modal
+   */
+  async showVoteAdjustmentModal() {
+    try {
+      // Get current standings
+      const standingsData = await this.getEventStandings();
+      
+      if (!standingsData?.standings || standingsData.standings.length === 0) {
+        this.ui.showError('Error', 'No teams available for vote adjustment');
+        return;
+      }
+
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-300">
+              <h3 class="text-lg font-medium text-gray-900">Vote Adjustment</h3>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+              <p class="text-sm text-gray-600 mb-4">Select a team and adjust their votes:</p>
+              
+              <div class="space-y-4">
+                ${standingsData.standings.map(standing => `
+                  <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                      <div class="flex-1">
+                        <div class="font-medium text-gray-900">${this.escapeHtml(standing.team.name)}</div>
+                        <div class="text-sm text-gray-500 mt-1">
+                          Current Votes: <span class="font-medium" id="team-votes-${standing.team.id}">${standing.votes || 0}</span>
+                        </div>
+                      </div>
+                      <div class="flex items-center space-x-3">
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustVote('${standing.team.id}', -1)"
+                          class="w-10 h-10 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-full font-bold transition-colors"
+                          title="Decrease vote"
+                        >
+                          −
+                        </button>
+                        <div class="w-20 text-center">
+                          <input 
+                            type="number" 
+                            id="vote-adjustment-${standing.team.id}" 
+                            value="0" 
+                            class="w-full text-center border-gray-300 rounded-md text-sm"
+                            step="0.5"
+                          />
+                        </div>
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustVote('${standing.team.id}', 1)"
+                          class="w-10 h-10 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-full font-bold transition-colors"
+                          title="Increase vote"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button 
+                onclick="window.eventWorkspacePage.closeVoteAdjustmentModal()" 
+                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              <button 
+                onclick="window.eventWorkspacePage.applyVoteAdjustments()" 
+                class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md"
+              >
+                Apply Adjustments
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('voteAdjustmentModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'voteAdjustmentModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing vote adjustment modal:', error);
+      this.ui.showError('Error', 'Unable to show vote adjustment interface');
+    }
+  }
+
+  /**
+   * Close vote adjustment modal
+   */
+  closeVoteAdjustmentModal() {
+    const modal = document.getElementById('voteAdjustmentModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Adjust vote for a team (using + or - buttons)
+   */
+  adjustVote(teamId, delta) {
+    const input = document.getElementById(`vote-adjustment-${teamId}`);
+    if (input) {
+      const currentValue = parseFloat(input.value) || 0;
+      input.value = currentValue + delta;
+    }
+  }
+
+  /**
+   * Apply vote adjustments
+   */
+  async applyVoteAdjustments() {
+    try {
+      // Collect all adjustments
+      const adjustments = [];
+      const inputs = document.querySelectorAll('[id^="vote-adjustment-"]');
+      
+      inputs.forEach(input => {
+        const adjustment = parseFloat(input.value) || 0;
+        if (adjustment !== 0) {
+          const teamId = input.id.replace('vote-adjustment-', '');
+          adjustments.push({
+            teamId,
+            adjustment
+          });
+        }
+      });
+
+      if (adjustments.length === 0) {
+        this.ui.showError('Error', 'No adjustments to apply');
+        return;
+      }
+
+      this.ui.showLoading('Applying vote adjustments...');
+
+      // Call backend API to apply adjustments
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/vote-adjustments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ adjustments })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to apply vote adjustments');
+      }
+
+      const result = await response.json();
+
+      this.ui.showSuccess('Success', result.message || 'Vote adjustments applied successfully');
+
+      // Close modal
+      this.closeVoteAdjustmentModal();
+
+      // Refresh standings
+      await this.refreshStandings();
+
+    } catch (error) {
+      console.error('Error applying vote adjustments:', error);
+      this.ui.showError('Error', error.message || 'Failed to apply vote adjustments');
+    } finally {
+      this.ui.hideLoading();
+    }
+  }
+
+  /**
+   * Escape HTML special characters to prevent XSS
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 

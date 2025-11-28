@@ -794,6 +794,124 @@ class EventService {
       throw new Error('Failed to get round schedule');
     }
   }
+
+  /**
+   * Apply vote adjustments to teams
+   * @param {string} eventId - Event ID
+   * @param {Array} adjustments - Array of {teamId, adjustment}
+   * @param {string} adminId - Admin ID
+   * @param {string} adminName - Admin name
+   * @returns {Object} Result
+   */
+  async applyVoteAdjustments(eventId, adjustments, adminId, adminName) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Check if VoteLog table exists
+      try {
+        // Create vote logs for each adjustment
+        const voteLogs = [];
+        for (const { teamId, adjustment } of adjustments) {
+          // Verify team belongs to this event
+          const team = await prisma.team.findFirst({
+            where: { 
+              id: teamId,
+              eventId: eventId
+            }
+          });
+
+          if (!team) {
+            throw new Error(`Team ${teamId} not found in this event`);
+          }
+
+          // Create vote log entry
+          const voteLog = await prisma.voteLog.create({
+            data: {
+              eventId,
+              teamId,
+              adjustment: parseFloat(adjustment),
+              adminId,
+              adminName
+            }
+          });
+
+          voteLogs.push(voteLog);
+        }
+
+        return {
+          adjustmentsApplied: voteLogs.length,
+          logs: voteLogs
+        };
+      } catch (dbError) {
+        if (dbError.message && dbError.message.includes('does not exist')) {
+          throw new Error('Vote adjustment feature is not available. Please run database migrations first.');
+        }
+        throw dbError;
+      }
+    } catch (error) {
+      console.error('Error applying vote adjustments:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get vote adjustment logs for an event
+   * @param {string} eventId - Event ID
+   * @returns {Array} Vote logs
+   */
+  async getVoteLogs(eventId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Get all vote logs for this event (gracefully handle if table doesn't exist)
+      try {
+        const logs = await prisma.voteLog.findMany({
+          where: { eventId },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        // Get team names for each log
+        const logsWithTeamNames = await Promise.all(
+          logs.map(async (log) => {
+            const team = await prisma.team.findUnique({
+              where: { id: log.teamId },
+              select: { name: true }
+            });
+            
+            return {
+              ...log,
+              teamName: team?.name || 'Unknown Team'
+            };
+          })
+        );
+
+        return logsWithTeamNames;
+      } catch (dbError) {
+        if (dbError.message && dbError.message.includes('does not exist')) {
+          console.log('VoteLog table not found, returning empty logs');
+          return [];
+        }
+        throw dbError;
+      }
+    } catch (error) {
+      console.error('Error getting vote logs:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = EventService; 

@@ -91,4 +91,16 @@ router.put('/:eventId/round-schedules', requireRole('admin'), requireEventAccess
  */
 router.get('/:eventId/round-schedules/:roundNumber', requireEventAccess('eventId'), eventController.getRoundSchedule);
 
+/**
+ * POST /events/:eventId/vote-adjustments
+ * Apply vote adjustments to teams (Admin only)
+ */
+router.post('/:eventId/vote-adjustments', requireRole('admin'), requireEventAccess('eventId'), eventController.applyVoteAdjustments);
+
+/**
+ * GET /events/:eventId/vote-logs
+ * Get vote adjustment logs (Admin only)
+ */
+router.get('/:eventId/vote-logs', requireRole('admin'), requireEventAccess('eventId'), eventController.getVoteLogs);
+
 module.exports = router; 

@@ -49,8 +49,28 @@ class StatisticsService {
         throw new Error('Event not found');
       }
 
+      // Get vote adjustments for this event (gracefully handle if table doesn't exist yet)
+      let voteAdjustments = [];
+      try {
+        voteAdjustments = await prisma.voteLog.findMany({
+          where: { eventId }
+        });
+      } catch (error) {
+        console.log('VoteLog table not found, skipping vote adjustments:', error.message);
+        // Table doesn't exist yet, continue without vote adjustments
+      }
+
+      // Calculate total adjustments per team
+      const teamAdjustments = {};
+      voteAdjustments.forEach(log => {
+        if (!teamAdjustments[log.teamId]) {
+          teamAdjustments[log.teamId] = 0;
+        }
+        teamAdjustments[log.teamId] += log.adjustment;
+      });
+
       // Calculate team statistics with detailed logging
-      const { standings: teamStats, logs } = this.calculateTeamStandings(event.teams, event.matches);
+      const { standings: teamStats, logs } = this.calculateTeamStandings(event.teams, event.matches, teamAdjustments);
       
       // Store logs for this event
       this.rankingLogs.set(eventId, logs);
@@ -100,9 +120,10 @@ class StatisticsService {
    * Calculate team rankings based on Partial Round-Robin rules with detailed logging
    * @param {Array} teams - List of teams
    * @param {Array} matches - List of matches
+   * @param {Object} voteAdjustments - Vote adjustments per team {teamId: adjustment}
    * @returns {Object} { standings: Array, logs: Array }
    */
-  calculateTeamStandings(teams, matches) {
+  calculateTeamStandings(teams, matches, voteAdjustments = {}) {
     const logs = [];
     const completedMatches = matches.filter(m => m.status === 'completed');
     
@@ -157,6 +178,10 @@ class StatisticsService {
         opponentIds.push(opponentId);
       });
 
+      // Apply vote adjustments
+      const adjustment = voteAdjustments[team.id] || 0;
+      votes += adjustment;
+
       return {
         team: {
           id: team.id,
@@ -165,6 +190,7 @@ class StatisticsService {
         },
         wins,
         votes,
+        voteAdjustment: adjustment,
         scoreDifferential,
         totalMatches,
         winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0,
@@ -194,7 +220,8 @@ class StatisticsService {
         const ties = Math.round((t.wins % 1) * 2); // 0.5 wins = 1 tie
         const losses = t.totalMatches - wins - ties;
         
-        return `${t.team.name}: ${wins}W-${losses}L-${ties}T (${t.totalMatches} matches), ${t.votes.toFixed(1)} votes, ${t.scoreDifferential > 0 ? '+' : ''}${t.scoreDifferential.toFixed(2)} score diff, opponents result: ${t.opponentsResult.toFixed(2)}`;
+        const adjustmentNote = t.voteAdjustment !== 0 ? ` (includes ${t.voteAdjustment > 0 ? '+' : ''}${t.voteAdjustment} adjustment)` : '';
+        return `${t.team.name}: ${wins}W-${losses}L-${ties}T (${t.totalMatches} matches), ${t.votes.toFixed(1)} votes${adjustmentNote}, ${t.scoreDifferential > 0 ? '+' : ''}${t.scoreDifferential.toFixed(2)} score diff, opponents result: ${t.opponentsResult.toFixed(2)}`;
       }).join('\n')
     });
 
@@ -360,23 +387,13 @@ class StatisticsService {
       // Get head-to-head results
       const h2hResults = this.getHeadToHeadResults(tiedTeams, matches);
       
-      // Sort by h2h wins, then h2h votes
-      const sorted = [...tiedTeams].sort((a, b) => {
-        const aH2H = h2hResults.get(a.team.id);
-        const bH2H = h2hResults.get(b.team.id);
-        
-        if (aH2H.wins !== bH2H.wins) return bH2H.wins - aH2H.wins;
-        if (aH2H.votes !== bH2H.votes) return bH2H.votes - aH2H.votes;
-        return 0;
-      });
-
-      // Show detailed head-to-head results
-      const h2hDetails = sorted.map(t => {
+      // Show detailed head-to-head results (wins and score diff)
+      const h2hDetails = tiedTeams.map(t => {
         const h2h = h2hResults.get(t.team.id);
         const h2hWins = Math.floor(h2h.wins);
         const h2hTies = Math.round((h2h.wins % 1) * 2);
         const h2hLosses = h2h.matches - h2hWins - h2hTies;
-        return `  • ${t.team.name}: ${h2hWins}W-${h2hLosses}L-${h2hTies}T (${h2h.matches} h2h matches), ${h2h.votes.toFixed(1)} votes, ${h2h.scoreDiff > 0 ? '+' : ''}${h2h.scoreDiff.toFixed(2)} score diff`;
+        return `  • ${t.team.name}: ${h2hWins}W-${h2hLosses}L-${h2hTies}T (${h2h.matches} h2h matches), ${h2h.scoreDiff > 0 ? '+' : ''}${h2h.scoreDiff.toFixed(2)} score diff`;
       }).join('\n');
 
       logs.push({
@@ -385,24 +402,81 @@ class StatisticsService {
         content: h2hDetails
       });
 
-      // Check if this resolved the tie
-      if (sorted[0].wins !== sorted[sorted.length - 1].wins || 
-          h2hResults.get(sorted[0].team.id).wins !== h2hResults.get(sorted[sorted.length - 1].team.id).wins) {
+      // Sort by h2h wins, then h2h score diff
+      let sorted = [...tiedTeams].sort((a, b) => {
+        const aH2H = h2hResults.get(a.team.id);
+        const bH2H = h2hResults.get(b.team.id);
+        
+        if (aH2H.wins !== bH2H.wins) return bH2H.wins - aH2H.wins;
+        if (aH2H.scoreDiff !== bH2H.scoreDiff) return bH2H.scoreDiff - aH2H.scoreDiff;
+        return 0;
+      });
+
+      // Check if H2H results resolved the tie
+      const firstH2H = h2hResults.get(sorted[0].team.id);
+      const lastH2H = h2hResults.get(sorted[sorted.length - 1].team.id);
+      
+      if (firstH2H.wins !== lastH2H.wins || firstH2H.scoreDiff !== lastH2H.scoreDiff) {
         const winner = sorted[0];
         const winnerH2H = h2hResults.get(winner.team.id);
         logs.push({
           type: 'tie-breaking-result',
-          title: '✅ Tie Resolved by Head-to-Head',
-          content: `Winner: ${winner.team.name} with ${winnerH2H.wins.toFixed(1)} wins and ${winnerH2H.votes.toFixed(1)} votes in head-to-head matches`
+          title: '✅ Tie Resolved by Head-to-Head Results',
+          content: `Winner: ${winner.team.name} with ${winnerH2H.wins.toFixed(1)} wins and ${winnerH2H.scoreDiff > 0 ? '+' : ''}${winnerH2H.scoreDiff.toFixed(2)} score diff in head-to-head matches`
+        });
+        return sorted;
+      }
+
+      // Step 1b: Head-to-Head Votes
+      logs.push({
+        type: 'tie-breaking-step',
+        title: 'Step 2: Head-to-Head Votes',
+        content: 'Comparing head-to-head votes.'
+      });
+
+      // Show detailed head-to-head votes
+      const h2hVoteDetails = sorted.map(t => {
+        const h2h = h2hResults.get(t.team.id);
+        return `  • ${t.team.name}: ${h2h.votes.toFixed(1)} total votes (${h2h.matches} matches)`;
+      }).join('\n');
+
+      logs.push({
+        type: 'tie-breaking-step',
+        title: 'Head-to-Head Votes Comparison',
+        content: h2hVoteDetails
+      });
+
+      // Sort by h2h votes
+      sorted = [...sorted].sort((a, b) => {
+        const aH2H = h2hResults.get(a.team.id);
+        const bH2H = h2hResults.get(b.team.id);
+        
+        if (aH2H.wins !== bH2H.wins) return bH2H.wins - aH2H.wins;
+        if (aH2H.scoreDiff !== bH2H.scoreDiff) return bH2H.scoreDiff - aH2H.scoreDiff;
+        if (aH2H.votes !== bH2H.votes) return bH2H.votes - aH2H.votes;
+        return 0;
+      });
+
+      // Check if H2H votes resolved the tie
+      const firstH2HAfter = h2hResults.get(sorted[0].team.id);
+      const lastH2HAfter = h2hResults.get(sorted[sorted.length - 1].team.id);
+      
+      if (firstH2HAfter.votes !== lastH2HAfter.votes) {
+        const winner = sorted[0];
+        const winnerH2H = h2hResults.get(winner.team.id);
+        logs.push({
+          type: 'tie-breaking-result',
+          title: '✅ Tie Resolved by Head-to-Head Votes',
+          content: `Winner: ${winner.team.name} with ${winnerH2H.votes.toFixed(1)} votes in head-to-head matches`
         });
         return sorted;
       }
     }
 
-    // Step 2: Compare total votes received
+    // Step 3: Compare total votes received
     logs.push({
       type: 'tie-breaking-step',
-      title: 'Step 2: Total Votes Comparison',
+      title: 'Step 3: Total Votes Comparison',
       content: 'Comparing cumulative number of votes received across all matches.'
     });
 
@@ -432,10 +506,10 @@ class StatisticsService {
       return sorted;
     }
 
-    // Step 3: Compare opponents' results
+    // Step 4: Compare opponents' results
     logs.push({
       type: 'tie-breaking-step',
-      title: 'Step 3: Opponents\' Results',
+      title: 'Step 4: Opponents\' Results',
       content: 'Comparing the total cumulative result (wins) of all opponents faced.'
     });
 
@@ -459,10 +533,10 @@ class StatisticsService {
       return sorted;
     }
 
-    // Step 4: Compare score differential
+    // Step 5: Compare score differential
     logs.push({
       type: 'tie-breaking-step',
-      title: 'Step 4: Score Differential',
+      title: 'Step 5: Score Differential',
       content: 'Comparing cumulative score differential (sum of [team score - opponent score] across all matches).'
     });
 
