@@ -3701,7 +3701,7 @@ class EventWorkspacePage {
       this.ui.showSuccess('成功', '活动已启动！状态已更改为 Active');
       
       // Re-render the workspace to reflect changes
-      await this.loadData();
+      await this.loadEventData();
       this.renderWorkspace();
       
     } catch (error) {
