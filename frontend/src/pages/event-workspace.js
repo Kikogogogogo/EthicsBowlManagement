@@ -3655,12 +3655,12 @@ class EventWorkspacePage {
     try {
       // Confirm with user
       const confirmed = confirm(
-        '确定要启动这个活动吗？\n\n' +
-        '启动后：\n' +
-        '• 活动状态将从 Draft 变为 Active\n' +
-        '• 无法再编辑活动设置\n' +
-        '• 无法改回 Draft 状态\n\n' +
-        '是否继续？'
+        'Are you sure you want to start this event?\n\n' +
+        'After starting:\n' +
+        '• Event status will change from Draft to Active\n' +
+        '• Event settings cannot be edited\n' +
+        '• Cannot change back to Draft status\n\n' +
+        'Do you want to continue?'
       );
       
       if (!confirmed) {
@@ -3676,7 +3676,7 @@ class EventWorkspacePage {
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          启动中...
+          Starting...
         `;
       }
       
@@ -3698,7 +3698,7 @@ class EventWorkspacePage {
       const response = await this.eventService.updateEvent(this.currentEventId, updateData);
       this.currentEvent = response.data || response;
       
-      this.ui.showSuccess('成功', '活动已启动！状态已更改为 Active');
+      this.ui.showSuccess('Success', 'Event started! Status changed to Active');
       
       // Re-render the workspace to reflect changes
       await this.loadEventData();
@@ -3706,7 +3706,7 @@ class EventWorkspacePage {
       
     } catch (error) {
       console.error('Failed to start event:', error);
-      this.ui.showError('错误', '启动活动失败：' + error.message);
+      this.ui.showError('Error', 'Failed to start event: ' + error.message);
       
       // Re-enable button on error
       const startBtn = document.getElementById('start-event-btn');
@@ -3879,10 +3879,10 @@ class EventWorkspacePage {
         
         // Show warning and ask for confirmation
         const confirmed = await this.ui.showConfirmation(
-          '⚠️ 警告：队伍重复出现',
-          `以下队伍已经在 Round ${roundNumber} 中出现过：\n\n${duplicateTeams.join('、')}\n\n这违反了比赛规则（每个队伍在每轮只能出现一次）。\n\n您确定要继续创建这个比赛吗？`,
-          '继续创建',
-          '取消'
+          '⚠️ Warning: Duplicate Teams',
+          `The following teams already appear in Round ${roundNumber}:\n\n${duplicateTeams.join(', ')}\n\nThis violates competition rules (each team can only appear once per round).\n\nAre you sure you want to continue creating this match?`,
+          'Continue',
+          'Cancel'
         );
         
         if (!confirmed) {
@@ -8640,20 +8640,20 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           if (!pairing.teamB) {
             // This is a bye
             if (byeTeam) {
-              throw new Error(`验证失败：Round ${roundNumber} 有多个 bye teams（不允许）`);
+              throw new Error(`Validation failed: Round ${roundNumber} has multiple bye teams (not allowed)`);
             }
             byeTeam = pairing.teamA;
             if (teamsInRound.has(pairing.teamA.id)) {
-              throw new Error(`验证失败：Bye team ${pairing.teamA.name} 在 Round ${roundNumber} 中重复出现`);
+              throw new Error(`Validation failed: Bye team ${pairing.teamA.name} appears multiple times in Round ${roundNumber}`);
             }
             teamsInRound.add(pairing.teamA.id);
           } else {
             // Regular match - check for duplicates
             if (teamsInRound.has(pairing.teamA.id)) {
-              throw new Error(`验证失败：队伍 ${pairing.teamA.name} 在 Round ${roundNumber} 中出现了两次（不允许）`);
+              throw new Error(`Validation failed: Team ${pairing.teamA.name} appears twice in Round ${roundNumber} (not allowed)`);
             }
             if (teamsInRound.has(pairing.teamB.id)) {
-              throw new Error(`验证失败：队伍 ${pairing.teamB.name} 在 Round ${roundNumber} 中出现了两次（不允许）`);
+              throw new Error(`Validation failed: Team ${pairing.teamB.name} appears twice in Round ${roundNumber} (not allowed)`);
             }
             teamsInRound.add(pairing.teamA.id);
             teamsInRound.add(pairing.teamB.id);
@@ -8662,18 +8662,18 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         
         // Validation: Check all teams are participating
         if (teamsInRound.size !== teamCount) {
-          throw new Error(`验证失败：Round ${roundNumber} 中只有 ${teamsInRound.size}/${teamCount} 个队伍参赛（应该全部参赛）`);
+          throw new Error(`Validation failed: Round ${roundNumber} only has ${teamsInRound.size}/${teamCount} teams participating (all should participate)`);
         }
         
         // Validation: Bye team rules
         if (isOddTeams && !byeTeam) {
-          throw new Error(`验证失败：奇数队伍 (${teamCount}) 但 Round ${roundNumber} 没有 bye team`);
+          throw new Error(`Validation failed: Odd number of teams (${teamCount}) but Round ${roundNumber} has no bye team`);
         }
         if (!isOddTeams && byeTeam) {
-          throw new Error(`验证失败：偶数队伍 (${teamCount}) 但 Round ${roundNumber} 有 bye team`);
+          throw new Error(`Validation failed: Even number of teams (${teamCount}) but Round ${roundNumber} has bye team`);
         }
         
-        console.log(`✅ Round ${roundNumber} 验证通过: ${teamsInRound.size} 队伍${byeTeam ? ', bye: ' + byeTeam.name : ''}`);
+        console.log(`✅ Round ${roundNumber} validation passed: ${teamsInRound.size} teams${byeTeam ? ', bye: ' + byeTeam.name : ''}`);
         // ==================== 验证逻辑结束 ====================
         
         // Create matches for this round

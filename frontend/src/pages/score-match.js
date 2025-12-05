@@ -96,9 +96,9 @@ class ScoreMatchPage {
             </svg>
           </div>
           <div class="ml-3">
-            <h3 class="text-sm font-medium text-green-800">比赛已完成</h3>
+            <h3 class="text-sm font-medium text-green-800">Match Completed</h3>
             <div class="mt-2 text-sm text-green-700">
-              <p>所有评委的分数已提交，比赛评分已完成。</p>
+              <p>All judges have submitted their scores. Match scoring is complete.</p>
             </div>
           </div>
         </div>
