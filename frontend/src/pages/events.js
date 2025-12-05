@@ -362,20 +362,28 @@ class EventsPage {
         
         // Create edit button
         const editBtn = document.createElement('button');
+        const isActive = event.status === 'active';
         editBtn.className = 'text-sm text-gray-600 hover:text-gray-900 edit-event-btn px-3 py-1.5 rounded-md hover:bg-gray-100 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed';
         editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (this.isOperationInProgress) return;
-          
+        // Disable edit button for active events
+        if (isActive) {
           editBtn.disabled = true;
-          editBtn.textContent = 'Loading...';
-          
-          await this.editEvent(event.id);
-          
-          editBtn.disabled = false;
-          editBtn.textContent = 'Edit';
-        });
+          editBtn.title = 'Active events cannot be edited';
+          editBtn.className = 'text-sm text-gray-400 cursor-not-allowed edit-event-btn px-3 py-1.5 rounded-md border border-gray-300 opacity-50';
+        } else {
+          editBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (this.isOperationInProgress) return;
+            
+            editBtn.disabled = true;
+            editBtn.textContent = 'Loading...';
+            
+            await this.editEvent(event.id);
+            
+            editBtn.disabled = false;
+            editBtn.textContent = 'Edit';
+          });
+        }
         
         // Create delete button
         const deleteBtn = document.createElement('button');
@@ -455,22 +463,30 @@ class EventsPage {
         
         // Create edit button
         const editBtn = document.createElement('button');
+        const isActive = event.status === 'active';
         editBtn.className = 'text-black hover:text-gray-700 mr-4 disabled:opacity-50 disabled:cursor-not-allowed';
         editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', async (e) => {
-          e.stopPropagation(); // Prevent row click
-          if (this.isOperationInProgress) return;
-          
-          // Disable button during operation
+        // Disable edit button for active events
+        if (isActive) {
           editBtn.disabled = true;
-          editBtn.textContent = 'Loading...';
-          
-          await this.editEvent(event.id);
-          
-          // Re-enable button
-          editBtn.disabled = false;
-          editBtn.textContent = 'Edit';
-        });
+          editBtn.title = 'Active events cannot be edited';
+          editBtn.className = 'text-gray-400 cursor-not-allowed mr-4 opacity-50';
+        } else {
+          editBtn.addEventListener('click', async (e) => {
+            e.stopPropagation(); // Prevent row click
+            if (this.isOperationInProgress) return;
+            
+            // Disable button during operation
+            editBtn.disabled = true;
+            editBtn.textContent = 'Loading...';
+            
+            await this.editEvent(event.id);
+            
+            // Re-enable button
+            editBtn.disabled = false;
+            editBtn.textContent = 'Edit';
+          });
+        }
         
         // Create delete button
         const deleteBtn = document.createElement('button');

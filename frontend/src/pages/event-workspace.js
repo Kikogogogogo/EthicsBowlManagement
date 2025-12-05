@@ -302,6 +302,21 @@ class EventWorkspacePage {
     document.addEventListener('click', backToEventsHandler);
     this.eventListeners.push({ type: 'click', handler: backToEventsHandler });
 
+    // Start Event button - to activate draft events
+    const startEventHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      if (e.target.matches('#start-event-btn') || e.target.closest('#start-event-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleStartEvent();
+      }
+    };
+    document.addEventListener('click', startEventHandler);
+    this.eventListeners.push({ type: 'click', handler: startEventHandler });
+
     // Form submissions - only for workspace forms
     const formSubmitHandler = (e) => {
       // Check if workspace page is currently visible
@@ -1682,6 +1697,22 @@ class EventWorkspacePage {
             </div>
           ` : ''}
         </div>
+
+        <!-- Start Event Button (for Draft events) -->
+        ${this.currentEvent.status === 'draft' ? `
+          <div class="flex justify-center mb-6">
+            <button 
+              id="start-event-btn" 
+              class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+            >
+              <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              Start Event
+            </button>
+          </div>
+        ` : ''}
 
         <!-- Middle Section: Rounds Overview and Recent Activity -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -3569,7 +3600,14 @@ class EventWorkspacePage {
         description: formData.get('description'),
         totalRounds: parseInt(formData.get('totalRounds')),
         currentRound: parseInt(formData.get('currentRound')),
-        status: formData.get('status')
+        status: formData.get('status'),
+        // Preserve existing data that's not in the form
+        eventDate: this.currentEvent.eventDate,
+        location: this.currentEvent.location,
+        maxTeams: this.currentEvent.maxTeams,
+        roundNames: this.currentEvent.roundNames,
+        allowedJudges: this.currentEvent.allowedJudges,
+        allowedModerators: this.currentEvent.allowedModerators
       };
 
       // Validate data
@@ -3606,6 +3644,81 @@ class EventWorkspacePage {
       if (submitButton) {
         submitButton.disabled = false;
         submitButton.textContent = 'Save Changes';
+      }
+    }
+  }
+
+  /**
+   * Handle Start Event button click (Draft -> Active)
+   */
+  async handleStartEvent() {
+    try {
+      // Confirm with user
+      const confirmed = confirm(
+        '确定要启动这个活动吗？\n\n' +
+        '启动后：\n' +
+        '• 活动状态将从 Draft 变为 Active\n' +
+        '• 无法再编辑活动设置\n' +
+        '• 无法改回 Draft 状态\n\n' +
+        '是否继续？'
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      // Disable the button and show loading state
+      const startBtn = document.getElementById('start-event-btn');
+      if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.innerHTML = `
+          <svg class="animate-spin mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          启动中...
+        `;
+      }
+      
+      // Update event status to active
+      const updateData = {
+        name: this.currentEvent.name,
+        description: this.currentEvent.description,
+        totalRounds: this.currentEvent.totalRounds,
+        currentRound: this.currentEvent.currentRound || 1,
+        status: 'active',
+        eventDate: this.currentEvent.eventDate,
+        location: this.currentEvent.location,
+        maxTeams: this.currentEvent.maxTeams,
+        roundNames: this.currentEvent.roundNames,
+        allowedJudges: this.currentEvent.allowedJudges,
+        allowedModerators: this.currentEvent.allowedModerators
+      };
+      
+      const response = await this.eventService.updateEvent(this.currentEventId, updateData);
+      this.currentEvent = response.data || response;
+      
+      this.ui.showSuccess('成功', '活动已启动！状态已更改为 Active');
+      
+      // Re-render the workspace to reflect changes
+      await this.loadData();
+      this.renderWorkspace();
+      
+    } catch (error) {
+      console.error('Failed to start event:', error);
+      this.ui.showError('错误', '启动活动失败：' + error.message);
+      
+      // Re-enable button on error
+      const startBtn = document.getElementById('start-event-btn');
+      if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.innerHTML = `
+          <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Start Event
+        `;
       }
     }
   }
