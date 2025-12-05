@@ -317,6 +317,24 @@ class EventWorkspacePage {
     document.addEventListener('click', startEventHandler);
     this.eventListeners.push({ type: 'click', handler: startEventHandler });
 
+    // Complete Event button - to finalize active events
+    const completeEventHandler = (e) => {
+      // Check if workspace page is currently visible
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      
+      if (e.target.matches('#complete-event-btn') || e.target.closest('#complete-event-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const btn = e.target.closest('#complete-event-btn');
+        if (btn && !btn.disabled) {
+          this.handleCompleteEvent();
+        }
+      }
+    };
+    document.addEventListener('click', completeEventHandler);
+    this.eventListeners.push({ type: 'click', handler: completeEventHandler });
+
     // Form submissions - only for workspace forms
     const formSubmitHandler = (e) => {
       // Check if workspace page is currently visible
@@ -1711,6 +1729,34 @@ class EventWorkspacePage {
               </svg>
               Start Event
             </button>
+          </div>
+        ` : ''}
+
+        <!-- Complete Event Button (for Active events) -->
+        ${this.currentEvent.status === 'active' && (isAdmin || isModerator) ? `
+          <div class="flex justify-center mb-6">
+            <div class="text-center">
+              <button 
+                id="complete-event-btn" 
+                ${completedMatches < totalMatches ? 'disabled' : ''}
+                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white ${completedMatches < totalMatches ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                title="${completedMatches < totalMatches ? `Complete all matches first (${completedMatches}/${totalMatches} completed)` : 'Mark event as completed'}"
+              >
+                <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Complete Event
+              </button>
+              ${completedMatches < totalMatches ? `
+                <p class="mt-2 text-sm text-gray-600">
+                  All matches must be completed first (${completedMatches}/${totalMatches} completed)
+                </p>
+              ` : `
+                <p class="mt-2 text-sm text-gray-600">
+                  All matches completed! Ready to finalize event.
+                </p>
+              `}
+            </div>
           </div>
         ` : ''}
 
@@ -3718,6 +3764,90 @@ class EventWorkspacePage {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
           Start Event
+        `;
+      }
+    }
+  }
+
+  /**
+   * Handle Complete Event button click (Active -> Completed)
+   */
+  async handleCompleteEvent() {
+    try {
+      // Check if all matches are completed
+      const completedMatches = this.matches.filter(m => m.status === 'completed').length;
+      const totalMatches = this.matches.length;
+      
+      if (completedMatches < totalMatches) {
+        this.ui.showError('Cannot Complete Event', `All matches must be completed first. Currently ${completedMatches}/${totalMatches} matches are completed.`);
+        return;
+      }
+      
+      // Confirm with user
+      const confirmed = confirm(
+        'Are you sure you want to complete this event?\n\n' +
+        'After completing:\n' +
+        '• Event status will change from Active to Completed\n' +
+        '• No further changes can be made to the event\n' +
+        '• This action cannot be undone\n\n' +
+        `All ${totalMatches} matches have been completed.\n\n` +
+        'Do you want to continue?'
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      // Disable the button and show loading state
+      const completeBtn = document.getElementById('complete-event-btn');
+      if (completeBtn) {
+        completeBtn.disabled = true;
+        completeBtn.innerHTML = `
+          <svg class="animate-spin mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Completing...
+        `;
+      }
+      
+      // Update event status to completed
+      const updateData = {
+        name: this.currentEvent.name,
+        description: this.currentEvent.description,
+        totalRounds: this.currentEvent.totalRounds,
+        currentRound: this.currentEvent.currentRound,
+        status: 'completed',
+        eventDate: this.currentEvent.eventDate,
+        location: this.currentEvent.location,
+        maxTeams: this.currentEvent.maxTeams,
+        roundNames: this.currentEvent.roundNames,
+        allowedJudges: this.currentEvent.allowedJudges,
+        allowedModerators: this.currentEvent.allowedModerators
+      };
+      
+      const response = await this.eventService.updateEvent(this.currentEventId, updateData);
+      this.currentEvent = response.data || response;
+      
+      this.ui.showSuccess('Success', 'Event completed! All results have been finalized.');
+      
+      // Re-render the workspace to reflect changes
+      await this.loadEventData();
+      this.renderWorkspace();
+      
+    } catch (error) {
+      console.error('Failed to complete event:', error);
+      this.ui.showError('Error', 'Failed to complete event: ' + error.message);
+      
+      // Re-enable button on error
+      const completeBtn = document.getElementById('complete-event-btn');
+      if (completeBtn) {
+        completeBtn.disabled = false;
+        completeBtn.innerHTML = `
+          <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Complete Event
         `;
       }
     }
