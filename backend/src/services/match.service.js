@@ -1263,6 +1263,18 @@ class MatchService {
    */
   async validateMatchCompletion(matchId) {
     try {
+      // First check if this is a bye match
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        select: { teamAId: true, teamBId: true }
+      });
+
+      // If teamBId is null, this is a bye match - no validation needed
+      if (!match.teamBId) {
+        console.log('✅ Bye match detected - skipping validation');
+        return true;
+      }
+
       // Get all judge assignments for this match
       const assignments = await prisma.matchAssignment.findMany({
         where: { matchId },
@@ -1276,10 +1288,7 @@ class MatchService {
       }
 
       // Check if all judges have submitted scores for both teams
-      const teams = await prisma.match.findUnique({
-        where: { id: matchId },
-        select: { teamAId: true, teamBId: true }
-      });
+      const teams = match;
 
       if (!teams.teamAId || !teams.teamBId) {
         throw new Error('Cannot complete match: Teams not properly assigned');
