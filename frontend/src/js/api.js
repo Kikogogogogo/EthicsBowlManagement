@@ -21,6 +21,7 @@ const ENDPOINTS = {
     create: `${API_BASE_URL}/events`,
     get: (id) => `${API_BASE_URL}/events/${id}`,
     update: (id) => `${API_BASE_URL}/events/${id}`,
+    updateStatus: (id) => `${API_BASE_URL}/events/${id}/status`,
     delete: (id) => `${API_BASE_URL}/events/${id}`,
     updateRoundSchedules: (id) => `${API_BASE_URL}/events/${id}/round-schedules`,
     getRoundSchedule: (id, roundNumber) => `${API_BASE_URL}/events/${id}/round-schedules/${roundNumber}`
@@ -350,6 +351,14 @@ class EventService {
    */
   async updateEvent(id, eventData) {
     const response = await this.api.put(ENDPOINTS.events.update(id), eventData);
+    return response.data;
+  }
+
+  /**
+   * Update event status (draft -> active -> completed)
+   */
+  async updateEventStatus(id, status) {
+    const response = await this.api.put(ENDPOINTS.events.updateStatus(id), { status });
     return response.data;
   }
 

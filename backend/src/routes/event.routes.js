@@ -1,7 +1,7 @@
 const express = require('express');
 const EventController = require('../controllers/event.controller');
 const ExportController = require('../controllers/export.controller');
-const { authenticateToken, requireRole, requireEventAccess } = require('../middleware/auth.middleware');
+const { authenticateToken, requireRole, requireAdminOrModerator, requireEventAccess } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 const eventController = new EventController();
@@ -36,9 +36,9 @@ router.put('/:eventId', requireRole('admin'), requireEventAccess('eventId'), eve
 
 /**
  * PUT /events/:eventId/status
- * Update event status (Admin only)
+ * Update event status (Admin or Moderator)
  */
-router.put('/:eventId/status', requireRole('admin'), requireEventAccess('eventId'), eventController.updateEventStatus);
+router.put('/:eventId/status', requireAdminOrModerator, requireEventAccess('eventId'), eventController.updateEventStatus);
 
 /**
  * DELETE /events/:eventId

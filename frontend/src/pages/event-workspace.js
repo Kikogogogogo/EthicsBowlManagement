@@ -3726,22 +3726,8 @@ class EventWorkspacePage {
         `;
       }
       
-      // Update event status to active
-      const updateData = {
-        name: this.currentEvent.name,
-        description: this.currentEvent.description,
-        totalRounds: this.currentEvent.totalRounds,
-        currentRound: this.currentEvent.currentRound || 1,
-        status: 'active',
-        eventDate: this.currentEvent.eventDate,
-        location: this.currentEvent.location,
-        maxTeams: this.currentEvent.maxTeams,
-        roundNames: this.currentEvent.roundNames,
-        allowedJudges: this.currentEvent.allowedJudges,
-        allowedModerators: this.currentEvent.allowedModerators
-      };
-      
-      const response = await this.eventService.updateEvent(this.currentEventId, updateData);
+      // Update event status to active using the dedicated status update endpoint
+      const response = await this.eventService.updateEventStatus(this.currentEventId, 'active');
       this.currentEvent = response.data || response;
       
       this.ui.showSuccess('Success', 'Event started! Status changed to Active');
@@ -3811,22 +3797,8 @@ class EventWorkspacePage {
         `;
       }
       
-      // Update event status to completed
-      const updateData = {
-        name: this.currentEvent.name,
-        description: this.currentEvent.description,
-        totalRounds: this.currentEvent.totalRounds,
-        currentRound: this.currentEvent.currentRound,
-        status: 'completed',
-        eventDate: this.currentEvent.eventDate,
-        location: this.currentEvent.location,
-        maxTeams: this.currentEvent.maxTeams,
-        roundNames: this.currentEvent.roundNames,
-        allowedJudges: this.currentEvent.allowedJudges,
-        allowedModerators: this.currentEvent.allowedModerators
-      };
-      
-      const response = await this.eventService.updateEvent(this.currentEventId, updateData);
+      // Update event status to completed using the dedicated status update endpoint
+      const response = await this.eventService.updateEventStatus(this.currentEventId, 'completed');
       this.currentEvent = response.data || response;
       
       this.ui.showSuccess('Success', 'Event completed! All results have been finalized.');
