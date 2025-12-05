@@ -103,4 +103,65 @@ router.post('/:eventId/vote-adjustments', requireRole('admin'), requireEventAcce
  */
 router.get('/:eventId/vote-logs', requireRole('admin'), requireEventAccess('eventId'), eventController.getVoteLogs);
 
+/**
+ * DELETE /events/:eventId/vote-logs/:logId
+ * Delete/revert a vote adjustment log (Admin only)
+ */
+router.delete('/:eventId/vote-logs/:logId', requireRole('admin'), requireEventAccess('eventId'), eventController.deleteVoteLog);
+
+/**
+ * POST /events/:eventId/win-adjustments
+ * Apply win point adjustments to teams (Admin only)
+ */
+router.post('/:eventId/win-adjustments', requireRole('admin'), requireEventAccess('eventId'), eventController.applyWinAdjustments);
+
+/**
+ * GET /events/:eventId/win-logs
+ * Get win adjustment logs (Admin only)
+ */
+router.get('/:eventId/win-logs', requireRole('admin'), requireEventAccess('eventId'), eventController.getWinLogs);
+
+/**
+ * DELETE /events/:eventId/win-logs/:logId
+ * Delete/revert a win adjustment log (Admin only)
+ */
+router.delete('/:eventId/win-logs/:logId', requireRole('admin'), requireEventAccess('eventId'), eventController.deleteWinLog);
+
+/**
+ * POST /events/:eventId/score-diff-adjustments
+ * Apply score differential adjustments to teams (Admin only)
+ */
+router.post('/:eventId/score-diff-adjustments', requireRole('admin'), requireEventAccess('eventId'), eventController.applyScoreDiffAdjustments);
+
+/**
+ * GET /events/:eventId/score-diff-logs
+ * Get score differential adjustment logs (Admin only)
+ */
+router.get('/:eventId/score-diff-logs', requireRole('admin'), requireEventAccess('eventId'), eventController.getScoreDiffLogs);
+
+/**
+ * DELETE /events/:eventId/score-diff-logs/:logId
+ * Delete/revert a score differential adjustment log (Admin only)
+ */
+router.delete('/:eventId/score-diff-logs/:logId', requireRole('admin'), requireEventAccess('eventId'), eventController.deleteScoreDiffLog);
+
+/**
+ * GET /events/:eventId/bye-teams
+ * Get bye teams information for all rounds in the event
+ * Access: All authenticated users with event access
+ */
+router.get('/:eventId/bye-teams', requireEventAccess('eventId'), eventController.getByeTeams);
+
+/**
+ * POST /events/:eventId/bye-teams
+ * Create or update bye team for a specific round (Admin only)
+ */
+router.post('/:eventId/bye-teams', requireRole('admin'), requireEventAccess('eventId'), eventController.createByeTeam);
+
+/**
+ * PUT /events/:eventId/bye-teams/recalculate
+ * Recalculate score differentials for all bye teams (Admin only)
+ */
+router.put('/:eventId/bye-teams/recalculate', requireRole('admin'), requireEventAccess('eventId'), eventController.recalculateByeTeamScores);
+
 module.exports = router; 

@@ -17,6 +17,10 @@
 - `PUT /events/:eventId` - Update event details (Admin only)
 - `PUT /events/:eventId/status` - Update event status (Admin only)
 - `DELETE /events/:eventId` - Delete event (Admin only)
+- `POST /events/:eventId/vote-adjustments` - Apply vote adjustments to teams (Admin only)
+- `GET /events/:eventId/vote-logs` - Get vote adjustment logs (Admin only)
+- `POST /events/:eventId/win-adjustments` - Apply win point adjustments to teams (Admin only)
+- `GET /events/:eventId/win-logs` - Get win adjustment logs (Admin only)
 
 ### Teams (team.routes.js)
 - `GET /events/:eventId/teams` - Get all teams for an event (Admin only)

@@ -501,6 +501,482 @@ class EventController {
       });
     }
   };
+
+  /**
+   * DELETE /events/:eventId/vote-logs/:logId
+   * Delete/revert a vote adjustment log
+   */
+  deleteVoteLog = async (req, res) => {
+    try {
+      const { eventId, logId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!logId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Log ID is required',
+          error: 'MISSING_LOG_ID'
+        });
+      }
+      
+      const result = await this.eventService.deleteVoteLog(eventId, logId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Vote adjustment reverted successfully'
+      });
+    } catch (error) {
+      console.error('Delete vote log error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'VOTE_LOG_DELETE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'LOG_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to revert vote adjustment',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * POST /events/:eventId/win-adjustments
+   * Apply win point adjustments to teams
+   */
+  applyWinAdjustments = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const { adjustments } = req.body;
+      const adminId = req.user.id;
+      const adminName = `${req.user.firstName} ${req.user.lastName}`;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!adjustments || !Array.isArray(adjustments) || adjustments.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Adjustments array is required',
+          error: 'MISSING_ADJUSTMENTS'
+        });
+      }
+
+      const result = await this.eventService.applyWinAdjustments(eventId, adjustments, adminId, adminName);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Win adjustments applied successfully'
+      });
+    } catch (error) {
+      console.error('Apply win adjustments error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'WIN_ADJUSTMENT_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      } else if (error.message.includes('Invalid')) {
+        statusCode = 400;
+        errorCode = 'INVALID_DATA';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to apply win adjustments',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * GET /events/:eventId/win-logs
+   * Get win adjustment logs
+   */
+  getWinLogs = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      const logs = await this.eventService.getWinLogs(eventId);
+
+      res.json({
+        success: true,
+        data: { logs },
+        message: 'Win logs retrieved successfully'
+      });
+    } catch (error) {
+      console.error('Get win logs error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'WIN_LOGS_FETCH_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to retrieve win logs',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * DELETE /events/:eventId/win-logs/:logId
+   * Delete/revert a win adjustment log
+   */
+  deleteWinLog = async (req, res) => {
+    try {
+      const { eventId, logId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!logId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Log ID is required',
+          error: 'MISSING_LOG_ID'
+        });
+      }
+      
+      const result = await this.eventService.deleteWinLog(eventId, logId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Win adjustment reverted successfully'
+      });
+    } catch (error) {
+      console.error('Delete win log error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'WIN_LOG_DELETE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'LOG_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to revert win adjustment',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * POST /events/:eventId/score-diff-adjustments
+   * Apply score differential adjustments to teams
+   */
+  applyScoreDiffAdjustments = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const { adjustments } = req.body;
+      const adminId = req.user.id;
+      const adminName = `${req.user.firstName} ${req.user.lastName}`;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!adjustments || !Array.isArray(adjustments) || adjustments.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Adjustments array is required',
+          error: 'MISSING_ADJUSTMENTS'
+        });
+      }
+
+      const result = await this.eventService.applyScoreDiffAdjustments(eventId, adjustments, adminId, adminName);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Score differential adjustments applied successfully'
+      });
+    } catch (error) {
+      console.error('Apply score diff adjustments error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'SCORE_DIFF_ADJUSTMENT_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      } else if (error.message.includes('Invalid')) {
+        statusCode = 400;
+        errorCode = 'INVALID_DATA';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to apply score differential adjustments',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * GET /events/:eventId/score-diff-logs
+   * Get score differential adjustment logs
+   */
+  getScoreDiffLogs = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      const logs = await this.eventService.getScoreDiffLogs(eventId);
+
+      res.json({
+        success: true,
+        data: { logs },
+        message: 'Score differential logs retrieved successfully'
+      });
+    } catch (error) {
+      console.error('Get score diff logs error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'SCORE_DIFF_LOGS_FETCH_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'EVENT_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to retrieve score differential logs',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * DELETE /events/:eventId/score-diff-logs/:logId
+   * Delete/revert a score differential adjustment log
+   */
+  deleteScoreDiffLog = async (req, res) => {
+    try {
+      const { eventId, logId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!logId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Log ID is required',
+          error: 'MISSING_LOG_ID'
+        });
+      }
+      
+      const result = await this.eventService.deleteScoreDiffLog(eventId, logId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Score differential adjustment reverted successfully'
+      });
+    } catch (error) {
+      console.error('Delete score diff log error:', error);
+      
+      let statusCode = 500;
+      let errorCode = 'SCORE_DIFF_LOG_DELETE_FAILED';
+      
+      if (error.message.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'LOG_NOT_FOUND';
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to revert score differential adjustment',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * GET /events/:eventId/bye-teams
+   * Get bye teams information for all rounds
+   */
+  getByeTeams = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      const byeTeamsInfo = await this.eventService.getByeTeams(eventId);
+
+      res.json({
+        success: true,
+        data: byeTeamsInfo,
+        message: 'Bye teams information retrieved successfully'
+      });
+    } catch (error) {
+      console.error('Get bye teams error:', error);
+      const errorCode = error.message.includes('not found') ? 'EVENT_NOT_FOUND' : 'BYE_TEAMS_FETCH_FAILED';
+      const statusCode = error.message.includes('not found') ? 404 : 500;
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to retrieve bye teams information',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * POST /events/:eventId/bye-teams
+   * Create or update bye team for a specific round
+   */
+  createByeTeam = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const { roundNumber, teamId } = req.body;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      if (!roundNumber || !teamId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Round number and team ID are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+
+      const byeMatch = await this.eventService.createByeTeam(eventId, roundNumber, teamId);
+
+      res.json({
+        success: true,
+        data: {
+          match: byeMatch
+        },
+        message: 'Bye team created/updated successfully'
+      });
+    } catch (error) {
+      console.error('Create bye team error:', error);
+      let errorCode = 'BYE_TEAM_CREATE_FAILED';
+      let statusCode = 500;
+
+      if (error.message.includes('not found')) {
+        errorCode = 'RESOURCE_NOT_FOUND';
+        statusCode = 404;
+      } else if (error.message.includes('even number') || error.message.includes('already has a bye')) {
+        errorCode = 'INVALID_BYE_TEAM';
+        statusCode = 400;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to create bye team',
+        error: errorCode
+      });
+    }
+  };
+
+  /**
+   * PUT /events/:eventId/bye-teams/recalculate
+   * Recalculate score differentials for all bye teams
+   */
+  recalculateByeTeamScores = async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event ID is required',
+          error: 'MISSING_EVENT_ID'
+        });
+      }
+
+      await this.eventService.recalculateByeMatchScores(eventId);
+
+      // Get updated bye teams info
+      const byeTeamsInfo = await this.eventService.getByeTeams(eventId);
+
+      res.json({
+        success: true,
+        data: byeTeamsInfo,
+        message: 'Bye team score differentials recalculated successfully'
+      });
+    } catch (error) {
+      console.error('Recalculate bye team scores error:', error);
+      const errorCode = error.message.includes('not found') ? 'EVENT_NOT_FOUND' : 'RECALCULATION_FAILED';
+      const statusCode = error.message.includes('not found') ? 404 : 500;
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Failed to recalculate bye team scores',
+        error: errorCode
+      });
+    }
+  };
 }
 
 module.exports = EventController; 

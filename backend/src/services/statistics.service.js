@@ -60,17 +60,65 @@ class StatisticsService {
         // Table doesn't exist yet, continue without vote adjustments
       }
 
-      // Calculate total adjustments per team
-      const teamAdjustments = {};
+      // Get win adjustments for this event
+      let winAdjustments = [];
+      try {
+        winAdjustments = await prisma.winLog.findMany({
+          where: { eventId }
+        });
+      } catch (error) {
+        console.log('WinLog table not found, skipping win adjustments:', error.message);
+        // Table doesn't exist yet, continue without win adjustments
+      }
+
+      // Calculate total vote adjustments per team
+      const teamVoteAdjustments = {};
       voteAdjustments.forEach(log => {
-        if (!teamAdjustments[log.teamId]) {
-          teamAdjustments[log.teamId] = 0;
+        if (!teamVoteAdjustments[log.teamId]) {
+          teamVoteAdjustments[log.teamId] = 0;
         }
-        teamAdjustments[log.teamId] += log.adjustment;
+        teamVoteAdjustments[log.teamId] += log.adjustment;
+      });
+
+      // Calculate total win adjustments per team
+      const teamWinAdjustments = {};
+      winAdjustments.forEach(log => {
+        if (!teamWinAdjustments[log.teamId]) {
+          teamWinAdjustments[log.teamId] = { wins: 0, losses: 0, ties: 0 };
+        }
+        teamWinAdjustments[log.teamId].wins += log.winsAdj;
+        teamWinAdjustments[log.teamId].losses += log.lossesAdj;
+        teamWinAdjustments[log.teamId].ties += log.tiesAdj;
+      });
+
+      // Get score diff adjustments for this event
+      let scoreDiffAdjustments = [];
+      try {
+        scoreDiffAdjustments = await prisma.scoreDiffLog.findMany({
+          where: { eventId }
+        });
+      } catch (error) {
+        console.log('ScoreDiffLog table not found, skipping score diff adjustments:', error.message);
+        // Table doesn't exist yet, continue without score diff adjustments
+      }
+
+      // Calculate total score diff adjustments per team
+      const teamScoreDiffAdjustments = {};
+      scoreDiffAdjustments.forEach(log => {
+        if (!teamScoreDiffAdjustments[log.teamId]) {
+          teamScoreDiffAdjustments[log.teamId] = 0;
+        }
+        teamScoreDiffAdjustments[log.teamId] += log.scoreDiffAdj;
       });
 
       // Calculate team statistics with detailed logging
-      const { standings: teamStats, logs } = this.calculateTeamStandings(event.teams, event.matches, teamAdjustments);
+      const { standings: teamStats, logs } = this.calculateTeamStandings(
+        event.teams, 
+        event.matches, 
+        teamVoteAdjustments,
+        teamWinAdjustments,
+        teamScoreDiffAdjustments
+      );
       
       // Store logs for this event
       this.rankingLogs.set(eventId, logs);
@@ -121,9 +169,10 @@ class StatisticsService {
    * @param {Array} teams - List of teams
    * @param {Array} matches - List of matches
    * @param {Object} voteAdjustments - Vote adjustments per team {teamId: adjustment}
+   * @param {Object} winAdjustments - Win adjustments per team {teamId: {wins, losses, ties}}
    * @returns {Object} { standings: Array, logs: Array }
    */
-  calculateTeamStandings(teams, matches, voteAdjustments = {}) {
+  calculateTeamStandings(teams, matches, voteAdjustments = {}, winAdjustments = {}, scoreDiffAdjustments = {}) {
     const logs = [];
     const completedMatches = matches.filter(m => m.status === 'completed');
     
@@ -178,9 +227,23 @@ class StatisticsService {
         opponentIds.push(opponentId);
       });
 
+      // Apply win adjustments (convert W-L-T to decimal wins)
+      const winAdj = winAdjustments[team.id] || { wins: 0, losses: 0, ties: 0 };
+      const adjWins = winAdj.wins;
+      const adjLosses = winAdj.losses;
+      const adjTies = winAdj.ties;
+      
+      // Convert ties to 0.5 wins and add adjustments
+      wins += adjWins + (adjTies * 0.5);
+      totalMatches += adjWins + adjLosses + adjTies;
+
       // Apply vote adjustments
-      const adjustment = voteAdjustments[team.id] || 0;
-      votes += adjustment;
+      const voteAdjustment = voteAdjustments[team.id] || 0;
+      votes += voteAdjustment;
+
+      // Apply score differential adjustments
+      const scoreDiffAdjustment = scoreDiffAdjustments[team.id] || 0;
+      scoreDifferential += scoreDiffAdjustment;
 
       return {
         team: {
@@ -190,8 +253,10 @@ class StatisticsService {
         },
         wins,
         votes,
-        voteAdjustment: adjustment,
+        voteAdjustment,
+        winAdjustment: winAdj,
         scoreDifferential,
+        scoreDiffAdjustment,
         totalMatches,
         winPercentage: totalMatches > 0 ? (wins / totalMatches * 100).toFixed(1) : 0,
         opponentIds,
@@ -220,8 +285,13 @@ class StatisticsService {
         const ties = Math.round((t.wins % 1) * 2); // 0.5 wins = 1 tie
         const losses = t.totalMatches - wins - ties;
         
-        const adjustmentNote = t.voteAdjustment !== 0 ? ` (includes ${t.voteAdjustment > 0 ? '+' : ''}${t.voteAdjustment} adjustment)` : '';
-        return `${t.team.name}: ${wins}W-${losses}L-${ties}T (${t.totalMatches} matches), ${t.votes.toFixed(1)} votes${adjustmentNote}, ${t.scoreDifferential > 0 ? '+' : ''}${t.scoreDifferential.toFixed(2)} score diff, opponents result: ${t.opponentsResult.toFixed(2)}`;
+        const voteAdjNote = t.voteAdjustment !== 0 ? ` (vote adj: ${t.voteAdjustment > 0 ? '+' : ''}${t.voteAdjustment})` : '';
+        const winAdj = t.winAdjustment || { wins: 0, losses: 0, ties: 0 };
+        const winAdjNote = (winAdj.wins !== 0 || winAdj.losses !== 0 || winAdj.ties !== 0) 
+          ? ` (win adj: ${winAdj.wins > 0 ? '+' : ''}${winAdj.wins}W ${winAdj.losses > 0 ? '+' : ''}${winAdj.losses}L ${winAdj.ties > 0 ? '+' : ''}${winAdj.ties}T)` 
+          : '';
+        
+        return `${t.team.name}: ${wins}W-${losses}L-${ties}T (${t.totalMatches} matches), ${t.votes.toFixed(1)} votes${voteAdjNote}${winAdjNote}, ${t.scoreDifferential > 0 ? '+' : ''}${t.scoreDifferential.toFixed(2)} score diff, opponents result: ${t.opponentsResult.toFixed(2)}`;
       }).join('\n')
     });
 

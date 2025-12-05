@@ -34,6 +34,10 @@ A comprehensive web application for managing Ethics Bowl tournaments, providing 
 - Judge scoring interface with real-time updates
 - Automatic score calculation and ranking
 - Comprehensive scoring history and analytics
+- **Manual Adjustments**: Admin tools for vote and win point adjustments
+  - Vote Adjustment: Modify team voting scores
+  - Win Point Adjustment: Adjust win/loss/tie records
+  - Full audit trail with admin logs
 
 ### User Management
 - Role-based access control (Admin, Judge, Moderator)

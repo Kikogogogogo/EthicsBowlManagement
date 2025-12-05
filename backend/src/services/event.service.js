@@ -912,6 +912,723 @@ class EventService {
       throw error;
     }
   }
+
+  /**
+   * Delete a vote adjustment log (revert the adjustment)
+   * @param {string} eventId - Event ID
+   * @param {string} logId - Log ID to delete
+   * @returns {Object} Result
+   */
+  async deleteVoteLog(eventId, logId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Find the log to verify it belongs to this event
+      const log = await prisma.voteLog.findUnique({
+        where: { id: logId }
+      });
+
+      if (!log) {
+        throw new Error('Vote adjustment log not found');
+      }
+
+      if (log.eventId !== eventId) {
+        throw new Error('Vote adjustment log does not belong to this event');
+      }
+
+      // Delete the log
+      await prisma.voteLog.delete({
+        where: { id: logId }
+      });
+
+      return {
+        deleted: true,
+        logId: logId
+      };
+    } catch (error) {
+      console.error('Error deleting vote log:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Apply win point adjustments to teams
+   * @param {string} eventId - Event ID
+   * @param {Array} adjustments - Array of {teamId, wins, losses, ties}
+   * @param {string} adminId - Admin ID
+   * @param {string} adminName - Admin name
+   * @returns {Object} Result
+   */
+  async applyWinAdjustments(eventId, adjustments, adminId, adminName) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Create win logs for each adjustment
+      const winLogs = [];
+      for (const { teamId, wins, losses, ties } of adjustments) {
+        // Verify team belongs to this event
+        const team = await prisma.team.findFirst({
+          where: { 
+            id: teamId,
+            eventId: eventId
+          }
+        });
+
+        if (!team) {
+          throw new Error(`Team ${teamId} not found in this event`);
+        }
+
+        // Create win log entry
+        const winLog = await prisma.winLog.create({
+          data: {
+            eventId,
+            teamId,
+            wins_adj: parseInt(wins) || 0,
+            losses_adj: parseInt(losses) || 0,
+            ties_adj: parseInt(ties) || 0,
+            adminId,
+            adminName
+          }
+        });
+
+        winLogs.push(winLog);
+      }
+
+      return {
+        adjustmentsApplied: winLogs.length,
+        logs: winLogs
+      };
+    } catch (error) {
+      console.error('Error applying win adjustments:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get win adjustment logs for an event
+   * @param {string} eventId - Event ID
+   * @returns {Array} Win logs
+   */
+  async getWinLogs(eventId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Get all win logs for this event
+      try {
+        const logs = await prisma.winLog.findMany({
+          where: { eventId },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        // Get team names for each log
+        const logsWithTeamNames = await Promise.all(
+          logs.map(async (log) => {
+            const team = await prisma.team.findUnique({
+              where: { id: log.teamId },
+              select: { name: true }
+            });
+            
+            return {
+              ...log,
+              teamName: team?.name || 'Unknown Team'
+            };
+          })
+        );
+
+        return logsWithTeamNames;
+      } catch (dbError) {
+        if (dbError.message && dbError.message.includes('does not exist')) {
+          console.log('WinLog table not found, returning empty logs');
+          return [];
+        }
+        throw dbError;
+      }
+    } catch (error) {
+      console.error('Error getting win logs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a win adjustment log (revert the adjustment)
+   * @param {string} eventId - Event ID
+   * @param {string} logId - Log ID to delete
+   * @returns {Object} Result
+   */
+  async deleteWinLog(eventId, logId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Find the log to verify it belongs to this event
+      const log = await prisma.winLog.findUnique({
+        where: { id: logId }
+      });
+
+      if (!log) {
+        throw new Error('Win adjustment log not found');
+      }
+
+      if (log.eventId !== eventId) {
+        throw new Error('Win adjustment log does not belong to this event');
+      }
+
+      // Delete the log
+      await prisma.winLog.delete({
+        where: { id: logId }
+      });
+
+      return {
+        deleted: true,
+        logId: logId
+      };
+    } catch (error) {
+      console.error('Error deleting win log:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Apply score differential adjustments to teams
+   * @param {string} eventId - Event ID
+   * @param {Array} adjustments - Array of {teamId, scoreDiff}
+   * @param {string} adminId - Admin ID
+   * @param {string} adminName - Admin name
+   * @returns {Object} Result
+   */
+  async applyScoreDiffAdjustments(eventId, adjustments, adminId, adminName) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      const scoreDiffLogs = [];
+      for (const { teamId, scoreDiff } of adjustments) {
+        // Verify team exists in this event
+        const team = await prisma.team.findFirst({
+          where: { id: teamId, eventId: eventId }
+        });
+
+        if (!team) {
+          throw new Error(`Team ${teamId} not found in this event`);
+        }
+
+        // Create score diff log entry
+        const scoreDiffLog = await prisma.scoreDiffLog.create({
+          data: {
+            eventId,
+            teamId,
+            scoreDiffAdj: parseFloat(scoreDiff) || 0,
+            adminId,
+            adminName
+          }
+        });
+
+        scoreDiffLogs.push(scoreDiffLog);
+      }
+
+      return {
+        adjustmentsApplied: scoreDiffLogs.length,
+        logs: scoreDiffLogs
+      };
+    } catch (error) {
+      console.error('Error applying score diff adjustments:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get score differential adjustment logs for an event
+   * @param {string} eventId - Event ID
+   * @returns {Array} Score diff logs
+   */
+  async getScoreDiffLogs(eventId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Get all score diff logs for this event
+      try {
+        const logs = await prisma.scoreDiffLog.findMany({
+          where: { eventId },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        // Get team names for each log
+        const logsWithTeamNames = await Promise.all(
+          logs.map(async (log) => {
+            const team = await prisma.team.findUnique({
+              where: { id: log.teamId },
+              select: { name: true }
+            });
+            
+            return {
+              ...log,
+              teamName: team?.name || 'Unknown Team'
+            };
+          })
+        );
+
+        return logsWithTeamNames;
+      } catch (dbError) {
+        if (dbError.message && dbError.message.includes('does not exist')) {
+          console.log('ScoreDiffLog table not found, returning empty logs');
+          return [];
+        }
+        throw dbError;
+      }
+    } catch (error) {
+      console.error('Error getting score diff logs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a score differential adjustment log (revert the adjustment)
+   * @param {string} eventId - Event ID
+   * @param {string} logId - Log ID to delete
+   * @returns {Object} Result
+   */
+  async deleteScoreDiffLog(eventId, logId) {
+    try {
+      // Verify event exists
+      const event = await prisma.event.findUnique({
+        where: { id: eventId }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Find the log to verify it belongs to this event
+      const log = await prisma.scoreDiffLog.findUnique({
+        where: { id: logId }
+      });
+
+      if (!log) {
+        throw new Error('Score differential adjustment log not found');
+      }
+
+      if (log.eventId !== eventId) {
+        throw new Error('Score differential adjustment log does not belong to this event');
+      }
+
+      // Delete the log
+      await prisma.scoreDiffLog.delete({
+        where: { id: logId }
+      });
+
+      return {
+        deleted: true,
+        logId: logId
+      };
+    } catch (error) {
+      console.error('Error deleting score diff log:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get bye teams information for all rounds in an event
+   * @param {string} eventId - Event ID
+   * @returns {Object} Bye teams by round with score differentials
+   */
+  async getByeTeams(eventId) {
+    try {
+      // Get event and check if it has odd number of teams
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        include: {
+          teams: true,
+          matches: {
+            include: {
+              teamA: true,
+              teamB: true,
+              scores: {
+                where: { isSubmitted: true }
+              }
+            }
+          }
+        }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Only events with odd number of teams have bye teams
+      const teamCount = event.teams.length;
+      const hasOddTeams = teamCount % 2 === 1;
+
+      if (!hasOddTeams) {
+        return {
+          hasOddTeams: false,
+          teamCount,
+          byeTeams: {}
+        };
+      }
+
+      // Find bye matches (matches where teamBId is null)
+      const byeMatches = event.matches.filter(m => m.teamAId && !m.teamBId);
+      
+      // Group bye matches by round
+      const byeTeamsByRound = {};
+      
+      for (const match of byeMatches) {
+        const roundNumber = match.roundNumber;
+        const team = match.teamA;
+        
+        // Calculate score differential for this team
+        const scoreDiff = await this.calculateByeTeamScoreDifferential(eventId, team.id, match.id);
+        
+        byeTeamsByRound[roundNumber] = {
+          matchId: match.id,
+          team: {
+            id: team.id,
+            name: team.name,
+            school: team.school
+          },
+          scoreDifferential: scoreDiff.value,
+          calculationMethod: scoreDiff.method,
+          explanation: scoreDiff.explanation,
+          averageScoreDiff: scoreDiff.averageScoreDiff,
+          matchesPlayed: scoreDiff.matchesPlayed
+        };
+      }
+
+      return {
+        hasOddTeams: true,
+        teamCount,
+        byeTeamsByRound,
+        rules: {
+          defaultScoreDiff: 3.0,
+          description: 'Bye team score differential is the larger of: +3.0 or the team\'s average score differential from other matches.',
+          updateTrigger: 'Score differential is recalculated every time a match is completed.'
+        }
+      };
+    } catch (error) {
+      console.error('Error getting bye teams:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate score differential for a bye team
+   * @param {string} eventId - Event ID
+   * @param {string} teamId - Team ID
+   * @param {string} byeMatchId - Bye match ID to exclude from calculation
+   * @returns {Object} Score differential info
+   */
+  async calculateByeTeamScoreDifferential(eventId, teamId, byeMatchId) {
+    try {
+      // Get all completed matches for this team (excluding the bye match)
+      const matches = await prisma.match.findMany({
+        where: {
+          eventId,
+          id: { not: byeMatchId },
+          status: 'completed',
+          OR: [
+            { teamAId: teamId },
+            { teamBId: teamId }
+          ]
+        },
+        include: {
+          scores: {
+            where: { isSubmitted: true }
+          },
+          assignments: true,
+          teamA: true,
+          teamB: true
+        }
+      });
+
+      // If no other matches played, use +3.0
+      if (matches.length === 0) {
+        return {
+          value: 3.0,
+          method: 'default',
+          explanation: 'No other matches played yet. Using default +3.0.',
+          averageScoreDiff: null,
+          matchesPlayed: 0
+        };
+      }
+
+      // Calculate score differential for each match
+      let totalScoreDiff = 0;
+      const statisticsService = require('./statistics.service');
+
+      for (const match of matches) {
+        const matchResult = statisticsService.calculateMatchResult(match, teamId);
+        totalScoreDiff += matchResult.scoreDifferential;
+      }
+
+      const averageScoreDiff = totalScoreDiff / matches.length;
+
+      // Use the larger of +3.0 or average score differential
+      const finalScoreDiff = Math.max(3.0, averageScoreDiff);
+
+      return {
+        value: finalScoreDiff,
+        method: finalScoreDiff === 3.0 ? 'default' : 'average',
+        explanation: finalScoreDiff === 3.0 
+          ? `Average score differential (${averageScoreDiff.toFixed(2)}) is less than +3.0. Using +3.0.`
+          : `Average score differential (${averageScoreDiff.toFixed(2)}) is greater than +3.0. Using average.`,
+        averageScoreDiff,
+        matchesPlayed: matches.length
+      };
+    } catch (error) {
+      console.error('Error calculating bye team score differential:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create or update a bye team assignment for a round
+   * @param {string} eventId - Event ID
+   * @param {number} roundNumber - Round number
+   * @param {string} teamId - Team ID to assign bye
+   * @returns {Object} Created/updated bye match
+   */
+  async createByeTeam(eventId, roundNumber, teamId) {
+    try {
+      // Verify event exists and has odd number of teams
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        include: {
+          teams: true
+        }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      const teamCount = event.teams.length;
+      if (teamCount % 2 === 0) {
+        throw new Error('Cannot create bye team for event with even number of teams');
+      }
+
+      // Verify team exists in this event
+      const team = event.teams.find(t => t.id === teamId);
+      if (!team) {
+        throw new Error('Team not found in this event');
+      }
+
+      // Check if team already has a bye in another round
+      const existingBye = await prisma.match.findFirst({
+        where: {
+          eventId,
+          teamAId: teamId,
+          teamBId: null,
+          roundNumber: { not: roundNumber }
+        }
+      });
+
+      if (existingBye) {
+        throw new Error('Team already has a bye in another round. Each team can only have one bye per tournament.');
+      }
+
+      // Check if a bye match already exists for this round
+      const existingByeMatch = await prisma.match.findFirst({
+        where: {
+          eventId,
+          roundNumber,
+          teamBId: null
+        }
+      });
+
+      if (existingByeMatch) {
+        // Update existing bye match
+        const updatedMatch = await prisma.match.update({
+          where: { id: existingByeMatch.id },
+          data: {
+            teamAId: teamId,
+            status: 'completed', // Bye matches are automatically completed
+            winnerId: teamId
+          },
+          include: {
+            teamA: true
+          }
+        });
+
+        // Recalculate score differential
+        await this.recalculateByeMatchScores(eventId);
+
+        return updatedMatch;
+      } else {
+        // Create new bye match
+        const byeMatch = await prisma.match.create({
+          data: {
+            eventId,
+            roundNumber,
+            teamAId: teamId,
+            teamBId: null, // null indicates bye
+            status: 'completed', // Bye matches are automatically completed
+            winnerId: teamId
+          },
+          include: {
+            teamA: true
+          }
+        });
+
+        // Recalculate score differential
+        await this.recalculateByeMatchScores(eventId);
+
+        return byeMatch;
+      }
+    } catch (error) {
+      console.error('Error creating bye team:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Recalculate score differentials for all bye teams in an event
+   * This should be called every time a match is completed
+   * @param {string} eventId - Event ID
+   */
+  async recalculateByeMatchScores(eventId) {
+    try {
+      // Get all bye matches for this event
+      const byeMatches = await prisma.match.findMany({
+        where: {
+          eventId,
+          teamBId: null,
+          teamAId: { not: null }
+        },
+        include: {
+          teamA: true
+        }
+      });
+
+      console.log(`📊 Recalculating score differentials for ${byeMatches.length} bye matches...`);
+
+      // For each bye match, update the score differential
+      // Note: We store this as a win adjustment (3-0) and score diff adjustment
+      for (const byeMatch of byeMatches) {
+        const teamId = byeMatch.teamAId;
+        const scoreDiff = await this.calculateByeTeamScoreDifferential(eventId, teamId, byeMatch.id);
+        
+        console.log(`  Team ${byeMatch.teamA.name}: Score diff = ${scoreDiff.value.toFixed(2)} (${scoreDiff.method})`);
+
+        // Check if we need to update the score diff log for this bye
+        // We'll use a special marker in the reason field to identify bye match adjustments
+        const existingLog = await prisma.scoreDiffLog.findFirst({
+          where: {
+            eventId,
+            teamId,
+            reason: `Bye match in round ${byeMatch.roundNumber}`
+          }
+        });
+
+        if (existingLog) {
+          // Update existing log if score diff changed
+          if (Math.abs(existingLog.scoreDiffAdj - scoreDiff.value) > 0.01) {
+            await prisma.scoreDiffLog.update({
+              where: { id: existingLog.id },
+              data: {
+                scoreDiffAdj: scoreDiff.value,
+                adminName: 'System (Auto-calculated)',
+                createdAt: new Date() // Update timestamp
+              }
+            });
+          }
+        } else {
+          // Create new log entry
+          // Get admin user (system)
+          const adminUser = await prisma.user.findFirst({
+            where: { role: 'admin' }
+          });
+
+          if (adminUser) {
+            await prisma.scoreDiffLog.create({
+              data: {
+                eventId,
+                teamId,
+                scoreDiffAdj: scoreDiff.value,
+                adminId: adminUser.id,
+                adminName: 'System (Auto-calculated)',
+                reason: `Bye match in round ${byeMatch.roundNumber}`
+              }
+            });
+          }
+        }
+
+        // Also ensure the team has the 3-0 win recorded
+        const existingWinLog = await prisma.winLog.findFirst({
+          where: {
+            eventId,
+            teamId,
+            reason: `Bye match in round ${byeMatch.roundNumber}`
+          }
+        });
+
+        if (!existingWinLog) {
+          const adminUser = await prisma.user.findFirst({
+            where: { role: 'admin' }
+          });
+
+          if (adminUser) {
+            await prisma.winLog.create({
+              data: {
+                eventId,
+                teamId,
+                winsAdj: 1,
+                lossesAdj: 0,
+                tiesAdj: 0,
+                adminId: adminUser.id,
+                adminName: 'System (Bye match)',
+                reason: `Bye match in round ${byeMatch.roundNumber}`
+              }
+            });
+          }
+        }
+      }
+
+      console.log('✅ Bye match score differentials recalculated successfully');
+    } catch (error) {
+      console.error('Error recalculating bye match scores:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = EventService; 

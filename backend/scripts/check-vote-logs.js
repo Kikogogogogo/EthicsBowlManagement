@@ -39,3 +39,10 @@ async function checkVoteLogs() {
 
 checkVoteLogs();
 
+
+
+
+
+
+
+

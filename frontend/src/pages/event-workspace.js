@@ -1747,8 +1747,8 @@ class EventWorkspacePage {
                 📋 Log
               </button>
               ${isAdmin ? `
-                <button onclick="window.eventWorkspacePage.showVoteAdjustmentModal()" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-medium">
-                  ⚖️ Vote Adjustment
+                <button onclick="window.eventWorkspacePage.showAdjustmentModal()" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-medium">
+                  ⚖️ Adjustment
                 </button>
               ` : ''}
               <button onclick="window.eventWorkspacePage.refreshStandings()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium">
@@ -1837,8 +1837,15 @@ class EventWorkspacePage {
 
     const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
       <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
-        <div class="px-6 py-4 border-b border-gray-300">
+        <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
           <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
+          <button 
+            onclick="window.eventWorkspacePage.showByeTeamInfo(${round})"
+            class="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors"
+            title="View bye team information for this round"
+          >
+            Bye Team
+          </button>
         </div>
         <div class="divide-y divide-gray-200">
           ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
@@ -1992,8 +1999,15 @@ class EventWorkspacePage {
         <!-- Matches by Round -->
         ${Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
           <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
-            <div class="px-6 py-4 border-b border-gray-300">
+            <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
               <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
+              <button 
+                onclick="window.eventWorkspacePage.showByeTeamInfo(${round})"
+                class="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors"
+                title="View bye team information for this round"
+              >
+                Bye Team
+              </button>
             </div>
             <div class="divide-y divide-gray-200">
               ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
@@ -2132,7 +2146,7 @@ class EventWorkspacePage {
             ` : ''}
           </div>
 
-          <!-- 提示信息区域 - 显示在按钮下方 (更新时间: ${new Date().toISOString()}) -->
+          <!-- Status Information Area - Display below buttons (Updated: ${new Date().toISOString()}) -->
           <div class="mt-2 space-y-1">
             ${isAssignedJudge && effectiveRole === 'judge' && hasSubmittedScores ? `
               <div class="bg-green-50 border border-green-200 rounded px-3 py-1 text-xs text-green-800">
@@ -3183,6 +3197,20 @@ class EventWorkspacePage {
               >
                 Vote Adjustments
               </button>
+              <button 
+                id="winLogTab"
+                onclick="window.eventWorkspacePage.switchLogTab('win')"
+                class="log-tab py-4 px-6 text-sm font-medium border-b-2 border-transparent hover:border-gray-300 transition-colors"
+              >
+                Win Adjustments
+              </button>
+              <button 
+                id="scoreDiffLogTab"
+                onclick="window.eventWorkspacePage.switchLogTab('scoreDiff')"
+                class="log-tab py-4 px-6 text-sm font-medium border-b-2 border-transparent hover:border-gray-300 transition-colors"
+              >
+                Score Diff Adjustments
+              </button>
             </nav>
           </div>
           
@@ -3191,6 +3219,31 @@ class EventWorkspacePage {
           </div>
           
           <div id="voteLogsContent" class="p-6 max-h-[70vh] overflow-y-auto hidden">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+          </div>
+          
+          <div id="winLogsContent" class="p-6 max-h-[70vh] overflow-y-auto hidden">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+          </div>
+          
+          <div id="scoreDiffLogsContent" class="p-6 max-h-[70vh] overflow-y-auto hidden">
+            <div class="text-gray-500 text-center py-8">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bye Team Information Modal -->
+      <div id="byeTeamModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-3xl w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-300 flex justify-between items-center">
+            <h3 class="text-lg font-medium text-gray-900">Bye Team Information</h3>
+            <button onclick="window.eventWorkspacePage.hideModal('byeTeamModal')" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="byeTeamModalContent" class="p-6">
             <div class="text-gray-500 text-center py-8">Loading...</div>
           </div>
         </div>
@@ -3686,6 +3739,44 @@ class EventWorkspacePage {
       if (teamAId && teamBId && teamAId === teamBId) {
         errors.push('Team A and Team B cannot be the same team');
       }
+      
+      // ==================== 验证队伍在该轮是否已存在 ====================
+      // Check if team already exists in this round
+      const matchesInRound = this.matches.filter(m => m.roundNumber === roundNumber);
+      const teamsInRound = new Set();
+      
+      matchesInRound.forEach(match => {
+        if (match.teamAId) teamsInRound.add(match.teamAId);
+        if (match.teamBId) teamsInRound.add(match.teamBId);
+      });
+      
+      const teamAExists = teamAId && teamsInRound.has(teamAId);
+      const teamBExists = teamBId && teamsInRound.has(teamBId);
+      
+      if (teamAExists || teamBExists) {
+        const duplicateTeams = [];
+        if (teamAExists) {
+          const teamA = this.teams.find(t => t.id === teamAId);
+          duplicateTeams.push(teamA ? teamA.name : 'Team A');
+        }
+        if (teamBExists) {
+          const teamB = this.teams.find(t => t.id === teamBId);
+          duplicateTeams.push(teamB ? teamB.name : 'Team B');
+        }
+        
+        // Show warning and ask for confirmation
+        const confirmed = await this.ui.showConfirmation(
+          '⚠️ 警告：队伍重复出现',
+          `以下队伍已经在 Round ${roundNumber} 中出现过：\n\n${duplicateTeams.join('、')}\n\n这违反了比赛规则（每个队伍在每轮只能出现一次）。\n\n您确定要继续创建这个比赛吗？`,
+          '继续创建',
+          '取消'
+        );
+        
+        if (!confirmed) {
+          return; // User cancelled
+        }
+      }
+      // ==================== 验证结束 ====================
       
       // Validate location (optional for moderators and admins)
       const location = formData.get('location');
@@ -6377,7 +6468,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * 安全地获取当前用户
+   * Safely get current user
    */
   getCurrentUser() {
     if (!this.authManager || !this.authManager.currentUser) {
@@ -6405,15 +6496,15 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * 显示导出模态框
+   * Show export modal
    */
   showExportModal() {
     this.showModal('exportModal');
   }
 
   /**
-   * 导出轮次结果
-   * @param {string} roundNumber - 轮次号
+   * Export round results
+   * @param {string} roundNumber - Round number
    */
   async exportRoundResults(roundNumber) {
     try {
@@ -6424,7 +6515,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         return;
       }
 
-      // 先获取JSON数据
+      // First get JSON data
       const response = await fetch(`/api/v1/events/${this.currentEventId}/export/round/${roundNumber}`, {
         method: 'GET',
         headers: {
@@ -6440,7 +6531,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
       const data = await response.json();
       
-      // 下载CSV格式
+      // Download CSV format
       const csvResponse = await fetch(`/api/v1/events/${this.currentEventId}/export/round/${roundNumber}?format=csv`, {
         method: 'GET',
         headers: {
@@ -6465,7 +6556,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         throw new Error('Failed to download CSV file');
       }
 
-      // 关闭模态框
+      // Close modal
       this.closeModal('exportModal');
 
     } catch (error) {
@@ -6475,13 +6566,13 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * 导出完整事件结果
+   * Export complete event results
    */
   async exportFullEventResults() {
     try {
       console.log('Exporting full event results');
 
-      // 先获取JSON数据
+      // First get JSON data
       const response = await fetch(`/api/v1/events/${this.currentEventId}/export/full`, {
         method: 'GET',
         headers: {
@@ -6497,7 +6588,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
 
       const data = await response.json();
       
-      // 下载CSV格式
+      // Download CSV format
       const csvResponse = await fetch(`/api/v1/events/${this.currentEventId}/export/full?format=csv`, {
         method: 'GET',
         headers: {
@@ -6523,7 +6614,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         throw new Error('Failed to download CSV file');
       }
 
-      // 关闭模态框
+      // Close modal
       this.closeModal('exportModal');
 
     } catch (error) {
@@ -6594,7 +6685,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const hasHalfWin = (backendWins % 1) >= 0.4; // Check if there's a .5 (allowing small float errors)
     
     const wins = wholeWins + (hasHalfWin ? 0 : 0); // Integer wins
-    const draws = hasHalfWin ? 1 : 0; // Draws (半局)
+    const draws = hasHalfWin ? 1 : 0; // Draws
     const losses = totalMatches - wins - draws;
     
     // Calculate win rate from backend data
@@ -6745,7 +6836,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                       </div>
                     </div>
                     <div class="text-right">
-                      <div class="text-sm font-medium">第 ${detail.round} 轮</div>
+                      <div class="text-sm font-medium">Round ${detail.round}</div>
                       <div class="text-xs text-gray-500">${detail.room}</div>
                     </div>
                   </div>
@@ -6758,21 +6849,21 @@ Note: Judges typically score each question individually (First, Second, Third Qu
               <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div>
                   <div class="text-lg font-bold text-gray-900">${standing.wins}</div>
-                  <div class="text-xs text-gray-500">胜场</div>
+                  <div class="text-xs text-gray-500">Wins</div>
                 </div>
                 <div>
                   <div class="text-lg font-bold text-gray-900">${standing.totalMatches - standing.wins}</div>
-                  <div class="text-xs text-gray-500">负场</div>
+                  <div class="text-xs text-gray-500">Losses</div>
                 </div>
                 <div>
                   <div class="text-lg font-bold text-gray-900">${standing.votes}</div>
-                  <div class="text-xs text-gray-500">总票数</div>
+                  <div class="text-xs text-gray-500">Total Votes</div>
                 </div>
                 <div>
                   <div class="text-lg font-bold ${standing.scoreDifferential >= 0 ? 'text-green-600' : 'text-red-600'}">
                     ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential}
                   </div>
-                  <div class="text-xs text-gray-500">分差</div>
+                  <div class="text-xs text-gray-500">Score Diff</div>
                 </div>
               </div>
             </div>
@@ -6921,8 +7012,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   async switchLogTab(tab) {
     const rankingLogTab = document.getElementById('rankingLogTab');
     const voteLogTab = document.getElementById('voteLogTab');
+    const winLogTab = document.getElementById('winLogTab');
+    const scoreDiffLogTab = document.getElementById('scoreDiffLogTab');
     const rankingLogsContent = document.getElementById('rankingLogsContent');
     const voteLogsContent = document.getElementById('voteLogsContent');
+    const winLogsContent = document.getElementById('winLogsContent');
+    const scoreDiffLogsContent = document.getElementById('scoreDiffLogsContent');
     
     // Update tab styles
     const allTabs = document.querySelectorAll('.log-tab');
@@ -6936,15 +7031,43 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       rankingLogTab.classList.add('border-purple-600', 'text-purple-600');
       rankingLogsContent.classList.remove('hidden');
       voteLogsContent.classList.add('hidden');
+      winLogsContent.classList.add('hidden');
+      scoreDiffLogsContent.classList.add('hidden');
     } else if (tab === 'vote') {
       voteLogTab.classList.remove('text-gray-500');
       voteLogTab.classList.add('border-purple-600', 'text-purple-600');
       voteLogsContent.classList.remove('hidden');
       rankingLogsContent.classList.add('hidden');
+      winLogsContent.classList.add('hidden');
+      scoreDiffLogsContent.classList.add('hidden');
       
       // Load vote logs if not already loaded
       if (voteLogsContent.querySelector('.text-gray-500')) {
         await this.loadVoteLogs();
+      }
+    } else if (tab === 'win') {
+      winLogTab.classList.remove('text-gray-500');
+      winLogTab.classList.add('border-purple-600', 'text-purple-600');
+      winLogsContent.classList.remove('hidden');
+      rankingLogsContent.classList.add('hidden');
+      voteLogsContent.classList.add('hidden');
+      scoreDiffLogsContent.classList.add('hidden');
+      
+      // Load win logs if not already loaded
+      if (winLogsContent.querySelector('.text-gray-500')) {
+        await this.loadWinLogs();
+      }
+    } else if (tab === 'scoreDiff') {
+      scoreDiffLogTab.classList.remove('text-gray-500');
+      scoreDiffLogTab.classList.add('border-purple-600', 'text-purple-600');
+      scoreDiffLogsContent.classList.remove('hidden');
+      rankingLogsContent.classList.add('hidden');
+      voteLogsContent.classList.add('hidden');
+      winLogsContent.classList.add('hidden');
+      
+      // Load score diff logs if not already loaded
+      if (scoreDiffLogsContent.querySelector('.text-gray-500')) {
+        await this.loadScoreDiffLogs();
       }
     }
   }
@@ -6996,6 +7119,417 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Load win adjustment logs
+   */
+  async loadWinLogs() {
+    const winLogsContent = document.getElementById('winLogsContent');
+    
+    try {
+      winLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
+      
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/win-logs`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log('🏆 [WinLogs] API Response:', data);
+      console.log('🏆 [WinLogs] Logs array:', data.data?.logs);
+      console.log('🏆 [WinLogs] Number of logs:', data.data?.logs?.length || 0);
+      
+      // Debug: Log first entry to see field names
+      if (data.data?.logs?.length > 0) {
+        console.log('🏆 [WinLogs] First log entry:', data.data.logs[0]);
+        console.log('🏆 [WinLogs] Field names:', Object.keys(data.data.logs[0]));
+      }
+      
+      if (data.success && data.data && data.data.logs) {
+        winLogsContent.innerHTML = this.renderWinLogs(data.data.logs);
+      } else {
+        winLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">No win adjustments found</div>';
+      }
+      
+    } catch (error) {
+      console.error('Error loading win logs:', error);
+      winLogsContent.innerHTML = '<div class="text-red-500 text-center py-8">Failed to load win logs</div>';
+    }
+  }
+
+  /**
+   * Render win adjustment logs
+   */
+  renderWinLogs(logs) {
+    console.log('🎨 [renderWinLogs] Called with logs:', logs);
+    console.log('🎨 [renderWinLogs] Logs type:', typeof logs);
+    console.log('🎨 [renderWinLogs] Logs is array:', Array.isArray(logs));
+    console.log('🎨 [renderWinLogs] Logs length:', logs?.length);
+    
+    if (!logs || logs.length === 0) {
+      return '<div class="text-gray-500 text-center py-8">No win adjustments have been made yet</div>';
+    }
+
+    const html = `
+      <div class="space-y-3">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <h4 class="text-lg font-semibold text-blue-900 mb-2">Win Point Adjustment History</h4>
+          <p class="text-sm text-blue-800">This log shows all manual win/loss/tie adjustments made by administrators.</p>
+        </div>
+        
+        ${logs.map(log => {
+          console.log('🎨 [renderWinLogs] Rendering log:', log);
+          
+          // Support both snake_case and camelCase field names for compatibility
+          const winsAdj = log.wins_adj ?? log.winsAdj ?? 0;
+          const lossesAdj = log.losses_adj ?? log.lossesAdj ?? 0;
+          const tiesAdj = log.ties_adj ?? log.tiesAdj ?? 0;
+          
+          // Determine the adjustment type and color
+          const hasWins = winsAdj !== 0;
+          const hasLosses = lossesAdj !== 0;
+          const hasTies = tiesAdj !== 0;
+          
+          const adjustmentParts = [];
+          if (hasWins) {
+            const winsColor = winsAdj > 0 ? 'text-green-600' : 'text-red-600';
+            const winsSign = winsAdj > 0 ? '+' : '';
+            adjustmentParts.push(`<span class="${winsColor} font-semibold">${winsSign}${winsAdj}W</span>`);
+          }
+          if (hasLosses) {
+            const lossesColor = lossesAdj > 0 ? 'text-red-600' : 'text-green-600';
+            const lossesSign = lossesAdj > 0 ? '+' : '';
+            adjustmentParts.push(`<span class="${lossesColor} font-semibold">${lossesSign}${lossesAdj}L</span>`);
+          }
+          if (hasTies) {
+            const tiesColor = tiesAdj > 0 ? 'text-yellow-600' : 'text-gray-600';
+            const tiesSign = tiesAdj > 0 ? '+' : '';
+            adjustmentParts.push(`<span class="${tiesColor} font-semibold">${tiesSign}${tiesAdj}T</span>`);
+          }
+          
+          const adjustmentDisplay = adjustmentParts.join(', ');
+          
+          // Use neutral background for win adjustments
+          const adjustmentBg = 'bg-blue-50 border-blue-200';
+          
+          return `
+            <div class="border ${adjustmentBg} rounded-lg p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-2">
+                    <span class="font-semibold text-gray-900">${this.escapeHtml(log.teamName)}</span>
+                    <span class="px-2 py-1 text-sm rounded bg-white border border-gray-300">
+                      ${adjustmentDisplay}
+                    </span>
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    <div>Admin: <span class="font-medium">${this.escapeHtml(log.adminName)}</span></div>
+                    <div>Time: <span class="font-medium">${new Date(log.createdAt).toLocaleString()}</span></div>
+                    ${log.reason ? `<div class="mt-1">Reason: <span class="italic">${this.escapeHtml(log.reason)}</span></div>` : ''}
+                  </div>
+                </div>
+                <div class="ml-4">
+                  <button 
+                    onclick="window.eventWorkspacePage.revertWinAdjustment('${log.id}', '${this.escapeHtml(log.teamName)}')"
+                    class="px-3 py-1 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-300 rounded-md transition-colors"
+                    title="Revert this adjustment"
+                  >
+                    Revert
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    
+    console.log('🎨 [renderWinLogs] Generated HTML length:', html.length);
+    return html;
+  }
+
+  /**
+   * Revert a win adjustment
+   */
+  async revertWinAdjustment(logId, teamName) {
+    try {
+      // Confirm with user
+      const confirmed = confirm(`Are you sure you want to revert the win adjustment for ${teamName}?\n\nThis will remove the adjustment from the records and recalculate the standings.`);
+      
+      if (!confirmed) {
+        return;
+      }
+
+      this.ui.showLoading('Reverting win adjustment...');
+
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/win-logs/${logId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to revert win adjustment');
+      }
+
+      const result = await response.json();
+
+      // Refresh the win logs
+      await this.loadWinLogs();
+      
+      // Refresh standings to reflect the reverted adjustment
+      await this.refreshStandings();
+      
+      this.ui.hideLoading();
+      this.ui.showSuccess('Success', result.message || 'Win adjustment reverted successfully');
+
+    } catch (error) {
+      console.error('Error reverting win adjustment:', error);
+      this.ui.hideLoading();
+      this.ui.showError('Error', error.message || 'Failed to revert win adjustment');
+    }
+  }
+
+  /**
+   * Revert a vote adjustment
+   */
+  async revertVoteAdjustment(logId, teamName) {
+    try {
+      // Confirm with user
+      const confirmed = confirm(`Are you sure you want to revert the vote adjustment for ${teamName}?\n\nThis will remove the adjustment from the records and recalculate the standings.`);
+      
+      if (!confirmed) {
+        return;
+      }
+
+      this.ui.showLoading('Reverting vote adjustment...');
+
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/vote-logs/${logId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to revert vote adjustment');
+      }
+
+      const result = await response.json();
+
+      // Refresh the vote logs
+      await this.loadVoteLogs();
+      
+      // Refresh standings to reflect the reverted adjustment
+      await this.refreshStandings();
+      
+      this.ui.hideLoading();
+      this.ui.showSuccess('Success', result.message || 'Vote adjustment reverted successfully');
+
+    } catch (error) {
+      console.error('Error reverting vote adjustment:', error);
+      this.ui.hideLoading();
+      this.ui.showError('Error', error.message || 'Failed to revert vote adjustment');
+    }
+  }
+
+  /**
+   * Load score differential adjustment logs
+   */
+  async loadScoreDiffLogs() {
+    const scoreDiffLogsContent = document.getElementById('scoreDiffLogsContent');
+    
+    try {
+      scoreDiffLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading...</div>';
+      
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/score-diff-logs`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log('📊 [ScoreDiffLogs] API Response:', data);
+      console.log('📊 [ScoreDiffLogs] Logs array:', data.data?.logs);
+      console.log('📊 [ScoreDiffLogs] Number of logs:', data.data?.logs?.length || 0);
+      
+      if (data.success && data.data && data.data.logs) {
+        scoreDiffLogsContent.innerHTML = this.renderScoreDiffLogs(data.data.logs);
+      } else {
+        scoreDiffLogsContent.innerHTML = '<div class="text-gray-500 text-center py-8">No score diff adjustments found</div>';
+      }
+      
+    } catch (error) {
+      console.error('Error loading score diff logs:', error);
+      scoreDiffLogsContent.innerHTML = '<div class="text-red-500 text-center py-8">Failed to load score diff logs</div>';
+    }
+  }
+
+  /**
+   * Render score differential adjustment logs
+   */
+  renderScoreDiffLogs(logs) {
+    console.log('🎨 [renderScoreDiffLogs] Called with logs:', logs);
+    console.log('🎨 [renderScoreDiffLogs] Logs type:', typeof logs);
+    console.log('🎨 [renderScoreDiffLogs] Logs is array:', Array.isArray(logs));
+    console.log('🎨 [renderScoreDiffLogs] Logs length:', logs?.length);
+    
+    if (!logs || logs.length === 0) {
+      return '<div class="text-gray-500 text-center py-8">No score diff adjustments have been made yet</div>';
+    }
+
+    const html = `
+      <div class="space-y-3">
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+          <h4 class="text-lg font-semibold text-orange-900 mb-2">Score Differential Adjustment History</h4>
+          <p class="text-sm text-orange-800">This log shows all manual score differential adjustments made by administrators.</p>
+        </div>
+        
+        ${logs.map(log => {
+          console.log('🎨 [renderScoreDiffLogs] Rendering log:', log);
+          
+          // Support both snake_case and camelCase field names
+          const scoreDiffAdj = log.scoreDiffAdj ?? log.score_diff_adj ?? 0;
+          
+          const adjustmentColor = scoreDiffAdj > 0 ? 'text-green-600' : 'text-red-600';
+          const adjustmentSign = scoreDiffAdj > 0 ? '+' : '';
+          const adjustmentBg = scoreDiffAdj > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200';
+          
+          return `
+            <div class="border ${adjustmentBg} rounded-lg p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-2">
+                    <span class="font-semibold text-gray-900">${this.escapeHtml(log.teamName)}</span>
+                    <span class="px-2 py-1 text-sm font-bold ${adjustmentColor} rounded">
+                      ${adjustmentSign}${scoreDiffAdj.toFixed(2)} score diff
+                    </span>
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    <div>Admin: <span class="font-medium">${this.escapeHtml(log.adminName)}</span></div>
+                    <div>Time: <span class="font-medium">${new Date(log.createdAt).toLocaleString()}</span></div>
+                    ${log.reason ? `<div class="mt-1">Reason: <span class="italic">${this.escapeHtml(log.reason)}</span></div>` : ''}
+                  </div>
+                </div>
+                <div class="ml-4">
+                  <button 
+                    onclick="window.eventWorkspacePage.revertScoreDiffAdjustment('${log.id}', '${this.escapeHtml(log.teamName)}')"
+                    class="px-3 py-1 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-300 rounded-md transition-colors"
+                    title="Revert this adjustment"
+                  >
+                    Revert
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    
+    console.log('🎨 [renderScoreDiffLogs] Generated HTML length:', html.length);
+    return html;
+  }
+
+  /**
+   * Revert a score differential adjustment
+   */
+  async revertScoreDiffAdjustment(logId, teamName) {
+    try {
+      // Confirm with user
+      const confirmed = confirm(`Are you sure you want to revert the score diff adjustment for ${teamName}?\n\nThis will remove the adjustment from the records and recalculate the standings.`);
+      
+      if (!confirmed) {
+        return;
+      }
+
+      this.ui.showLoading('Reverting score diff adjustment...');
+
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/score-diff-logs/${logId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to revert score diff adjustment');
+      }
+
+      const result = await response.json();
+
+      // Refresh the score diff logs
+      await this.loadScoreDiffLogs();
+      
+      // Refresh standings to reflect the reverted adjustment
+      await this.refreshStandings();
+      
+      this.ui.hideLoading();
+      this.ui.showSuccess('Success', result.message || 'Score diff adjustment reverted successfully');
+
+    } catch (error) {
+      console.error('Error reverting score diff adjustment:', error);
+      this.ui.hideLoading();
+      this.ui.showError('Error', error.message || 'Failed to revert score diff adjustment');
+    }
+  }
+
+  /**
    * Render vote logs
    */
   renderVoteLogs(logs) {
@@ -7036,6 +7570,15 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                     <div>Time: <span class="font-medium">${new Date(log.createdAt).toLocaleString()}</span></div>
                     ${log.reason ? `<div class="mt-1">Reason: <span class="italic">${this.escapeHtml(log.reason)}</span></div>` : ''}
                   </div>
+                </div>
+                <div class="ml-4">
+                  <button 
+                    onclick="window.eventWorkspacePage.revertVoteAdjustment('${log.id}', '${this.escapeHtml(log.teamName)}')"
+                    class="px-3 py-1 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-300 rounded-md transition-colors"
+                    title="Revert this adjustment"
+                  >
+                    Revert
+                  </button>
                 </div>
               </div>
             </div>
@@ -7438,7 +7981,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
                       detail.isDraw ? 'bg-yellow-100 text-yellow-800' : 
                       'bg-red-100 text-red-800'
                     }">
-                      ${detail.hasData ? detail.result : '未评分'}
+                      ${detail.hasData ? detail.result : 'Not Scored'}
                     </span>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-500">${detail.room}</td>
@@ -7561,7 +8104,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     try {
       console.log('🔄 [RoleSwitcher] Switching role from', this.getEffectiveRole(), 'to', newRole);
       
-      // 安全检查：确保用户存在
+      // Safety check: ensure user exists
       const currentUser = this.getCurrentUser();
       if (!currentUser) {
         console.error('❌ [RoleSwitcher] Current user is null, cannot switch roles');
@@ -7860,11 +8403,25 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       
       for (const pairing of pairings) {
         try {
-          // Handle bye (轮空) - when teamB is null
+          // Handle bye - when teamB is null
           if (!pairing.teamB) {
             byeTeams.push(pairing.teamA.name);
             console.log(`Team ${pairing.teamA.name} has a bye this round`);
-            continue; // Skip creating a match for bye
+            
+            // Create bye match (teamBId = null)
+            const byeMatchData = {
+              roundNumber: roundNumber,
+              teamAId: pairing.teamA.id,
+              teamBId: null, // null indicates bye
+              status: 'completed', // Bye matches are automatically completed
+              winnerId: pairing.teamA.id, // Bye team automatically wins
+              room: 'Bye'
+            };
+            
+            await this.matchService.createEventMatch(this.currentEventId, byeMatchData);
+            console.log(`✅ Created bye match for ${pairing.teamA.name}`);
+            createdCount++;
+            continue;
           }
           
           const matchData = {
@@ -7892,7 +8449,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Show success message with bye information
       let message = `Generated ${createdCount} matches for Round ${roundNumber}`;
       if (byeTeams.length > 0) {
-        message += `\n\nTeams with bye (轮空): ${byeTeams.join(', ')}`;
+        message += `\n\nTeams with bye: ${byeTeams.join(', ')}`;
       }
       this.ui.showSuccess('Success', message);
       
@@ -7925,7 +8482,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Calculate matches per round (each team plays once per round)
       const teamCount = selectedTeams.length;
       const matchesPerRound = Math.floor(teamCount / 2);
-      let excludedTeamsPerRound = [];
+      const isOddTeams = teamCount % 2 === 1;
       
       // Handle odd number of teams - one team sits out each round
       if (teamCount % 2 === 1) {
@@ -7937,38 +8494,106 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       
       let totalCreatedCount = 0;
       const roundDistribution = {};
+      const byeTeamsPerRound = [];
       
       // Generate complete Round Robin pairings first
       const allPairings = this.generateRoundRobinPairings([...selectedTeams]);
       console.log(`\n🔄 Generated ${allPairings.length} total Round Robin pairings`);
       
-      // Distribute pairings across selected rounds
-      const pairingsPerRound = Math.ceil(allPairings.length / selectedRoundNumbers.length);
+      // Calculate pairings per round based on team structure
+      // For odd teams: matchesPerRound + 1 (includes 1 bye)
+      // For even teams: matchesPerRound
+      const pairingsPerRound = isOddTeams ? matchesPerRound + 1 : matchesPerRound;
       console.log(`🔄 Distributing ${pairingsPerRound} pairings per round across ${selectedRoundNumbers.length} rounds`);
       
       for (let i = 0; i < selectedRoundNumbers.length; i++) {
         const roundNumber = selectedRoundNumbers[i];
         roundDistribution[roundNumber] = [];
         
-        // Get pairings for this round
+        // Get pairings for this round - fixed number per round
         const startIndex = i * pairingsPerRound;
         const endIndex = Math.min(startIndex + pairingsPerRound, allPairings.length);
         const roundPairings = allPairings.slice(startIndex, endIndex);
         
-        console.log(`\n🔄 Round ${roundNumber}: distributing ${roundPairings.length} pairings (${startIndex + 1}-${endIndex})`);
+        console.log(`\n🔄 Round ${roundNumber}: distributing ${roundPairings.length} pairings`);
         
-        // Track excluded team for this round
-        let excludedTeam = null;
+        // ==================== 验证逻辑 ====================
+        // Validate: each team appears at most once per round
+        const teamsInRound = new Set();
+        let byeTeam = null;
+        
+        // First pass: validate all pairings for this round
+        for (const pairing of roundPairings) {
+          if (!pairing.teamB) {
+            // This is a bye
+            if (byeTeam) {
+              throw new Error(`验证失败：Round ${roundNumber} 有多个 bye teams（不允许）`);
+            }
+            byeTeam = pairing.teamA;
+            if (teamsInRound.has(pairing.teamA.id)) {
+              throw new Error(`验证失败：Bye team ${pairing.teamA.name} 在 Round ${roundNumber} 中重复出现`);
+            }
+            teamsInRound.add(pairing.teamA.id);
+          } else {
+            // Regular match - check for duplicates
+            if (teamsInRound.has(pairing.teamA.id)) {
+              throw new Error(`验证失败：队伍 ${pairing.teamA.name} 在 Round ${roundNumber} 中出现了两次（不允许）`);
+            }
+            if (teamsInRound.has(pairing.teamB.id)) {
+              throw new Error(`验证失败：队伍 ${pairing.teamB.name} 在 Round ${roundNumber} 中出现了两次（不允许）`);
+            }
+            teamsInRound.add(pairing.teamA.id);
+            teamsInRound.add(pairing.teamB.id);
+          }
+        }
+        
+        // Validation: Check all teams are participating
+        if (teamsInRound.size !== teamCount) {
+          throw new Error(`验证失败：Round ${roundNumber} 中只有 ${teamsInRound.size}/${teamCount} 个队伍参赛（应该全部参赛）`);
+        }
+        
+        // Validation: Bye team rules
+        if (isOddTeams && !byeTeam) {
+          throw new Error(`验证失败：奇数队伍 (${teamCount}) 但 Round ${roundNumber} 没有 bye team`);
+        }
+        if (!isOddTeams && byeTeam) {
+          throw new Error(`验证失败：偶数队伍 (${teamCount}) 但 Round ${roundNumber} 有 bye team`);
+        }
+        
+        console.log(`✅ Round ${roundNumber} 验证通过: ${teamsInRound.size} 队伍${byeTeam ? ', bye: ' + byeTeam.name : ''}`);
+        // ==================== 验证逻辑结束 ====================
         
         // Create matches for this round
         for (const pairing of roundPairings) {
           // Handle bye (when odd number of teams)
           if (!pairing.teamB) {
-            excludedTeam = pairing.teamA.name;
-            console.log(`${pairing.teamA.name} sits out Round ${roundNumber}`);
+            const byeTeamName = pairing.teamA.name;
+            console.log(`${byeTeamName} has bye in Round ${roundNumber}`);
+            byeTeamsPerRound.push({ round: roundNumber, team: byeTeamName });
+            
+            // Create bye match (teamBId = null)
+            try {
+              const byeMatchData = {
+                roundNumber: roundNumber,
+                teamAId: pairing.teamA.id,
+                teamBId: null, // null indicates bye
+                status: 'completed', // Bye matches are automatically completed
+                winnerId: pairing.teamA.id, // Bye team automatically wins
+                room: 'Bye'
+              };
+              
+              await this.matchService.createEventMatch(this.currentEventId, byeMatchData);
+              roundDistribution[roundNumber].push(`${byeTeamName} (BYE - auto 3-0 win)`);
+              totalCreatedCount++;
+              console.log(`✅ Bye match: ${byeTeamName}`);
+            } catch (error) {
+              console.error(`❌ Failed to create bye match:`, error);
+              throw error; // Stop on error
+            }
             continue;
           }
           
+          // Regular match
           try {
             const matchData = {
               roundNumber: roundNumber,
@@ -7982,15 +8607,11 @@ Note: Judges typically score each question individually (First, Second, Third Qu
             await this.matchService.createEventMatch(this.currentEventId, matchData);
             roundDistribution[roundNumber].push(`${pairing.teamA.name} vs ${pairing.teamB.name}`);
             totalCreatedCount++;
-            
             console.log(`✅ Created: ${pairing.teamA.name} vs ${pairing.teamB.name}`);
           } catch (error) {
-            console.error(`❌ Failed to create match ${pairing.teamA.name} vs ${pairing.teamB.name}:`, error);
+            console.error(`❌ Failed to create match:`, error);
+            throw error; // Stop on error
           }
-        }
-        
-        if (excludedTeam) {
-          excludedTeamsPerRound.push(`Round ${roundNumber}: ${excludedTeam}`);
         }
         
         console.log(`Round ${roundNumber}: created ${roundDistribution[roundNumber].length} matches`);
@@ -8002,21 +8623,31 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Re-render the workspace
       document.getElementById('workspace-content').innerHTML = this.renderTabContent();
       
-      // Create detailed success message
-      let message = `Successfully generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds (${matchesPerRound} matches per round).\n\nEach team plays exactly once per round.\n\nDistribution:`;
+      // Success message
+      let message = `Generated ${totalCreatedCount} matches across ${selectedRoundNumbers.length} rounds.\n\n`;
       
-      for (const [round, matches] of Object.entries(roundDistribution)) {
-        message += `\n\nRound ${round} (${matches.length} matches):`;
-        matches.forEach(match => {
-          message += `\n• ${match}`;
-        });
+      if (isOddTeams) {
+        message += `🎯 Partial Round-Robin with Bye Teams:\n`;
+        message += `- ${teamCount} teams (odd)\n`;
+        message += `- ${matchesPerRound} matches + 1 bye per round\n\n`;
+      } else {
+        message += `🎯 Round-Robin:\n`;
+        message += `- ${teamCount} teams (even)\n`;
+        message += `- ${matchesPerRound} matches per round\n\n`;
       }
       
-      if (excludedTeamsPerRound.length > 0) {
-        message += `\n\nTeams sitting out:`;
-        excludedTeamsPerRound.forEach(exclusion => {
-          message += `\n• ${exclusion}`;
+      message += `Distribution:`;
+      for (const [round, matches] of Object.entries(roundDistribution)) {
+        message += `\n\nRound ${round}:`;
+        matches.forEach(match => message += `\n• ${match}`);
+      }
+      
+      if (byeTeamsPerRound.length > 0) {
+        message += `\n\n🎯 Bye Teams:`;
+        byeTeamsPerRound.forEach(({ round, team }) => {
+          message += `\n• Round ${round}: ${team}`;
         });
+        message += `\n\n💡 Click "Bye Team" button to view details.`;
       }
       
       this.ui.showSuccess('Round Robin Generated', message);
@@ -8464,10 +9095,10 @@ Note: Judges typically score each question individually (First, Second, Third Qu
           teamB: shuffledTeams[i + 1]
         });
       } else {
-        // Odd number: last team gets a bye (轮空)
+        // Odd number: last team gets a bye
         pairings.push({
           teamA: shuffledTeams[i],
-          teamB: null // Bye (轮空)
+          teamB: null // Bye
         });
       }
     }
@@ -9479,6 +10110,93 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Show adjustment type selection modal
+   */
+  showAdjustmentModal() {
+    const modalContent = `
+      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div class="px-6 py-4 border-b border-gray-300">
+            <h3 class="text-lg font-medium text-gray-900">⚖️ Select Adjustment Type</h3>
+          </div>
+          
+          <div class="p-6 space-y-4">
+            <button 
+              onclick="window.eventWorkspacePage.closeAdjustmentModal(); window.eventWorkspacePage.showVoteAdjustmentModal();"
+              class="w-full px-6 py-4 bg-purple-100 hover:bg-purple-200 border-2 border-purple-300 rounded-lg transition-colors text-left"
+            >
+              <div class="flex items-center">
+                <div class="text-3xl mr-4">🗳️</div>
+                <div>
+                  <div class="font-medium text-purple-900 text-lg">Vote Adjustment</div>
+                  <div class="text-sm text-purple-700 mt-1">Adjust team vote scores</div>
+                </div>
+              </div>
+            </button>
+
+            <button 
+              onclick="window.eventWorkspacePage.closeAdjustmentModal(); window.eventWorkspacePage.showWinAdjustmentModal();"
+              class="w-full px-6 py-4 bg-blue-100 hover:bg-blue-200 border-2 border-blue-300 rounded-lg transition-colors text-left"
+            >
+              <div class="flex items-center">
+                <div class="text-3xl mr-4">🏆</div>
+                <div>
+                  <div class="font-medium text-blue-900 text-lg">Win Point Adjustment</div>
+                  <div class="text-sm text-blue-700 mt-1">Adjust team win/loss/tie records</div>
+                </div>
+              </div>
+            </button>
+
+            <button 
+              onclick="window.eventWorkspacePage.closeAdjustmentModal(); window.eventWorkspacePage.showScoreDiffAdjustmentModal();"
+              class="w-full px-6 py-4 bg-orange-100 hover:bg-orange-200 border-2 border-orange-300 rounded-lg transition-colors text-left"
+            >
+              <div class="flex items-center">
+                <div class="text-3xl mr-4">📊</div>
+                <div>
+                  <div class="font-medium text-orange-900 text-lg">Score Diff Adjustment</div>
+                  <div class="text-sm text-orange-700 mt-1">Adjust team score differential</div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div class="px-6 py-4 border-t border-gray-300 flex justify-end">
+            <button 
+              onclick="window.eventWorkspacePage.closeAdjustmentModal()" 
+              class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('adjustmentModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Add modal to page
+    const modal = document.createElement('div');
+    modal.id = 'adjustmentModal';
+    modal.innerHTML = modalContent;
+    document.body.appendChild(modal);
+  }
+
+  /**
+   * Close adjustment type selection modal
+   */
+  closeAdjustmentModal() {
+    const modal = document.getElementById('adjustmentModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
    * Show vote adjustment modal
    */
   async showVoteAdjustmentModal() {
@@ -9600,6 +10318,458 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
+   * Show win adjustment modal
+   */
+  async showWinAdjustmentModal() {
+    try {
+      // Get current standings
+      const standingsData = await this.getEventStandings();
+      
+      if (!standingsData?.standings || standingsData.standings.length === 0) {
+        this.ui.showError('Error', 'No teams available for win adjustment');
+        return;
+      }
+
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-300">
+              <h3 class="text-lg font-medium text-gray-900">🏆 Win Point Adjustment</h3>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+              <p class="text-sm text-gray-600 mb-4">Adjust win, loss, and tie counts for each team:</p>
+              
+              <div class="space-y-4">
+                ${standingsData.standings.map(standing => {
+                  // Calculate current W-L-T
+                  const backendWins = standing.wins || 0;
+                  const totalMatches = standing.totalMatches || 0;
+                  const wholeWins = Math.floor(backendWins);
+                  const hasHalfWin = (backendWins % 1) >= 0.4;
+                  const wins = wholeWins + (hasHalfWin ? 0 : 0);
+                  const draws = hasHalfWin ? 1 : 0;
+                  const losses = totalMatches - wins - draws;
+                  
+                  return `
+                  <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                    <div class="mb-3">
+                      <div class="font-medium text-gray-900 text-lg">${this.escapeHtml(standing.team.name)}</div>
+                      <div class="text-sm text-gray-500 mt-1">
+                        Current Record: <span class="font-medium text-blue-600">${wins}W - ${losses}L - ${draws}T</span>
+                      </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-4">
+                      <!-- Wins -->
+                      <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <label class="block text-sm font-medium text-green-800 mb-2 text-center">Wins</label>
+                        <div class="flex items-center justify-center space-x-2">
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'wins', -1)"
+                            class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            −
+                          </button>
+                          <input 
+                            type="number" 
+                            id="win-adjustment-wins-${standing.team.id}" 
+                            value="0" 
+                            class="w-16 text-center border-green-300 rounded-md text-sm font-medium"
+                            min="-10"
+                            max="10"
+                          />
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'wins', 1)"
+                            class="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <!-- Losses -->
+                      <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <label class="block text-sm font-medium text-red-800 mb-2 text-center">Losses</label>
+                        <div class="flex items-center justify-center space-x-2">
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'losses', -1)"
+                            class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            −
+                          </button>
+                          <input 
+                            type="number" 
+                            id="win-adjustment-losses-${standing.team.id}" 
+                            value="0" 
+                            class="w-16 text-center border-red-300 rounded-md text-sm font-medium"
+                            min="-10"
+                            max="10"
+                          />
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'losses', 1)"
+                            class="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <!-- Ties -->
+                      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <label class="block text-sm font-medium text-yellow-800 mb-2 text-center">Ties</label>
+                        <div class="flex items-center justify-center space-x-2">
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'ties', -1)"
+                            class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            −
+                          </button>
+                          <input 
+                            type="number" 
+                            id="win-adjustment-ties-${standing.team.id}" 
+                            value="0" 
+                            class="w-16 text-center border-yellow-300 rounded-md text-sm font-medium"
+                            min="-10"
+                            max="10"
+                          />
+                          <button 
+                            onclick="window.eventWorkspacePage.adjustWinStat('${standing.team.id}', 'ties', 1)"
+                            class="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-full font-bold transition-colors text-sm"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                `}).join('')}
+              </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button 
+                onclick="window.eventWorkspacePage.closeWinAdjustmentModal()" 
+                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              <button 
+                onclick="window.eventWorkspacePage.applyWinAdjustments()" 
+                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+              >
+                Apply Adjustments
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('winAdjustmentModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'winAdjustmentModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing win adjustment modal:', error);
+      this.ui.showError('Error', 'Unable to show win adjustment interface');
+    }
+  }
+
+  /**
+   * Close win adjustment modal
+   */
+  closeWinAdjustmentModal() {
+    const modal = document.getElementById('winAdjustmentModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Show score differential adjustment modal
+   */
+  async showScoreDiffAdjustmentModal() {
+    try {
+      // Get current standings
+      const standingsData = await this.getEventStandings();
+      
+      if (!standingsData?.standings || standingsData.standings.length === 0) {
+        this.ui.showError('Error', 'No teams available for score diff adjustment');
+        return;
+      }
+
+      const modalContent = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-300">
+              <h3 class="text-lg font-medium text-gray-900">📊 Score Differential Adjustment</h3>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+              <p class="text-sm text-gray-600 mb-4">Adjust score differential for each team (can be positive or negative):</p>
+              
+              <div class="space-y-4">
+                ${standingsData.standings.map(standing => {
+                  const currentScoreDiff = standing.scoreDifferential || 0;
+                  
+                  return `
+                  <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                    <div class="mb-3">
+                      <div class="font-medium text-gray-900 text-lg">${this.escapeHtml(standing.team.name)}</div>
+                      <div class="text-sm text-gray-500 mt-1">
+                        Current Score Diff: <span class="font-medium ${currentScoreDiff >= 0 ? 'text-green-600' : 'text-red-600'}">${currentScoreDiff >= 0 ? '+' : ''}${currentScoreDiff.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    
+                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                      <label class="block text-sm font-medium text-orange-800 mb-2 text-center">Score Diff Adjustment</label>
+                      <div class="flex items-center justify-center space-x-2">
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustScoreDiffStat('${standing.team.id}', -10)"
+                          class="px-3 py-1 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-md font-bold transition-colors text-sm"
+                        >
+                          -10
+                        </button>
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustScoreDiffStat('${standing.team.id}', -1)"
+                          class="w-8 h-8 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 rounded-full font-bold transition-colors text-sm"
+                        >
+                          −
+                        </button>
+                        <input 
+                          type="number" 
+                          id="score-diff-adjustment-${standing.team.id}" 
+                          value="0" 
+                          step="0.01"
+                          class="w-24 text-center border-orange-300 rounded-md text-sm font-medium"
+                          min="-100"
+                          max="100"
+                        />
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustScoreDiffStat('${standing.team.id}', 1)"
+                          class="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-full font-bold transition-colors text-sm"
+                        >
+                          +
+                        </button>
+                        <button 
+                          onclick="window.eventWorkspacePage.adjustScoreDiffStat('${standing.team.id}', 10)"
+                          class="px-3 py-1 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded-md font-bold transition-colors text-sm"
+                        >
+                          +10
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-300 flex justify-end space-x-3">
+              <button 
+                onclick="window.eventWorkspacePage.closeScoreDiffAdjustmentModal()" 
+                class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onclick="window.eventWorkspacePage.applyScoreDiffAdjustments()" 
+                class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md transition-colors font-medium"
+              >
+                Apply Adjustments
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('scoreDiffAdjustmentModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Create new modal
+      const modal = document.createElement('div');
+      modal.id = 'scoreDiffAdjustmentModal';
+      modal.innerHTML = modalContent;
+      document.body.appendChild(modal);
+
+    } catch (error) {
+      console.error('Error showing score diff adjustment modal:', error);
+      this.ui.showError('Error', 'Unable to show score diff adjustment interface');
+    }
+  }
+
+  /**
+   * Close score differential adjustment modal
+   */
+  closeScoreDiffAdjustmentModal() {
+    const modal = document.getElementById('scoreDiffAdjustmentModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /**
+   * Adjust score diff stat for a team (using + or - buttons)
+   */
+  adjustScoreDiffStat(teamId, delta) {
+    const input = document.getElementById(`score-diff-adjustment-${teamId}`);
+    if (input) {
+      const currentValue = parseFloat(input.value) || 0;
+      input.value = (currentValue + delta).toFixed(2);
+    }
+  }
+
+  /**
+   * Apply score differential adjustments
+   */
+  async applyScoreDiffAdjustments() {
+    try {
+      const adjustments = [];
+      const inputs = document.querySelectorAll('[id^="score-diff-adjustment-"]');
+      
+      inputs.forEach(input => {
+        const scoreDiff = parseFloat(input.value) || 0;
+        if (scoreDiff !== 0) {
+          const teamId = input.id.replace('score-diff-adjustment-', '');
+          adjustments.push({
+            teamId,
+            scoreDiff
+          });
+        }
+      });
+
+      if (adjustments.length === 0) {
+        this.ui.showError('Error', 'No adjustments to apply');
+        return;
+      }
+
+      this.ui.showLoading('Applying score diff adjustments...');
+
+      // Call backend API to apply adjustments
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/score-diff-adjustments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ adjustments })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to apply score diff adjustments');
+      }
+
+      const result = await response.json();
+
+      // Refresh standings
+      await this.refreshStandings();
+      this.closeScoreDiffAdjustmentModal();
+      
+      this.ui.hideLoading();
+      this.ui.showSuccess('Success', result.message || 'Score diff adjustments applied successfully');
+
+    } catch (error) {
+      console.error('Error applying score diff adjustments:', error);
+      this.ui.hideLoading();
+      this.ui.showError('Error', error.message || 'Failed to apply score diff adjustments');
+    }
+  }
+
+  /**
+   * Adjust win stat for a team (using + or - buttons)
+   */
+  adjustWinStat(teamId, stat, delta) {
+    const input = document.getElementById(`win-adjustment-${stat}-${teamId}`);
+    if (input) {
+      const currentValue = parseInt(input.value) || 0;
+      input.value = currentValue + delta;
+    }
+  }
+
+  /**
+   * Apply win adjustments
+   */
+  async applyWinAdjustments() {
+    try {
+      // Collect adjustments from inputs
+      const adjustments = [];
+      const inputs = document.querySelectorAll('[id^="win-adjustment-"]');
+      
+      // Group by team
+      const teamAdjustments = {};
+      inputs.forEach(input => {
+        const value = parseInt(input.value) || 0;
+        if (value !== 0) {
+          // Parse id: win-adjustment-{stat}-{teamId}
+          const parts = input.id.split('-');
+          const stat = parts[2]; // wins, losses, or ties
+          const teamId = parts.slice(3).join('-'); // teamId might contain dashes
+          
+          if (!teamAdjustments[teamId]) {
+            teamAdjustments[teamId] = { teamId, wins: 0, losses: 0, ties: 0 };
+          }
+          teamAdjustments[teamId][stat] = value;
+        }
+      });
+
+      // Convert to array
+      Object.values(teamAdjustments).forEach(adj => {
+        if (adj.wins !== 0 || adj.losses !== 0 || adj.ties !== 0) {
+          adjustments.push(adj);
+        }
+      });
+
+      if (adjustments.length === 0) {
+        this.ui.showError('Error', 'No adjustments to apply');
+        return;
+      }
+
+      this.ui.showLoading('Applying win adjustments...');
+
+      // Call backend API to apply adjustments
+      const response = await fetch(`/api/v1/events/${this.currentEventId}/win-adjustments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ adjustments })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to apply win adjustments');
+      }
+
+      const result = await response.json();
+
+      // Refresh standings
+      await this.refreshStandings();
+      this.closeWinAdjustmentModal();
+      
+      this.ui.hideLoading();
+      this.ui.showSuccess('Success', result.message || 'Win adjustments applied successfully');
+
+    } catch (error) {
+      console.error('Error applying win adjustments:', error);
+      this.ui.hideLoading();
+      this.ui.showError('Error', error.message || 'Failed to apply win adjustments');
+    }
+  }
+
+  /**
    * Apply vote adjustments
    */
   async applyVoteAdjustments() {
@@ -9666,6 +10836,234 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * Show bye team information modal for a specific round
+   * @param {number} roundNumber - Round number
+   */
+  async showByeTeamInfo(roundNumber) {
+    try {
+      this.showModal('byeTeamModal');
+      
+      const modalContent = document.getElementById('byeTeamModalContent');
+      if (!modalContent) return;
+      
+      modalContent.innerHTML = '<div class="text-gray-500 text-center py-8">Loading bye team information...</div>';
+      
+      // Fetch bye teams information
+      const API_BASE_URL = '/api/v1';
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        throw new Error('Access token not found. Please log in again.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/events/${this.currentEventId}/bye-teams`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch bye team information');
+      }
+      
+      const data = await response.json();
+      console.log('📊 Bye team data:', data);
+      
+      if (!data.success || !data.data) {
+        throw new Error('Invalid response from server');
+      }
+      
+      const byeInfo = data.data;
+      
+      // Render bye team information
+      modalContent.innerHTML = this.renderByeTeamInfo(roundNumber, byeInfo);
+      
+    } catch (error) {
+      console.error('Error loading bye team info:', error);
+      const modalContent = document.getElementById('byeTeamModalContent');
+      if (modalContent) {
+        modalContent.innerHTML = `
+          <div class="text-red-500 text-center py-8">
+            <p class="font-medium mb-2">Failed to load bye team information</p>
+            <p class="text-sm">${this.escapeHtml(error.message)}</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  /**
+   * Render bye team information content
+   * @param {number} roundNumber - Round number
+   * @param {Object} byeInfo - Bye teams information
+   * @returns {string} HTML string
+   */
+  renderByeTeamInfo(roundNumber, byeInfo) {
+    const { hasOddTeams, teamCount, byeTeamsByRound, rules } = byeInfo;
+    
+    // Check if this event has odd number of teams
+    if (!hasOddTeams) {
+      return `
+        <div class="text-center py-8">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mx-auto max-w-md">
+            <svg class="w-12 h-12 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <h4 class="text-lg font-medium text-blue-900 mb-2">No Bye Teams Needed</h4>
+            <p class="text-blue-800">This event has <strong>${teamCount} teams</strong> (even number), so no bye teams are required.</p>
+            <p class="text-sm text-blue-700 mt-3">Bye teams are only used in tournaments with an odd number of teams.</p>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Get bye team for this round
+    const byeTeam = byeTeamsByRound[roundNumber];
+    
+    if (!byeTeam) {
+      return `
+        <div class="space-y-4">
+          <!-- Rules Info -->
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h4 class="text-md font-semibold text-yellow-900 mb-2">⚠️ No Bye Team Assigned</h4>
+            <p class="text-sm text-yellow-800">
+              This event has <strong>${teamCount} teams</strong> (odd number), but no bye team has been assigned for Round ${roundNumber} yet.
+            </p>
+            <p class="text-sm text-yellow-800 mt-2">
+              Please create a bye match for this round by setting Team A to the team that should receive the bye, and leaving Team B empty (null).
+            </p>
+          </div>
+          
+          <!-- Bye Team Rules -->
+          ${this.renderByeTeamRules(rules)}
+        </div>
+      `;
+    }
+    
+    // Render bye team information
+    return `
+      <div class="space-y-4">
+        <!-- Bye Team Info -->
+        <div class="bg-green-50 border border-green-200 rounded-lg p-6">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <svg class="w-8 h-8 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+              </svg>
+            </div>
+            <div class="ml-4 flex-1">
+              <h4 class="text-lg font-semibold text-green-900 mb-2">Round ${roundNumber} Bye Team</h4>
+              <div class="space-y-2">
+                <div class="flex items-baseline">
+                  <span class="text-sm text-green-700 font-medium">Team:</span>
+                  <span class="ml-2 text-md font-semibold text-green-900">${this.escapeHtml(byeTeam.team.name)}</span>
+                </div>
+                ${byeTeam.team.school ? `
+                  <div class="flex items-baseline">
+                    <span class="text-sm text-green-700 font-medium">School:</span>
+                    <span class="ml-2 text-sm text-green-900">${this.escapeHtml(byeTeam.team.school)}</span>
+                  </div>
+                ` : ''}
+                <div class="mt-3 pt-3 border-t border-green-200">
+                  <div class="text-sm text-green-700 mb-1">Result: <strong class="text-green-900">3-0 Win (automatic)</strong></div>
+                  <div class="text-sm text-green-700">Score Differential: <strong class="text-green-900">${byeTeam.scoreDifferential > 0 ? '+' : ''}${byeTeam.scoreDifferential.toFixed(2)}</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Score Differential Calculation -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 class="text-md font-semibold text-blue-900 mb-3">📊 Score Differential Calculation</h4>
+          <div class="space-y-2 text-sm text-blue-800">
+            <div class="flex items-start">
+              <span class="font-medium mr-2">Method:</span>
+              <span class="${byeTeam.calculationMethod === 'default' ? 'text-orange-600' : 'text-blue-600'} font-semibold">
+                ${byeTeam.calculationMethod === 'default' ? 'Default (+3.0)' : 'Average from Matches'}
+              </span>
+            </div>
+            <div class="flex items-start">
+              <span class="font-medium mr-2">Explanation:</span>
+              <span>${this.escapeHtml(byeTeam.explanation)}</span>
+            </div>
+            ${byeTeam.averageScoreDiff !== null ? `
+              <div class="flex items-start">
+                <span class="font-medium mr-2">Average Score Diff:</span>
+                <span class="font-mono">${byeTeam.averageScoreDiff > 0 ? '+' : ''}${byeTeam.averageScoreDiff.toFixed(2)}</span>
+                <span class="ml-2 text-gray-600">(from ${byeTeam.matchesPlayed} completed matches)</span>
+              </div>
+            ` : ''}
+            <div class="flex items-start">
+              <span class="font-medium mr-2">Final Score Diff:</span>
+              <span class="font-mono font-bold text-lg">${byeTeam.scoreDifferential > 0 ? '+' : ''}${byeTeam.scoreDifferential.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Dynamic Update Notice -->
+        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div class="flex items-start">
+            <svg class="w-5 h-5 text-purple-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>
+            <div class="flex-1">
+              <h5 class="text-sm font-medium text-purple-900">🔄 Auto-Update</h5>
+              <p class="text-sm text-purple-700 mt-1">
+                Score differential is automatically recalculated every time a match is completed. 
+                The system uses the larger value between +3.0 and the team's average score differential.
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Bye Team Rules -->
+        ${this.renderByeTeamRules(rules)}
+      </div>
+    `;
+  }
+
+  /**
+   * Render bye team rules section
+   * @param {Object} rules - Bye team rules
+   * @returns {string} HTML string
+   */
+  renderByeTeamRules(rules) {
+    if (!rules) return '';
+    
+    return `
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <h4 class="text-md font-semibold text-gray-900 mb-3">📋 Bye Team Rules</h4>
+        <div class="space-y-2 text-sm text-gray-700">
+          <div class="flex items-start">
+            <span class="text-blue-500 mr-2">•</span>
+            <span>${this.escapeHtml(rules.description)}</span>
+          </div>
+          <div class="flex items-start">
+            <span class="text-blue-500 mr-2">•</span>
+            <span>Default score differential: <strong>+${rules.defaultScoreDiff.toFixed(1)}</strong></span>
+          </div>
+          <div class="flex items-start">
+            <span class="text-blue-500 mr-2">•</span>
+            <span>${this.escapeHtml(rules.updateTrigger)}</span>
+          </div>
+          <div class="flex items-start">
+            <span class="text-blue-500 mr-2">•</span>
+            <span>Each team can receive <strong>at most one bye</strong> per tournament.</span>
+          </div>
+          <div class="flex items-start">
+            <span class="text-blue-500 mr-2">•</span>
+            <span>Bye team automatically receives a <strong>3-0 win</strong>.</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 }
 

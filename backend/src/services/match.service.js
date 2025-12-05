@@ -102,7 +102,7 @@ class MatchService {
    */
   async createMatch(matchData) {
     try {
-      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, location, scheduledTime } = matchData;
+      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, location, scheduledTime, status, winnerId } = matchData;
 
       // Verify event exists and is not completed
       const event = await prisma.event.findUnique({
@@ -118,21 +118,24 @@ class MatchService {
       }
 
       // Verify teams exist and belong to the event
-      const [teamA, teamB] = await Promise.all([
-        prisma.team.findFirst({ where: { id: teamAId, eventId } }),
-        prisma.team.findFirst({ where: { id: teamBId, eventId } })
-      ]);
-
+      // Note: teamBId can be null for bye matches
+      const teamA = await prisma.team.findFirst({ where: { id: teamAId, eventId } });
+      
       if (!teamA) {
         throw new Error('Team A not found in this event');
       }
 
-      if (!teamB) {
-        throw new Error('Team B not found in this event');
-      }
+      // Only verify teamB if it's provided (not a bye match)
+      if (teamBId !== null && teamBId !== undefined) {
+        const teamB = await prisma.team.findFirst({ where: { id: teamBId, eventId } });
+        
+        if (!teamB) {
+          throw new Error('Team B not found in this event');
+        }
 
-      if (teamAId === teamBId) {
-        throw new Error('Team A and Team B cannot be the same');
+        if (teamAId === teamBId) {
+          throw new Error('Team A and Team B cannot be the same');
+        }
       }
 
       // Verify moderator exists if provided
@@ -151,19 +154,36 @@ class MatchService {
       }
 
       // Check for conflicting matches in the same round
-      const existingMatch = await prisma.match.findFirst({
-        where: {
-          eventId,
-          roundNumber,
-          OR: [
-            { teamAId, teamBId },
-            { teamAId: teamBId, teamBId: teamAId }
-          ]
-        }
-      });
+      if (teamBId === null) {
+        // For bye matches, check if this team already has a bye in this round
+        const existingBye = await prisma.match.findFirst({
+          where: {
+            eventId,
+            roundNumber,
+            teamAId,
+            teamBId: null
+          }
+        });
 
-      if (existingMatch) {
-        throw new Error('Match between these teams already exists in this round');
+        if (existingBye) {
+          throw new Error('This team already has a bye in this round');
+        }
+      } else {
+        // For regular matches, check if the same teams are already matched
+        const existingMatch = await prisma.match.findFirst({
+          where: {
+            eventId,
+            roundNumber,
+            OR: [
+              { teamAId, teamBId },
+              { teamAId: teamBId, teamBId: teamAId }
+            ]
+          }
+        });
+
+        if (existingMatch) {
+          throw new Error('Match between these teams already exists in this round');
+        }
       }
 
       // Handle room assignment - if room is provided, it should be a room ID
@@ -193,6 +213,11 @@ class MatchService {
         }
       }
 
+      // Determine status and winnerId
+      // For bye matches (teamBId = null), allow setting status to completed
+      const matchStatus = status || MATCH_STATUSES.DRAFT;
+      const matchWinnerId = winnerId || null;
+
       const match = await prisma.match.create({
         data: {
           eventId,
@@ -204,8 +229,9 @@ class MatchService {
           roomId,
           location,
           scheduledTime: finalScheduledTime,
-          status: MATCH_STATUSES.DRAFT,
-          currentStep: MATCH_STEPS.INTRO
+          status: matchStatus,
+          currentStep: MATCH_STEPS.INTRO,
+          winnerId: matchWinnerId
         },
         include: {
           teamA: {
@@ -219,6 +245,19 @@ class MatchService {
           }
         }
       });
+
+      // If this is a bye match (teamBId = null), initialize bye team scores
+      if (teamBId === null && matchStatus === 'completed') {
+        try {
+          const EventService = require('./event.service');
+          const eventService = new EventService();
+          await eventService.recalculateByeMatchScores(eventId);
+          console.log('✅ Bye team scores initialized after creating bye match');
+        } catch (error) {
+          // Don't fail match creation if bye score initialization fails
+          console.error('⚠️  Failed to initialize bye team scores:', error);
+        }
+      }
 
       return match;
     } catch (error) {
@@ -642,6 +681,19 @@ class MatchService {
 
       // Auto-submit scores for judges whose stage has passed
       await this.autoSubmitPassedJudgeScores(matchId, status);
+
+      // If match is completed, recalculate bye team score differentials
+      if (status === MATCH_STATUSES.COMPLETED) {
+        try {
+          const EventService = require('./event.service');
+          const eventService = new EventService();
+          await eventService.recalculateByeMatchScores(match.eventId);
+          console.log('✅ Bye team scores recalculated after match completion');
+        } catch (error) {
+          // Don't fail the match completion if bye team recalculation fails
+          console.error('⚠️  Failed to recalculate bye team scores:', error);
+        }
+      }
 
       return updatedMatch;
     } catch (error) {

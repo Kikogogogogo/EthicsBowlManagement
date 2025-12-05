@@ -69,10 +69,11 @@ class MatchController {
         });
       }
 
-      if (!roundNumber || !teamAId || !teamBId) {
+      // Allow teamBId to be null for bye matches
+      if (!roundNumber || !teamAId) {
         return res.status(400).json({
           success: false,
-          message: 'Round number, team A ID, and team B ID are required',
+          message: 'Round number and team A ID are required',
           error: 'MISSING_REQUIRED_FIELDS'
         });
       }
