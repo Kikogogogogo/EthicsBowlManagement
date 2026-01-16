@@ -92,6 +92,18 @@ router.put('/:eventId/round-schedules', requireRole('admin'), requireEventAccess
 router.get('/:eventId/round-schedules/:roundNumber', requireEventAccess('eventId'), eventController.getRoundSchedule);
 
 /**
+ * GET /events/:eventId/groups
+ * Get groups for an event
+ */
+router.get('/:eventId/groups', requireEventAccess('eventId'), eventController.getEventGroups);
+
+/**
+ * POST /events/:eventId/groups/generate-round-robin
+ * Generate grouped round robin matches (Admin only)
+ */
+router.post('/:eventId/groups/generate-round-robin', requireRole('admin'), requireEventAccess('eventId'), eventController.generateGroupRoundRobin);
+
+/**
  * POST /events/:eventId/vote-adjustments
  * Apply vote adjustments to teams (Admin only)
  */

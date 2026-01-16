@@ -11,9 +11,11 @@ class EventWorkspacePage {
     this.isOperationInProgress = false;
     this.matches = [];
     this.teams = [];
+    this.groups = [];
     this.users = [];
     this.rooms = [];
     this.currentTab = 'overview';
+    this.matchesSubpage = 'schedule';
     this.judgeScoresCache = new Map(); // Cache for judge scores status
     
     // Scores modal tracking
@@ -267,8 +269,9 @@ class EventWorkspacePage {
         this.closeModal(e.target.getAttribute('data-modal-close'));
       }
       
-      if (e.target.matches('[data-action]')) {
-        this.handleAction(e.target.getAttribute('data-action'), e.target);
+      const actionElement = e.target.closest('[data-action]');
+      if (actionElement) {
+        this.handleAction(actionElement.getAttribute('data-action'), actionElement);
       }
     };
     document.addEventListener('click', modalClickHandler);
@@ -494,13 +497,6 @@ class EventWorkspacePage {
       // Only handle changes within the workspace page
       if (!e.target.closest('#event-workspace-page')) return;
       
-      if (e.target.matches('select[name="judgeIds"]')) {
-        this.updateJudgeSelectionCounter(e.target);
-      }
-      if (e.target.matches('#editJudgeIds')) {
-        this.updateEditJudgeSelectionCounter(e.target);
-      }
-      
       // Role switcher change
       if (e.target.matches('#role-switcher')) {
         this.handleRoleSwitch(e.target.value);
@@ -575,21 +571,7 @@ class EventWorkspacePage {
 
     // First filter by role (judge/moderator)
     const roleFilter = roleType === 'judge' ? 'judge' : 'moderator';
-    let filteredUsers = this.users.filter(u => u.role === roleFilter || u.role === 'admin');
-    
-    // Apply event-specific restrictions if available
-    if (this.currentEvent) {
-      const allowedField = roleType === 'judge' ? 'allowedJudges' : 'allowedModerators';
-      const allowedUsers = this.currentEvent[allowedField];
-      
-      if (allowedUsers && allowedUsers.length > 0) {
-        // If there are specific allowed users, filter to only include them
-        filteredUsers = filteredUsers.filter(user => allowedUsers.includes(user.id));
-      }
-      // If allowedUsers is null or empty, show all users with the appropriate role (no restriction)
-    }
-
-    return filteredUsers;
+    return this.users.filter(u => u.role === roleFilter || u.role === 'admin');
   }
 
   /**
@@ -1037,11 +1019,11 @@ class EventWorkspacePage {
         this.updateCreateMatchTeamDropdowns();
       }
       
-      // Update Round Robin modal team list if open
+      // Update Round Robin modal group summary if open
       const roundRobinModal = document.getElementById('roundRobinModal');
       if (roundRobinModal && !roundRobinModal.classList.contains('hidden')) {
-        console.log('🎯 [EventWorkspace] Round Robin modal is open, updating team list');
-        this.updateRoundRobinTeamList();
+        console.log('🎯 [EventWorkspace] Round Robin modal is open, updating group summary');
+        this.updateGroupSizeSummary();
       }
       
       // Update Swiss modal team list if open
@@ -1178,6 +1160,7 @@ class EventWorkspacePage {
       console.log('🥊 [EventWorkspace] Loading matches...');
       const matchesResponse = await this.matchService.getEventMatches(this.currentEventId);
       const allMatches = matchesResponse.data?.matches || [];
+      this.allMatches = allMatches;
       console.log('✅ [EventWorkspace] Raw matches loaded:', allMatches.length, 'matches');
 
       // Filter matches based on effective role
@@ -1206,6 +1189,17 @@ class EventWorkspacePage {
       } else {
         // Other roles see no matches
         this.matches = [];
+      }
+
+      // Load groups for this event (if available)
+      console.log('🧩 [EventWorkspace] Loading groups...');
+      try {
+        const groupsResponse = await this.eventService.getEventGroups(this.currentEventId);
+        this.groups = groupsResponse || [];
+        console.log('✅ [EventWorkspace] Loaded groups:', this.groups.length, 'groups');
+      } catch (groupError) {
+        console.warn('⚠️ [EventWorkspace] Failed to load groups:', groupError);
+        this.groups = [];
       }
 
       // Load all active users (for judge assignments) - only for admins
@@ -1912,118 +1906,7 @@ class EventWorkspacePage {
       matchesByRound[roundNum].push(match);
     });
 
-    const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
-      <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
-        <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
-          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
-          <button 
-            onclick="window.eventWorkspacePage.showByeTeamInfo(${round})"
-            class="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors"
-            title="View bye team information for this round"
-          >
-            Bye Team
-          </button>
-        </div>
-        <div class="divide-y divide-gray-200">
-          ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
-        </div>
-      </div>
-    `).join('');
-
-    const noMatchesHTML = `
-      <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
-        <div class="text-gray-500">
-          ${displayMatches.length === 0 && this.filteredMatches ? 'No matches found for the selected filters.' : 
-            (isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
-            'No matches assigned to you yet.')}
-        </div>
-      </div>
-    `;
-
-    matchesContentContainer.innerHTML = displayMatches.length === 0 ? noMatchesHTML : matchesHTML;
-  }
-
-  /**
-   * Render matches tab
-   */
-  renderMatchesTab() {
-    const currentUser = this.authManager.currentUser;
-    const effectiveRole = this.getEffectiveRole();
-    const isAdmin = effectiveRole === 'admin';
-    const isModerator = effectiveRole === 'moderator';
-    const isJudge = effectiveRole === 'judge';
-    
-    // Store all matches for filtering
-    this.allMatches = [...this.matches];
-    
-    // Use already filtered matches from loadEventData
-    let displayMatches = this.matches;
-
-    const matchesByRound = {};
-    displayMatches.forEach(match => {
-      const roundNum = match.roundNumber;
-      if (!matchesByRound[roundNum]) {
-        matchesByRound[roundNum] = [];
-      }
-      matchesByRound[roundNum].push(match);
-    });
-
-    // Get judge number for judge view
-    let judgeNumber = null;
-    if (isJudge && this.matches.length > 0) {
-      const firstMatch = this.matches[0];
-      if (firstMatch.assignments) {
-        const userAssignment = firstMatch.assignments.find(a => a.judge?.id === currentUser.id);
-        if (userAssignment && userAssignment.judgeNumber) {
-          judgeNumber = userAssignment.judgeNumber;
-        }
-      }
-    }
-
-    return `
-      <div class="space-y-6">
-        <!-- Judge Assignment Notice -->
-        ${isJudge && judgeNumber ? `
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                </svg>
-              </div>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-blue-900">
-                  You have been assigned as Judge ${judgeNumber}
-                </h3>
-                <div class="mt-2 text-sm text-blue-700">
-                  <p>You can score questions at any time, but can only submit scores during the final scoring stage.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Admin Actions -->
-        ${isAdmin ? `
-          <div class="bg-white border border-gray-300 p-4 rounded-lg">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-medium text-gray-900">Admin Actions</h3>
-              <div class="flex space-x-3">
-                <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
-                  Create Match
-                </button>
-                <button data-action="generate-round-robin" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
-                  Generate Round Robin
-                </button>
-                <button data-action="generate-swiss" 
-                        class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
-                  Generate Swiss
-                </button>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-
+    const scheduleContent = `
         <!-- Filters and Refresh Controls -->
         <div class="bg-white border border-gray-300 p-4 rounded-lg">
           <div class="flex items-center justify-between">
@@ -2115,6 +1998,288 @@ class EventWorkspacePage {
             ` : ''}
           </div>
         ` : ''}
+    `;
+
+    const matchesHTML = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
+      <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
+        <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
+          <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
+          <button 
+            onclick="window.eventWorkspacePage.showByeTeamInfo(${round})"
+            class="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors"
+            title="View bye team information for this round"
+          >
+            Bye Team
+          </button>
+        </div>
+        <div class="divide-y divide-gray-200">
+          ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    const noMatchesHTML = `
+      <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
+        <div class="text-gray-500">
+          ${displayMatches.length === 0 && this.filteredMatches ? 'No matches found for the selected filters.' : 
+            (isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
+            'No matches assigned to you yet.')}
+        </div>
+      </div>
+    `;
+
+    matchesContentContainer.innerHTML = displayMatches.length === 0 ? noMatchesHTML : matchesHTML;
+  }
+
+  /**
+   * Render matches tab
+   */
+  renderMatchesTab() {
+    const currentUser = this.authManager.currentUser;
+    const effectiveRole = this.getEffectiveRole();
+    const isAdmin = effectiveRole === 'admin';
+    const isModerator = effectiveRole === 'moderator';
+    const isJudge = effectiveRole === 'judge';
+    
+    // Store all matches for filtering
+    this.allMatches = [...this.matches];
+    
+    // Use already filtered matches from loadEventData
+    let displayMatches = this.matches;
+
+    const matchesByRound = {};
+    displayMatches.forEach(match => {
+      const roundNum = match.roundNumber;
+      if (!matchesByRound[roundNum]) {
+        matchesByRound[roundNum] = [];
+      }
+      matchesByRound[roundNum].push(match);
+    });
+
+    const scheduleContent = this.buildScheduleContent(displayMatches, matchesByRound, isAdmin);
+
+    // Get judge number for judge view
+    let judgeNumber = null;
+    if (isJudge && this.matches.length > 0) {
+      const firstMatch = this.matches[0];
+      if (firstMatch.assignments) {
+        const userAssignment = firstMatch.assignments.find(a => a.judge?.id === currentUser.id);
+        if (userAssignment && userAssignment.judgeNumber) {
+          judgeNumber = userAssignment.judgeNumber;
+        }
+      }
+    }
+
+    return `
+      <div class="space-y-6">
+        <!-- Judge Assignment Notice -->
+        ${isJudge && judgeNumber ? `
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-900">
+                  You have been assigned as Judge ${judgeNumber}
+                </h3>
+                <div class="mt-2 text-sm text-blue-700">
+                  <p>You can score questions at any time, but can only submit scores during the final scoring stage.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Admin Actions -->
+        ${isAdmin ? `
+          <div class="bg-white border border-gray-300 p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium text-gray-900">Admin Actions</h3>
+              <div class="flex space-x-3">
+                <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+                  Create Match
+                </button>
+                <button data-action="generate-round-robin" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                  Generate Round Robin
+                </button>
+                <button data-action="generate-swiss" 
+                        class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
+                  Generate Swiss
+                </button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Matches Subpage Switcher -->
+        <div class="bg-white border border-gray-300 p-3 rounded-lg">
+          <div class="flex space-x-2">
+            <button data-action="switch-matches-subpage" data-subpage="schedule"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium ${this.matchesSubpage === 'schedule' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+              Schedule
+            </button>
+            <button data-action="switch-matches-subpage" data-subpage="group"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium ${this.matchesSubpage === 'group' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+              Group
+            </button>
+          </div>
+        </div>
+
+        ${this.matchesSubpage === 'schedule' ? scheduleContent : this.renderGroupView()}
+      </div>
+    `;
+  }
+
+  buildScheduleContent(displayMatches, matchesByRound, isAdmin) {
+    return `
+        <!-- Filters and Refresh Controls -->
+        <div class="bg-white border border-gray-300 p-4 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div class="flex space-x-4">
+              <select id="roundFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                <option value="">All Rounds</option>
+                ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
+                  `<option value="${round}">Round ${round}</option>`
+                ).join('')}
+              </select>
+              <select id="statusFilter" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
+                <option value="">All Status</option>
+                ${this.generateMatchStatusOptions(3).map(option => 
+                  `<option value="${option.value}">${option.text}</option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <!-- Refresh Controls -->
+            <div class="flex items-center space-x-3">
+              <button id="manual-refresh-btn" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors font-medium flex items-center space-x-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <span>Refresh</span>
+              </button>
+              
+              <div class="flex items-center space-x-2">
+                <label class="flex items-center space-x-2 text-sm">
+                  <input type="checkbox" id="auto-refresh-toggle" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${this.autoRefreshEnabled ? 'checked' : ''}>
+                  <span>Auto-refresh</span>
+                </label>
+                <select id="refresh-interval" class="text-xs border-gray-300 rounded focus:border-gray-500 focus:ring-gray-500">
+                  <option value="10000" ${this.refreshInterval === 10000 ? 'selected' : ''}>10s</option>
+                  <option value="30000" ${this.refreshInterval === 30000 ? 'selected' : ''}>30s</option>
+                  <option value="60000" ${this.refreshInterval === 60000 ? 'selected' : ''}>1m</option>
+                  <option value="120000" ${this.refreshInterval === 120000 ? 'selected' : ''}>2m</option>
+                </select>
+              </div>
+              
+              <div id="last-refresh-time" class="text-xs text-gray-500">
+                ${this.lastRefreshTime ? `Last: ${new Date(this.lastRefreshTime).toLocaleTimeString()}` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Matches Content Container -->
+        <div id="matches-content">
+        <!-- Matches by Round -->
+        ${Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
+          <div class="bg-white border border-gray-300 rounded-lg" style="margin-bottom: 1.5rem;">
+            <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
+              <h3 class="text-lg font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h3>
+              <button 
+                onclick="window.eventWorkspacePage.showByeTeamInfo(${round})"
+                class="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors"
+                title="View bye team information for this round"
+              >
+                Bye Team
+              </button>
+            </div>
+            <div class="divide-y divide-gray-200">
+              ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
+            </div>
+          </div>
+        `).join('')}
+        </div>
+
+        ${displayMatches.length === 0 ? `
+          <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
+            <div class="text-gray-500">
+              ${isAdmin && this.getEffectiveRole() === 'admin' ? 'No matches created yet.' : 
+                isAdmin && this.getEffectiveRole() === 'judge' ? 'You are not assigned as a judge to any matches in this event.' :
+                isAdmin && this.getEffectiveRole() === 'moderator' ? 'You are not assigned as a moderator to any matches in this event.' :
+                'No matches assigned to you.'}
+            </div>
+            ${isAdmin && this.getEffectiveRole() === 'admin' ? `
+              <button data-action="create-match" class="mt-4 bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+                Create First Match
+              </button>
+            ` : ''}
+            ${isAdmin && (this.getEffectiveRole() === 'judge' || this.getEffectiveRole() === 'moderator') ? `
+              <div class="mt-4">
+                <p class="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+                  💡 Switch back to Admin View to assign yourself to matches, then return to this view to score them.
+                </p>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+    `;
+  }
+
+  /**
+   * Render grouped view for matches
+   */
+  renderGroupView() {
+    if (!this.groups || this.groups.length === 0) {
+      return `
+        <div class="bg-white border border-gray-300 rounded-lg p-8 text-center">
+          <div class="text-gray-500">
+            No groups available yet. Generate Round Robin to create groups.
+          </div>
+        </div>
+      `;
+    }
+
+    const sortedGroups = [...this.groups].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    return `
+      <div class="bg-white border border-gray-300 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-4">
+          <div class="text-sm text-gray-600">
+            Group view shows teams assigned to each group. Click a team for details.
+          </div>
+        </div>
+        <div class="flex gap-4 overflow-x-auto pb-2">
+          ${sortedGroups.map(group => this.renderGroupColumn(group)).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  renderGroupColumn(group) {
+    const groupTeams = (group.teams || []).slice().sort((a, b) => (a.slotOrder || 0) - (b.slotOrder || 0));
+
+    return `
+      <div class="min-w-[240px] bg-gray-50 border border-gray-200 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
+          <div class="font-medium text-gray-900">${group.name}</div>
+          <button data-action="view-group-schedule" data-group-id="${group.id}"
+                  class="text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md transition-colors">
+            Schedule
+          </button>
+        </div>
+        <div class="divide-y divide-gray-200">
+          ${groupTeams.map(team => `
+            <div data-action="view-group-team" data-team-id="${team.id}"
+                 class="px-4 py-3 hover:bg-white cursor-pointer transition-colors">
+              <div class="text-sm font-medium text-gray-900">${team.name}</div>
+              <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+            </div>
+          `).join('')}
+        </div>
       </div>
     `;
   }
@@ -2721,15 +2886,27 @@ class EventWorkspacePage {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700">Moderator</label>
-                <select name="moderatorId" class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500">
-                  <option value="">Select Moderator</option>
-                  ${this.users && this.users.length > 0 ? 
-                    this.getFilteredUsers('moderator').map(user => 
-                      `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`
-                    ).join('') : 
-                    '<option disabled>No moderators available</option>'
-                  }
-                </select>
+                <div class="relative mt-1">
+                  <input type="hidden" name="moderatorId" id="createModeratorId" value="">
+                  <div id="createSelectedModeratorDisplay" class="text-xs text-gray-600 mb-1"></div>
+                  <div class="relative">
+                    <input 
+                      type="text" 
+                      id="createModeratorSearchInput" 
+                      placeholder="Search moderators and admins..." 
+                      class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm pl-3 pr-10"
+                      autocomplete="off"
+                    />
+                    <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                  </div>
+                  <div id="createModeratorSearchResults" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    <div class="p-2 text-sm text-gray-500 text-center">
+                      Start typing to search for moderators...
+                    </div>
+                  </div>
+                </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700">Scheduled Time</label>
@@ -2740,14 +2917,11 @@ class EventWorkspacePage {
             <!-- Judges Selection -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Judges <span class="text-red-500">*</span></label>
-              <select name="judgeIds" multiple required class="mt-1 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 h-32 overflow-y-auto bg-white text-sm" style="min-height: 8rem;">
-                ${this.users && this.users.length > 0 ? 
-                  this.getFilteredUsers('judge').map(user => `
-                    <option value="${user.id}" class="py-2 px-3">${user.firstName} ${user.lastName} (${user.email})</option>
-                  `).join('') : 
-                  '<option disabled>No judges available</option>'
-                }
-              </select>
+              <div class="mt-1">
+                <div id="createCurrentJudgesList" class="space-y-2 min-h-[60px] border border-gray-200 rounded-md p-3 bg-gray-50">
+                  <p class="text-sm text-gray-500 italic">No judges selected yet</p>
+                </div>
+              </div>
               <div class="mt-2 flex justify-between items-center">
                 <p class="text-xs text-gray-500">
                   <span class="text-red-600 font-medium">Required:</span> Select 2-3 judges (Hold Ctrl/Cmd to select multiple)
@@ -2756,6 +2930,26 @@ class EventWorkspacePage {
               </div>
               <div id="judgeValidationError" class="mt-1 text-xs text-red-600 hidden">
                 Please select 2-3 judges for this match
+              </div>
+              <div class="relative mt-3">
+                <input type="hidden" name="judgeIds" id="createJudgeIds" value="">
+                <div class="relative">
+                  <input 
+                    type="text" 
+                    id="createJudgeSearchInput" 
+                    placeholder="Search judges and admins by name or email..." 
+                    class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm pl-3 pr-10"
+                    autocomplete="off"
+                  />
+                  <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                </div>
+                <div id="createJudgeSearchResults" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div class="p-2 text-sm text-gray-500 text-center">
+                    Start typing to search for judges...
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -2823,21 +3017,12 @@ class EventWorkspacePage {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Moderator</label>
-                
-                <!-- Quick select from loaded moderators -->
-                <select name="moderatorId" class="mb-3 block w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500" id="editModeratorId">
-                  <option value="">Select Moderator</option>
-                  ${this.users && this.users.length > 0 ? 
-                    this.getFilteredUsers('moderator').map(user => 
-                      `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`
-                    ).join('') : 
-                    '<option disabled>No moderators available</option>'
-                  }
-                </select>
+                <input type="hidden" name="moderatorId" id="editModeratorId" value="">
+                <div id="editSelectedModeratorDisplay" class="text-xs text-gray-600 mb-1"></div>
                 
                 <!-- Or search all moderators in system (Admin only) -->
                 <div class="relative">
-                  <div class="text-xs text-gray-500 mb-1">Or search all moderators/admins:</div>
+                  <div class="text-xs text-gray-500 mb-1">Search all moderators/admins:</div>
                   <div class="relative">
                     <input 
                       type="text" 
@@ -2881,27 +3066,9 @@ class EventWorkspacePage {
               <div class="mb-4">
                 <h4 class="text-sm font-medium text-gray-700 mb-2">Add Judge</h4>
                 
-                <!-- Quick select from loaded judges -->
-                <div class="flex gap-2 items-end mb-3">
-                  <div class="flex-1">
-                    <select id="availableJudgesSelect" class="w-full border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm">
-                      <option value="">Select a judge to add</option>
-                      ${this.users && this.users.length > 0 ? 
-                        this.users.filter(u => u.role === 'judge' || u.role === 'admin').map(user => `
-                          <option value="${user.id}" data-name="${user.firstName} ${user.lastName}" data-email="${user.email}">${user.firstName} ${user.lastName} (${user.email})</option>
-                        `).join('') : 
-                        '<option disabled>No judges available</option>'
-                      }
-                    </select>
-                  </div>
-                  <button type="button" id="addJudgeBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm font-medium whitespace-nowrap">
-                    Add
-                  </button>
-                </div>
-                
                 <!-- Or search all judges in system (Admin only) -->
                 <div class="relative">
-                  <div class="text-xs text-gray-500 mb-1">Or search all judges/admins in system:</div>
+                  <div class="text-xs text-gray-500 mb-1">Search all judges/admins:</div>
                   <div class="flex gap-2 items-center">
                     <div class="flex-1 relative">
                       <input 
@@ -3085,55 +3252,25 @@ class EventWorkspacePage {
       <div id="roundRobinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-auto my-8 relative">
           <div class="px-6 py-4 border-b border-gray-300">
-            <h3 class="text-lg font-medium text-gray-900">Generate Round Robin Matches</h3>
+            <h3 class="text-lg font-medium text-gray-900">Generate Grouped Round Robin</h3>
           </div>
           <form id="roundRobinForm" class="p-6 space-y-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Select Rounds <span class="text-red-500">*</span></label>
-              <div class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto bg-gray-50">
-                <div class="space-y-2">
-                  ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => `
-                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
-                      <input type="checkbox" name="selectedRounds" value="${round}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                      <div class="text-sm font-medium text-gray-900">Round ${round}</div>
-                    </label>
-                  `).join('')}
-                </div>
-              </div>
-              <div class="mt-2 flex justify-between items-center">
-                <p class="text-xs text-gray-500">
-                  <span class="text-red-600 font-medium">Required:</span> Select at least 1 round
-                </p>
-                <span id="roundSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
-              </div>
-              <div id="roundValidationError" class="mt-1 text-xs text-red-600 hidden">
-                Please select at least 1 round for Round Robin
-              </div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Group Count <span class="text-red-500">*</span></label>
+              <input id="groupCountInput" type="number" name="groupCount" min="1" class="w-32 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             </div>
             
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Select Teams <span class="text-red-500">*</span></label>
-              <div class="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50">
-                <div class="space-y-2">
-                  ${this.teams.map(team => `
-                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
-                      <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                      <div>
-                        <div class="text-sm font-medium text-gray-900">${team.name}</div>
-                        <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
-                      </div>
-                    </label>
-                  `).join('')}
-                </div>
-              </div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Group Sizes <span class="text-red-500">*</span></label>
+              <div id="groupSizesContainer" class="border border-gray-300 rounded-md p-3 space-y-2 bg-gray-50"></div>
               <div class="mt-2 flex justify-between items-center">
                 <p class="text-xs text-gray-500">
-                  <span class="text-red-600 font-medium">Required:</span> Select at least 2 teams for Round Robin
+                  <span class="text-red-600 font-medium">Required:</span> Total must equal ${this.teams.length} teams (max 6 per group)
                 </p>
-                <span id="teamSelectionCounter" class="text-xs text-gray-600 font-medium">0 selected</span>
+                <span id="groupSizeTotal" class="text-xs text-gray-600 font-medium">0 / ${this.teams.length} teams</span>
               </div>
-              <div id="teamValidationError" class="mt-1 text-xs text-red-600 hidden">
-                Please select at least 2 teams for Round Robin
+              <div id="groupSizeValidationError" class="mt-1 text-xs text-red-600 hidden">
+                Total group size must equal the number of teams.
               </div>
             </div>
             
@@ -3143,11 +3280,10 @@ class EventWorkspacePage {
                   <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                  <h5 class="text-sm font-medium text-blue-900">Round Robin Tournament Information</h5>
+                  <h5 class="text-sm font-medium text-blue-900">Grouped Round Robin Information</h5>
                   <p class="text-sm text-blue-700 mt-1">
-                    Generates matches with the same number per round, where each team plays exactly once per round. 
-                    For example: 4 teams = 2 matches per round, 5 teams = 2 matches per round (1 team sits out each round).
-                    Each round has independent random pairings.
+                    Teams are randomly assigned into groups (max 6 per group). Each group plays a full round robin
+                    across up to 5 rounds (shared Round 1-5). Each team plays at most once per round.
                     <span class="font-medium text-red-600">Cannot generate matches for rounds that already have existing matches.</span>
                     Please delete existing matches before generating new matches.
                   </p>
@@ -3164,6 +3300,20 @@ class EventWorkspacePage {
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Group Schedule Modal -->
+      <div id="groupScheduleModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-auto my-8 relative">
+          <div id="groupScheduleModalContent"></div>
+        </div>
+      </div>
+
+      <!-- Group Team Details Modal -->
+      <div id="groupTeamModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-4xl w-full mx-auto my-8 relative">
+          <div id="groupTeamModalContent"></div>
         </div>
       </div>
 
@@ -3344,12 +3494,8 @@ class EventWorkspacePage {
           const form = document.getElementById('createMatchForm');
           if (form) {
             form.reset();
-            // Clear judge selection
-            const judgeSelect = form.querySelector('select[name="judgeIds"]');
-            if (judgeSelect) {
-              judgeSelect.selectedIndex = -1; // Clear all selections
-              this.updateJudgeSelectionCounter(judgeSelect); // Update counter
-            }
+            // Clear search-only selections
+            this.initializeCreateMatchSelection();
             // Hide validation errors
             const errorDiv = document.getElementById('judgeValidationError');
             if (errorDiv) errorDiv.classList.add('hidden');
@@ -3443,6 +3589,19 @@ class EventWorkspacePage {
           
         case 'generate-swiss':
           this.showSwissModal();
+          break;
+
+        case 'switch-matches-subpage':
+          this.matchesSubpage = element.getAttribute('data-subpage') || 'schedule';
+          this.renderWorkspace();
+          break;
+
+        case 'view-group-schedule':
+          await this.showGroupSchedule(element.getAttribute('data-group-id'));
+          break;
+
+        case 'view-group-team':
+          await this.showGroupTeamDetails(element.getAttribute('data-team-id'));
           break;
           
         case 'save-round-schedules':
@@ -4001,9 +4160,9 @@ class EventWorkspacePage {
         errors.push('Only moderators and admins can set location');
       }
       
-      // Get selected judge IDs from multiple select
-      const judgeSelect = event.target.querySelector('select[name="judgeIds"]');
-      const selectedJudgeIds = Array.from(judgeSelect.selectedOptions).map(option => option.value);
+      // Get selected judge IDs from hidden input (search-only)
+      const judgeIdsInput = event.target.querySelector('input[name="judgeIds"]');
+      const selectedJudgeIds = judgeIdsInput?.value ? judgeIdsInput.value.split(',').filter(Boolean) : [];
       
       // Validate judge selection (must be 2-3 judges)
       if (selectedJudgeIds.length < 2) {
@@ -4016,11 +4175,12 @@ class EventWorkspacePage {
       if (errors.length > 0) {
         const errorMessage = errors.join('\n• ');
         this.ui.showError('Validation Error', `• ${errorMessage}`);
-        if (errorDiv && selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3) {
+        if (errorDiv && (selectedJudgeIds.length < 2 || selectedJudgeIds.length > 3)) {
           errorDiv.textContent = `Please select 2-3 judges. Currently selected: ${selectedJudgeIds.length}`;
           errorDiv.classList.remove('hidden');
         }
-        judgeSelect.focus();
+        const searchInput = document.getElementById('createJudgeSearchInput');
+        if (searchInput) searchInput.focus();
         return;
       }
       
@@ -4188,6 +4348,21 @@ class EventWorkspacePage {
       document.getElementById('editTeamAId').value = match.teamAId;
       document.getElementById('editTeamBId').value = match.teamBId;
       document.getElementById('editModeratorId').value = match.moderatorId || '';
+
+      // Update selected moderator display (search-only)
+      const editModeratorDisplay = document.getElementById('editSelectedModeratorDisplay');
+      if (editModeratorDisplay) {
+        if (match.moderatorId) {
+          const moderator =
+            match.moderator ||
+            (Array.isArray(this.users) ? this.users.find(u => u.id === match.moderatorId) : null);
+          editModeratorDisplay.textContent = moderator
+            ? `Selected: ${moderator.firstName} ${moderator.lastName}`
+            : `Selected moderator: ${match.moderatorId}`;
+        } else {
+          editModeratorDisplay.textContent = '';
+        }
+      }
       
       
       // Format datetime for input - use local time to avoid timezone issues
@@ -4224,7 +4399,6 @@ class EventWorkspacePage {
    */
   initializeEditJudgeSelection(match) {
     const currentJudgesList = document.getElementById('currentJudgesList');
-    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
     const judgeSearchInput = document.getElementById('judgeSearchInput');
     const hiddenInput = document.getElementById('editJudgeIds');
     const counter = document.getElementById('editJudgeSelectionCounter');
@@ -4252,12 +4426,52 @@ class EventWorkspacePage {
     
     // Update counter
     counter.textContent = `${this.currentEditJudgeIds.length} selected`;
-    
-    // Update available judges dropdown
-    this.updateAvailableJudgesDropdown();
-    
-    // Add event listeners for both select and search
+    this.updateEditJudgeSelectionCounter();
+
+    // Add event listeners for search
     this.setupEditJudgeEventListeners();
+  }
+
+  /**
+   * Initialize create match selection UX (search-only)
+   */
+  initializeCreateMatchSelection() {
+    // Judges
+    this.currentCreateJudgeIds = [];
+    this.currentCreateJudgesById = new Map();
+
+    const createJudgeIdsInput = document.getElementById('createJudgeIds');
+    if (createJudgeIdsInput) createJudgeIdsInput.value = '';
+
+    const createJudgesList = document.getElementById('createCurrentJudgesList');
+    if (createJudgesList) {
+      createJudgesList.innerHTML = '<p class="text-sm text-gray-500 italic">No judges selected yet</p>';
+    }
+
+    const createJudgeSearchInput = document.getElementById('createJudgeSearchInput');
+    if (createJudgeSearchInput) createJudgeSearchInput.value = '';
+
+    const createJudgeSearchResults = document.getElementById('createJudgeSearchResults');
+    if (createJudgeSearchResults) createJudgeSearchResults.classList.add('hidden');
+
+    this.updateJudgeSelectionCounter();
+
+    // Moderator
+    const createModeratorId = document.getElementById('createModeratorId');
+    if (createModeratorId) createModeratorId.value = '';
+
+    const createModeratorDisplay = document.getElementById('createSelectedModeratorDisplay');
+    if (createModeratorDisplay) createModeratorDisplay.textContent = '';
+
+    const createModeratorSearchInput = document.getElementById('createModeratorSearchInput');
+    if (createModeratorSearchInput) createModeratorSearchInput.value = '';
+
+    const createModeratorSearchResults = document.getElementById('createModeratorSearchResults');
+    if (createModeratorSearchResults) createModeratorSearchResults.classList.add('hidden');
+
+    // Bind listeners
+    this.setupCreateJudgeSearchEventListeners();
+    this.setupCreateModeratorSearchEventListeners();
   }
 
   /**
@@ -4302,10 +4516,8 @@ class EventWorkspacePage {
     
     // Update counter
     document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
-    
-    // Update available judges dropdown
-    this.updateAvailableJudgesDropdown();
-    
+    this.updateEditJudgeSelectionCounter();
+
     // Re-render current judges list
     this.renderCurrentJudgesList();
   }
@@ -4332,74 +4544,12 @@ class EventWorkspacePage {
   }
 
   /**
-   * Update available judges dropdown
-   */
-  updateAvailableJudgesDropdown() {
-    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
-    if (!availableJudgesSelect) return;
-    
-    const options = availableJudgesSelect.querySelectorAll('option[value]');
-    
-    options.forEach(option => {
-      const judgeId = option.value;
-      if (this.currentEditJudgeIds.includes(judgeId)) {
-        option.disabled = true;
-        const originalText = option.getAttribute('data-name') + ' (' + option.getAttribute('data-email') + ')';
-        option.textContent = originalText + ' (Already assigned)';
-      } else {
-        option.disabled = false;
-        option.textContent = option.getAttribute('data-name') + ' (' + option.getAttribute('data-email') + ')';
-      }
-    });
-  }
-
-  /**
    * Setup event listeners for judge selection
    */
   setupEditJudgeEventListeners() {
-    const addJudgeBtn = document.getElementById('addJudgeBtn');
-    const availableJudgesSelect = document.getElementById('availableJudgesSelect');
     const judgeSearchInput = document.getElementById('judgeSearchInput');
     const judgeSearchResults = document.getElementById('judgeSearchResults');
-    
-    // Add judge button for select dropdown
-    if (addJudgeBtn && availableJudgesSelect) {
-      // Remove existing event listeners by cloning
-      const newAddJudgeBtn = addJudgeBtn.cloneNode(true);
-      addJudgeBtn.parentNode.replaceChild(newAddJudgeBtn, addJudgeBtn);
-      
-      newAddJudgeBtn.addEventListener('click', () => {
-        const selectedJudgeId = availableJudgesSelect.value;
-        if (!selectedJudgeId) return;
-        
-        const selectedOption = availableJudgesSelect.querySelector(`option[value="${selectedJudgeId}"]`);
-        if (!selectedOption) return;
-        
-        const judge = {
-          id: selectedJudgeId,
-          firstName: selectedOption.getAttribute('data-name').split(' ')[0],
-          lastName: selectedOption.getAttribute('data-name').split(' ').slice(1).join(' '),
-          email: selectedOption.getAttribute('data-email')
-        };
-        
-        // Add to current judges
-        this.currentEditJudgeIds.push(selectedJudgeId);
-        
-        // Update hidden input
-        document.getElementById('editJudgeIds').value = this.currentEditJudgeIds.join(',');
-        
-        // Update counter
-        document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
-        
-        // Update UI
-        this.addJudgeToCurrentList(judge);
-        this.updateAvailableJudgesDropdown();
-        
-        // Reset selection
-        availableJudgesSelect.value = '';
-      });
-    }
-    
+
     // Search input for searching all judges
     if (judgeSearchInput && judgeSearchResults) {
       // Remove existing event listeners by replacing the element
@@ -4451,39 +4601,11 @@ class EventWorkspacePage {
     const judgeSearchResults = document.getElementById('judgeSearchResults');
     
     try {
-      // Check if user is admin
-      const effectiveRole = this.getEffectiveRole();
-      if (effectiveRole !== 'admin') {
-        judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Only admins can search and add judges</div>';
-        judgeSearchResults.classList.remove('hidden');
-        return;
-      }
-      
       // Show loading state
       judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
       judgeSearchResults.classList.remove('hidden');
       
-      // Search for judges and admins using the UserService API
-      // We need to search both roles, so we'll make two requests and combine results
-      const [judgeResults, adminResults] = await Promise.all([
-        this.userService.getAllUsers({ 
-          role: 'judge', 
-          search: searchTerm 
-        }, { page: 1, limit: 20 }),
-        this.userService.getAllUsers({ 
-          role: 'admin', 
-          search: searchTerm 
-        }, { page: 1, limit: 20 })
-      ]);
-      
-      // Combine and deduplicate results
-      const judgesMap = new Map();
-      [...(judgeResults.users || []), ...(adminResults.users || [])].forEach(user => {
-        if (!judgesMap.has(user.id)) {
-          judgesMap.set(user.id, user);
-        }
-      });
-      const judges = Array.from(judgesMap.values());
+      const judges = await this.searchUsersByRoles(searchTerm, ['judge', 'admin'], 20);
       
       if (judges.length === 0) {
         judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No judges or admins found</div>';
@@ -4545,13 +4667,6 @@ class EventWorkspacePage {
    * Add judge from search results
    */
   addJudgeFromSearch(judgeId, firstName, lastName, email) {
-    // Check if user is admin
-    const effectiveRole = this.getEffectiveRole();
-    if (effectiveRole !== 'admin') {
-      this.ui.showError('Permission Denied', 'Only admins can add judges to matches');
-      return;
-    }
-    
     const judge = {
       id: judgeId,
       firstName: firstName,
@@ -4572,6 +4687,7 @@ class EventWorkspacePage {
     
     // Update counter
     document.getElementById('editJudgeSelectionCounter').textContent = `${this.currentEditJudgeIds.length} selected`;
+    this.updateEditJudgeSelectionCounter();
     
     // Update UI
     this.addJudgeToCurrentList(judge);
@@ -4644,38 +4760,11 @@ class EventWorkspacePage {
     const moderatorSearchResults = document.getElementById('moderatorSearchResults');
     
     try {
-      // Check if user is admin
-      const effectiveRole = this.getEffectiveRole();
-      if (effectiveRole !== 'admin') {
-        moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Only admins can search and add moderators</div>';
-        moderatorSearchResults.classList.remove('hidden');
-        return;
-      }
-      
       // Show loading state
       moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
       moderatorSearchResults.classList.remove('hidden');
       
-      // Search for moderators and admins using the UserService API
-      const [moderatorResults, adminResults] = await Promise.all([
-        this.userService.getAllUsers({ 
-          role: 'moderator', 
-          search: searchTerm 
-        }, { page: 1, limit: 20 }),
-        this.userService.getAllUsers({ 
-          role: 'admin', 
-          search: searchTerm 
-        }, { page: 1, limit: 20 })
-      ]);
-      
-      // Combine and deduplicate results
-      const moderatorsMap = new Map();
-      [...(moderatorResults.users || []), ...(adminResults.users || [])].forEach(user => {
-        if (!moderatorsMap.has(user.id)) {
-          moderatorsMap.set(user.id, user);
-        }
-      });
-      const moderators = Array.from(moderatorsMap.values());
+      const moderators = await this.searchUsersByRoles(searchTerm, ['moderator', 'admin'], 20);
       
       if (moderators.length === 0) {
         moderatorSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No moderators or admins found</div>';
@@ -4728,18 +4817,12 @@ class EventWorkspacePage {
    * Select moderator from search results
    */
   selectModeratorFromSearch(moderatorId, firstName, lastName) {
-    // Check if user is admin
-    const effectiveRole = this.getEffectiveRole();
-    if (effectiveRole !== 'admin') {
-      this.ui.showError('Permission Denied', 'Only admins can select moderators');
-      return;
-    }
-    
-    // Update the moderator select dropdown
-    const moderatorSelect = document.getElementById('editModeratorId');
-    if (moderatorSelect) {
-      moderatorSelect.value = moderatorId;
-    }
+    // Update hidden input + display (search-only)
+    const moderatorInput = document.getElementById('editModeratorId');
+    if (moderatorInput) moderatorInput.value = moderatorId;
+
+    const display = document.getElementById('editSelectedModeratorDisplay');
+    if (display) display.textContent = `Selected: ${firstName} ${lastName}`;
     
     // Clear search input and hide results
     const moderatorSearchInput = document.getElementById('moderatorSearchInput');
@@ -4750,6 +4833,304 @@ class EventWorkspacePage {
     if (moderatorSearchResults) {
       moderatorSearchResults.classList.add('hidden');
     }
+  }
+
+  /**
+   * Search helper: roles-filtered search using API, with local fallback (role-based)
+   */
+  async searchUsersByRoles(searchTerm, roles, limit = 20) {
+    const term = (searchTerm || '').trim();
+    if (!term) return [];
+
+    try {
+      const results = await Promise.all(
+        roles.map(role =>
+          this.userService.getAllUsers(
+            { role, search: term },
+            { page: 1, limit }
+          )
+        )
+      );
+
+      const usersMap = new Map();
+      results.forEach(r => {
+        (r?.users || []).forEach(u => {
+          if (u && u.id && !usersMap.has(u.id)) usersMap.set(u.id, u);
+        });
+      });
+
+      return Array.from(usersMap.values());
+    } catch (error) {
+      // Fallback: search within locally loaded users (may be limited by permissions)
+      console.warn('User search API failed, falling back to local users list:', error);
+      const lower = term.toLowerCase();
+      const users = Array.isArray(this.users) ? this.users : [];
+      return users.filter(u => {
+        if (!u || !u.id) return false;
+        if (!roles.includes(u.role)) return false;
+        const hay = `${u.firstName || ''} ${u.lastName || ''} ${u.email || ''}`.toLowerCase();
+        return hay.includes(lower);
+      });
+    }
+  }
+
+  /**
+   * Setup search listeners for create match judge selection
+   */
+  setupCreateJudgeSearchEventListeners() {
+    const judgeSearchInput = document.getElementById('createJudgeSearchInput');
+    const judgeSearchResults = document.getElementById('createJudgeSearchResults');
+    if (!judgeSearchInput || !judgeSearchResults) return;
+
+    const newSearchInput = judgeSearchInput.cloneNode(true);
+    judgeSearchInput.parentNode.replaceChild(newSearchInput, judgeSearchInput);
+
+    let searchTimeout = null;
+    newSearchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.trim();
+      if (searchTimeout) clearTimeout(searchTimeout);
+      if (!searchTerm) {
+        judgeSearchResults.classList.add('hidden');
+        return;
+      }
+      searchTimeout = setTimeout(async () => {
+        await this.searchJudgesForCreateMatch(searchTerm);
+      }, 300);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!newSearchInput.contains(e.target) && !judgeSearchResults.contains(e.target)) {
+        judgeSearchResults.classList.add('hidden');
+      }
+    });
+
+    newSearchInput.addEventListener('focus', () => {
+      if (newSearchInput.value.trim().length > 0) {
+        judgeSearchResults.classList.remove('hidden');
+      }
+    });
+  }
+
+  async searchJudgesForCreateMatch(searchTerm) {
+    const judgeSearchResults = document.getElementById('createJudgeSearchResults');
+    if (!judgeSearchResults) return;
+
+    try {
+      judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
+      judgeSearchResults.classList.remove('hidden');
+
+      const judges = await this.searchUsersByRoles(searchTerm, ['judge', 'admin'], 20);
+      const available = judges.filter(u => u?.id && !this.currentCreateJudgeIds.includes(u.id));
+
+      if (available.length === 0) {
+        judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No judges or admins found</div>';
+        return;
+      }
+
+      judgeSearchResults.innerHTML = available.map(judge => `
+        <div 
+          class="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 create-judge-search-result"
+          data-judge-id="${judge.id}"
+          data-judge-firstname="${this.escapeHtml(judge.firstName)}"
+          data-judge-lastname="${this.escapeHtml(judge.lastName)}"
+          data-judge-email="${this.escapeHtml(judge.email)}"
+          data-judge-role="${this.escapeHtml(judge.role)}"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-medium text-gray-900">${this.escapeHtml(judge.firstName)} ${this.escapeHtml(judge.lastName)}</div>
+                <span class="px-2 py-0.5 text-xs font-medium rounded ${judge.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
+                  ${judge.role === 'admin' ? 'Admin' : 'Judge'}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500">${this.escapeHtml(judge.email)}</div>
+            </div>
+            <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+
+      judgeSearchResults.querySelectorAll('.create-judge-search-result').forEach(el => {
+        el.addEventListener('click', () => {
+          const id = el.getAttribute('data-judge-id');
+          const firstName = el.getAttribute('data-judge-firstname');
+          const lastName = el.getAttribute('data-judge-lastname');
+          const email = el.getAttribute('data-judge-email');
+          this.addJudgeToCreateFromSearch(id, firstName, lastName, email);
+        });
+      });
+    } catch (error) {
+      console.error('Error searching judges (create match):', error);
+      judgeSearchResults.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Error searching judges</div>';
+      judgeSearchResults.classList.remove('hidden');
+    }
+  }
+
+  addJudgeToCreateFromSearch(judgeId, firstName, lastName, email) {
+    if (!judgeId || this.currentCreateJudgeIds.includes(judgeId)) return;
+
+    this.currentCreateJudgeIds.push(judgeId);
+    this.currentCreateJudgesById.set(judgeId, { id: judgeId, firstName, lastName, email });
+
+    const input = document.getElementById('createJudgeIds');
+    if (input) input.value = this.currentCreateJudgeIds.join(',');
+
+    this.renderCreateJudgesList();
+    this.updateJudgeSelectionCounter();
+
+    const searchInput = document.getElementById('createJudgeSearchInput');
+    const searchResults = document.getElementById('createJudgeSearchResults');
+    if (searchInput) searchInput.value = '';
+    if (searchResults) searchResults.classList.add('hidden');
+  }
+
+  removeJudgeFromCreate(judgeId) {
+    this.currentCreateJudgeIds = this.currentCreateJudgeIds.filter(id => id !== judgeId);
+    if (this.currentCreateJudgesById) this.currentCreateJudgesById.delete(judgeId);
+
+    const input = document.getElementById('createJudgeIds');
+    if (input) input.value = this.currentCreateJudgeIds.join(',');
+
+    this.renderCreateJudgesList();
+    this.updateJudgeSelectionCounter();
+  }
+
+  renderCreateJudgesList() {
+    const list = document.getElementById('createCurrentJudgesList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!this.currentCreateJudgeIds || this.currentCreateJudgeIds.length === 0) {
+      list.innerHTML = '<p class="text-sm text-gray-500 italic">No judges selected yet</p>';
+      return;
+    }
+
+    this.currentCreateJudgeIds.forEach(id => {
+      const judge = this.currentCreateJudgesById?.get(id) || (Array.isArray(this.users) ? this.users.find(u => u.id === id) : null);
+      const firstName = judge?.firstName || '';
+      const lastName = judge?.lastName || '';
+      const email = judge?.email || '';
+      const item = document.createElement('div');
+      item.className = 'flex items-center justify-between bg-white border border-gray-200 rounded-md p-2';
+      item.innerHTML = `
+        <div class="flex items-center">
+          <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+          <div>
+            <div class="text-sm font-medium text-gray-900">${this.escapeHtml(firstName)} ${this.escapeHtml(lastName)}</div>
+            <div class="text-xs text-gray-500">${this.escapeHtml(email)}</div>
+          </div>
+        </div>
+        <button type="button" class="text-red-600 hover:text-red-800 text-sm font-medium" onclick="window.eventWorkspacePage.removeJudgeFromCreate('${id}')">
+          Remove
+        </button>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  /**
+   * Setup search listeners for create match moderator selection
+   */
+  setupCreateModeratorSearchEventListeners() {
+    const input = document.getElementById('createModeratorSearchInput');
+    const results = document.getElementById('createModeratorSearchResults');
+    if (!input || !results) return;
+
+    const newInput = input.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+
+    let searchTimeout = null;
+    newInput.addEventListener('input', (e) => {
+      const term = e.target.value.trim();
+      if (searchTimeout) clearTimeout(searchTimeout);
+      if (!term) {
+        results.classList.add('hidden');
+        return;
+      }
+      searchTimeout = setTimeout(async () => {
+        await this.searchModeratorsForCreateMatch(term);
+      }, 300);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!newInput.contains(e.target) && !results.contains(e.target)) {
+        results.classList.add('hidden');
+      }
+    });
+
+    newInput.addEventListener('focus', () => {
+      if (newInput.value.trim().length > 0) results.classList.remove('hidden');
+    });
+  }
+
+  async searchModeratorsForCreateMatch(searchTerm) {
+    const results = document.getElementById('createModeratorSearchResults');
+    if (!results) return;
+
+    try {
+      results.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">Searching...</div>';
+      results.classList.remove('hidden');
+
+      const moderators = await this.searchUsersByRoles(searchTerm, ['moderator', 'admin'], 20);
+      if (moderators.length === 0) {
+        results.innerHTML = '<div class="p-2 text-sm text-gray-500 text-center">No moderators or admins found</div>';
+        return;
+      }
+
+      results.innerHTML = moderators.map(m => `
+        <div 
+          class="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 create-moderator-search-result"
+          data-moderator-id="${m.id}"
+          data-moderator-firstname="${this.escapeHtml(m.firstName)}"
+          data-moderator-lastname="${this.escapeHtml(m.lastName)}"
+          data-moderator-email="${this.escapeHtml(m.email)}"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-medium text-gray-900">${this.escapeHtml(m.firstName)} ${this.escapeHtml(m.lastName)}</div>
+                <span class="px-2 py-0.5 text-xs font-medium rounded ${m.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}">
+                  ${m.role === 'admin' ? 'Admin' : 'Moderator'}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500">${this.escapeHtml(m.email)}</div>
+            </div>
+            <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+          </div>
+        </div>
+      `).join('');
+
+      results.querySelectorAll('.create-moderator-search-result').forEach(el => {
+        el.addEventListener('click', () => {
+          const id = el.getAttribute('data-moderator-id');
+          const firstName = el.getAttribute('data-moderator-firstname');
+          const lastName = el.getAttribute('data-moderator-lastname');
+          this.selectCreateModeratorFromSearch(id, firstName, lastName);
+        });
+      });
+    } catch (error) {
+      console.error('Error searching moderators (create match):', error);
+      results.innerHTML = '<div class="p-2 text-sm text-red-500 text-center">Error searching moderators</div>';
+      results.classList.remove('hidden');
+    }
+  }
+
+  selectCreateModeratorFromSearch(moderatorId, firstName, lastName) {
+    const input = document.getElementById('createModeratorId');
+    if (input) input.value = moderatorId;
+
+    const display = document.getElementById('createSelectedModeratorDisplay');
+    if (display) display.textContent = `Selected: ${firstName} ${lastName}`;
+
+    const searchInput = document.getElementById('createModeratorSearchInput');
+    const results = document.getElementById('createModeratorSearchResults');
+    if (searchInput) searchInput.value = '';
+    if (results) results.classList.add('hidden');
   }
 
   /**
@@ -5559,8 +5940,11 @@ class EventWorkspacePage {
   /**
    * Update judge selection counter
    */
-  updateJudgeSelectionCounter(selectElement) {
-    const selectedCount = selectElement.selectedOptions.length;
+  updateJudgeSelectionCounter(selectElement = null) {
+    // Backward-compatible: if a <select multiple> is provided, use it; otherwise use create-match state.
+    const selectedCount = selectElement?.selectedOptions
+      ? selectElement.selectedOptions.length
+      : (this.currentCreateJudgeIds?.length || 0);
     const counter = document.getElementById('judgeSelectionCounter');
     const errorDiv = document.getElementById('judgeValidationError');
     
@@ -5582,8 +5966,11 @@ class EventWorkspacePage {
   /**
    * Update edit judge selection counter
    */
-  updateEditJudgeSelectionCounter(selectElement) {
-    const selectedCount = selectElement.selectedOptions.length;
+  updateEditJudgeSelectionCounter(selectElement = null) {
+    // Backward-compatible: if a <select multiple> is provided, use it; otherwise use edit-match state.
+    const selectedCount = selectElement?.selectedOptions
+      ? selectElement.selectedOptions.length
+      : (this.currentEditJudgeIds?.length || 0);
     const counter = document.getElementById('editJudgeSelectionCounter');
     const errorDiv = document.getElementById('editJudgeValidationError');
     
@@ -5615,6 +6002,8 @@ class EventWorkspacePage {
       this.updateCreateMatchTeamDropdowns();
       // Setup location input permissions
       this.setupLocationInputs();
+      // Initialize create match selection UX (search-only for moderator/judges)
+      this.initializeCreateMatchSelection();
     }
     
     // Setup location input permissions when opening edit match modal
@@ -8386,26 +8775,46 @@ Note: Judges typically score each question individually (First, Second, Third Qu
   }
 
   /**
-   * Update team list in Round Robin modal
+   * Update group size inputs in Round Robin modal
    */
-  updateRoundRobinTeamList() {
-    // Find the parent container of team checkboxes by looking for selectedTeams inputs
-    const firstTeamCheckbox = document.querySelector('#roundRobinModal input[name="selectedTeams"]');
-    const teamContainer = firstTeamCheckbox?.closest('.space-y-2');
-    if (!teamContainer) return;
+  updateRoundRobinGroupInputs(groupCount, presetSizes = []) {
+    const container = document.getElementById('groupSizesContainer');
+    if (!container) return;
 
-    teamContainer.innerHTML = this.teams.map(team => `
-      <label class="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
-        <input type="checkbox" name="selectedTeams" value="${team.id}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-        <div>
-          <div class="text-sm font-medium text-gray-900">${team.name}</div>
-          <div class="text-xs text-gray-500">${team.school || 'No school'}</div>
+    const count = Math.max(1, parseInt(groupCount, 10) || 1);
+    container.innerHTML = Array.from({ length: count }, (_, index) => {
+      const defaultSize = presetSizes[index] || 2;
+      return `
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-gray-700">Group ${String.fromCharCode(65 + index)}</label>
+          <input type="number" name="groupSize" min="2" max="6" value="${defaultSize}"
+                 class="w-24 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
-      </label>
-    `).join('');
+      `;
+    }).join('');
 
-    // Re-setup event listeners for the new checkboxes
-    this.addRoundRobinEventListeners();
+    container.querySelectorAll('input[name="groupSize"]').forEach(input => {
+      input.addEventListener('input', () => this.updateGroupSizeSummary());
+    });
+
+    this.updateGroupSizeSummary();
+  }
+
+  updateGroupSizeSummary() {
+    const inputs = Array.from(document.querySelectorAll('#roundRobinModal input[name="groupSize"]'));
+    const total = inputs.reduce((sum, input) => sum + (parseInt(input.value, 10) || 0), 0);
+    const totalTeams = this.teams.length;
+    const summary = document.getElementById('groupSizeTotal');
+    const errorDiv = document.getElementById('groupSizeValidationError');
+
+    if (summary) {
+      summary.textContent = `${total} / ${totalTeams} teams`;
+      summary.className = total === totalTeams ? 'text-xs text-green-600 font-medium' : 'text-xs text-red-600 font-medium';
+    }
+
+    if (errorDiv) {
+      errorDiv.classList.toggle('hidden', total === totalTeams);
+    }
   }
 
   /**
@@ -8413,40 +8822,24 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    */
   showRoundRobinModal() {
     this.showModal('roundRobinModal');
-    
-    // Update team list with latest data
-    this.updateRoundRobinTeamList();
-    
-    // Reset form when opening
+
     const form = document.getElementById('roundRobinForm');
     if (form) {
       form.reset();
-      
-      // Clear round selection counter
-      const roundCounter = document.getElementById('roundSelectionCounter');
-      if (roundCounter) {
-        roundCounter.textContent = '0 selected';
-      }
-      
-      // Clear team selection counter
-      const teamCounter = document.getElementById('teamSelectionCounter');
-      if (teamCounter) {
-        teamCounter.textContent = '0 selected';
-      }
-      
-      // Hide validation errors
-      const roundErrorDiv = document.getElementById('roundValidationError');
-      if (roundErrorDiv) {
-        roundErrorDiv.classList.add('hidden');
-      }
-      
-      const teamErrorDiv = document.getElementById('teamValidationError');
-      if (teamErrorDiv) {
-        teamErrorDiv.classList.add('hidden');
-      }
     }
-    
-    // Add event listeners for round and team selection
+
+    const totalTeams = this.teams.length;
+    const defaultGroupCount = Math.max(1, Math.ceil(totalTeams / 6));
+    const groupCountInput = document.getElementById('groupCountInput');
+    if (groupCountInput) {
+      groupCountInput.value = defaultGroupCount;
+    }
+
+    const baseSize = Math.floor(totalTeams / defaultGroupCount);
+    const remainder = totalTeams % defaultGroupCount;
+    const presetSizes = Array.from({ length: defaultGroupCount }, (_, index) => baseSize + (index < remainder ? 1 : 0));
+
+    this.updateRoundRobinGroupInputs(defaultGroupCount, presetSizes);
     this.addRoundRobinEventListeners();
   }
 
@@ -8467,31 +8860,17 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     form.removeEventListener('submit', submitHandler);
     form.addEventListener('submit', submitHandler);
     
-    // Handle round selection counter
-    const roundCheckboxes = form.querySelectorAll('input[name="selectedRounds"]');
-    const roundCounter = document.getElementById('roundSelectionCounter');
-    
-    roundCheckboxes.forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-        const selectedCount = form.querySelectorAll('input[name="selectedRounds"]:checked').length;
-        if (roundCounter) {
-          roundCounter.textContent = `${selectedCount} selected`;
-        }
+    const groupCountInput = document.getElementById('groupCountInput');
+    if (groupCountInput) {
+      groupCountInput.addEventListener('input', () => {
+        const groupCount = parseInt(groupCountInput.value, 10) || 1;
+        const totalTeams = this.teams.length;
+        const baseSize = Math.floor(totalTeams / groupCount);
+        const remainder = totalTeams % groupCount;
+        const presetSizes = Array.from({ length: groupCount }, (_, index) => baseSize + (index < remainder ? 1 : 0));
+        this.updateRoundRobinGroupInputs(groupCount, presetSizes);
       });
-    });
-    
-    // Handle team selection counter
-    const teamCheckboxes = form.querySelectorAll('input[name="selectedTeams"]');
-    const teamCounter = document.getElementById('teamSelectionCounter');
-    
-    teamCheckboxes.forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-        const selectedCount = form.querySelectorAll('input[name="selectedTeams"]:checked').length;
-        if (teamCounter) {
-          teamCounter.textContent = `${selectedCount} selected`;
-        }
-      });
-    });
+    }
   }
 
   /**
@@ -8513,52 +8892,42 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         submitButton.textContent = 'Generating...';
       }
       
-      const selectedRoundNumbers = formData.getAll('selectedRounds').map(r => parseInt(r));
-      const selectedTeamIds = formData.getAll('selectedTeams');
-      
-      // Validate input
-      if (selectedRoundNumbers.length === 0) {
-        alert('Validation Error: Please select at least 1 round');
-        this.ui.showError('Validation Error', 'Please select at least 1 round');
+      const groupCount = parseInt(formData.get('groupCount'), 10) || 1;
+      const groupSizes = formData.getAll('groupSize').map(size => parseInt(size, 10));
+
+      if (this.currentEvent.totalRounds > 5) {
+        this.ui.showError('Validation Error', 'Event total rounds cannot exceed 5 for grouped round robin');
         return;
       }
-      
-      if (selectedTeamIds.length < 2) {
-        alert('Validation Error: Please select at least 2 teams for Round Robin');
-        this.ui.showError('Validation Error', 'Please select at least 2 teams for Round Robin');
+
+      if (groupSizes.length !== groupCount) {
+        this.ui.showError('Validation Error', 'Group sizes must match group count');
         return;
       }
-      
-      // Check if any selected rounds already have matches
-      const roundsWithMatches = [];
-      for (const roundNumber of selectedRoundNumbers) {
-        const existingMatches = this.matches.filter(m => m.roundNumber === roundNumber);
-        if (existingMatches.length > 0) {
-          roundsWithMatches.push(roundNumber);
-        }
-      }
-      
-      if (roundsWithMatches.length > 0) {
-        const roundsList = roundsWithMatches.join(', ');
-        console.log('Found rounds with existing matches:', roundsWithMatches);
-        
-        // Show error alert first for immediate feedback
-        alert(`Cannot Generate Matches: The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`);
-        
-        // Also show UI error message
-        this.ui.showError(
-          'Cannot Generate Matches', 
-          `The following rounds already have existing matches: Round ${roundsList}. Please delete existing matches before generating new Round Robin matches.`
-        );
+
+      if (groupSizes.some(size => size > 6)) {
+        this.ui.showError('Validation Error', 'Each group size must be 6 or less');
         return;
       }
-      
-      // Get selected teams
-      const selectedTeams = this.teams.filter(team => selectedTeamIds.includes(team.id));
-      
-      // Generate Round Robin matches for multiple rounds
-      await this.generateRoundRobinForMultipleRounds(selectedRoundNumbers, selectedTeams);
-      
+
+      if (groupSizes.some(size => size < 2)) {
+        this.ui.showError('Validation Error', 'Each group must have at least 2 teams');
+        return;
+      }
+
+      const totalSize = groupSizes.reduce((sum, size) => sum + size, 0);
+      if (totalSize !== this.teams.length) {
+        this.ui.showError('Validation Error', 'Total group size must equal team count');
+        return;
+      }
+
+      // Generate grouped round robin on server
+      await this.eventService.generateGroupRoundRobin(this.currentEventId, groupCount, groupSizes);
+
+      // Refresh data and switch to Group subpage
+      await this.loadEventData();
+      this.matchesSubpage = 'group';
+
       // Close modal
       this.closeModal('roundRobinModal');
       
@@ -8572,6 +8941,149 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         submitButton.disabled = false;
         submitButton.textContent = 'Generate Matches';
       }
+    }
+  }
+
+  /**
+   * Show schedule for a specific group
+   */
+  async showGroupSchedule(groupId) {
+    const group = this.groups.find(item => item.id === groupId);
+    if (!group) {
+      this.ui.showError('Error', 'Group not found');
+      return;
+    }
+
+    const matchesSource = this.allMatches || this.matches || [];
+    const groupMatches = matchesSource.filter(match => match.groupId === groupId);
+    const matchesByRound = {};
+
+    groupMatches.forEach(match => {
+      if (!matchesByRound[match.roundNumber]) {
+        matchesByRound[match.roundNumber] = [];
+      }
+      matchesByRound[match.roundNumber].push(match);
+    });
+
+    const scheduleHTML = groupMatches.length === 0 ? `
+      <div class="p-6">
+        <div class="text-gray-500 text-center">No matches found for this group.</div>
+      </div>
+    ` : Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(round => `
+      <div class="border border-gray-300 rounded-lg mb-4 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-300 bg-gray-50">
+          <h4 class="text-sm font-medium text-gray-900">${this.getRoundDisplayNameWithTime(parseInt(round))}</h4>
+        </div>
+        <div class="divide-y divide-gray-200">
+          ${matchesByRound[round].map(match => this.renderMatchCard(match)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    const modalContent = `
+      <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
+        <h3 class="text-lg font-medium text-gray-900">${group.name} Schedule</h3>
+        <button onclick="window.eventWorkspacePage.closeModal('groupScheduleModal')" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="p-6 max-h-[70vh] overflow-y-auto">
+        ${scheduleHTML}
+      </div>
+      <div class="px-6 py-4 border-t border-gray-300 flex justify-end">
+        <button onclick="window.eventWorkspacePage.closeModal('groupScheduleModal')" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+          Close
+        </button>
+      </div>
+    `;
+
+    const modalContentContainer = document.getElementById('groupScheduleModalContent');
+    if (modalContentContainer) {
+      modalContentContainer.innerHTML = modalContent;
+    }
+
+    this.showModal('groupScheduleModal');
+  }
+
+  /**
+   * Show team details for a specific group team
+   */
+  async showGroupTeamDetails(teamId) {
+    try {
+      const standingsData = await this.getEventStandings();
+      const standing = standingsData?.standings?.find(item => item.team.id === teamId);
+      const team = this.teams.find(t => t.id === teamId);
+
+      if (!team) {
+        this.ui.showError('Error', 'Team not found');
+        return;
+      }
+
+      const summaryHTML = standing ? `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div>
+            <div class="text-lg font-bold text-gray-900">${standing.rank}</div>
+            <div class="text-xs text-gray-500">Rank</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-gray-900">${standing.wins || 0}</div>
+            <div class="text-xs text-gray-500">Wins</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-gray-900">${standing.votes || 0}</div>
+            <div class="text-xs text-gray-500">Votes</div>
+          </div>
+          <div>
+            <div class="text-lg font-bold ${standing.scoreDifferential >= 0 ? 'text-green-600' : 'text-red-600'}">
+              ${standing.scoreDifferential > 0 ? '+' : ''}${standing.scoreDifferential}
+            </div>
+            <div class="text-xs text-gray-500">Score Diff</div>
+          </div>
+        </div>
+      ` : `
+        <div class="text-gray-500 text-center">Standings data not available for this team.</div>
+      `;
+
+      const detailsHTML = this.renderTeamDetailsContent(teamId);
+
+      const modalContent = `
+        <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-medium text-gray-900">${team.name}</h3>
+            <p class="text-sm text-gray-500">${team.school || 'No school'}</p>
+          </div>
+          <button onclick="window.eventWorkspacePage.closeModal('groupTeamModal')" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            ${summaryHTML}
+          </div>
+          <div class="border border-gray-200 rounded-lg">
+            ${detailsHTML}
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-300 flex justify-end">
+          <button onclick="window.eventWorkspacePage.closeModal('groupTeamModal')" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+            Close
+          </button>
+        </div>
+      `;
+
+      const modalContentContainer = document.getElementById('groupTeamModalContent');
+      if (modalContentContainer) {
+        modalContentContainer.innerHTML = modalContent;
+      }
+
+      this.showModal('groupTeamModal');
+    } catch (error) {
+      console.error('Error showing group team details:', error);
+      this.ui.showError('Error', 'Failed to load team details');
     }
   }
 
@@ -9930,33 +10442,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       const allUsers = usersResponse.users || [];
       const judges = allUsers.filter(user => user.role === 'judge' && user.isActive);
 
-      // Filter judges who have access to this event
-      let allowedJudges = [];
-      if (event.allowedJudges) {
-        try {
-          const allowedJudgeIds = JSON.parse(event.allowedJudges);
-          if (Array.isArray(allowedJudgeIds) && allowedJudgeIds.length > 0) {
-            allowedJudges = judges.filter(judge => allowedJudgeIds.includes(judge.id));
-          } else {
-            // If allowedJudges is empty or invalid, allow all judges
-            allowedJudges = judges;
-          }
-        } catch (error) {
-          console.error('Error parsing allowedJudges:', error);
-          // If parsing fails, allow all judges
-          allowedJudges = judges;
-        }
-      } else {
-        // If no allowedJudges field, allow all judges
-        allowedJudges = judges;
-      }
-
       // Get current match judges
       const match = this.matches.find(m => m.id === matchId);
       const currentJudgeIds = match?.assignments?.map(a => a.judgeId) || [];
       
       // Filter out judges already assigned to this match
-      const availableJudges = allowedJudges.filter(judge => !currentJudgeIds.includes(judge.id));
+      const availableJudges = judges.filter(judge => !currentJudgeIds.includes(judge.id));
 
       if (availableJudges.length === 0) {
         this.ui.showError('Error', 'No available judges to add to this match');
@@ -10081,33 +10572,12 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       const allUsers = usersResponse.users || [];
       const judges = allUsers.filter(user => user.role === 'judge' && user.isActive);
 
-      // Filter judges who have access to this event
-      let allowedJudges = [];
-      if (event.allowedJudges) {
-        try {
-          const allowedJudgeIds = JSON.parse(event.allowedJudges);
-          if (Array.isArray(allowedJudgeIds) && allowedJudgeIds.length > 0) {
-            allowedJudges = judges.filter(judge => allowedJudgeIds.includes(judge.id));
-          } else {
-            // If allowedJudges is empty or invalid, allow all judges
-            allowedJudges = judges;
-          }
-        } catch (error) {
-          console.error('Error parsing allowedJudges:', error);
-          // If parsing fails, allow all judges
-          allowedJudges = judges;
-        }
-      } else {
-        // If no allowedJudges field, allow all judges
-        allowedJudges = judges;
-      }
-
       // Get current match judges
       const match = this.matches.find(m => m.id === matchId);
       const currentJudgeIds = match?.assignments?.map(a => a.judgeId) || [];
       
       // Filter out judges already assigned to this match (except the one being replaced)
-      const availableJudges = allowedJudges.filter(judge => 
+      const availableJudges = judges.filter(judge => 
         !currentJudgeIds.includes(judge.id) || judge.id === actualOldJudgeId
       );
 
@@ -11049,7 +11519,7 @@ Note: Judges typically score each question individually (First, Second, Third Qu
    */
   escapeHtml(text) {
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text ?? '';
     return div.innerHTML;
   }
 

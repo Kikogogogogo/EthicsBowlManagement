@@ -24,7 +24,9 @@ const ENDPOINTS = {
     updateStatus: (id) => `${API_BASE_URL}/events/${id}/status`,
     delete: (id) => `${API_BASE_URL}/events/${id}`,
     updateRoundSchedules: (id) => `${API_BASE_URL}/events/${id}/round-schedules`,
-    getRoundSchedule: (id, roundNumber) => `${API_BASE_URL}/events/${id}/round-schedules/${roundNumber}`
+    getRoundSchedule: (id, roundNumber) => `${API_BASE_URL}/events/${id}/round-schedules/${roundNumber}`,
+    getGroups: (id) => `${API_BASE_URL}/events/${id}/groups`,
+    generateGroupRoundRobin: (id) => `${API_BASE_URL}/events/${id}/groups/generate-round-robin`
   },
   teams: {
     listByEvent: (eventId) => `${API_BASE_URL}/events/${eventId}/teams`,
@@ -384,6 +386,25 @@ class EventService {
   async getRoundSchedule(eventId, roundNumber) {
     const response = await this.api.get(ENDPOINTS.events.getRoundSchedule(eventId, roundNumber));
     return response.data.roundSchedule;
+  }
+
+  /**
+   * Get groups for an event
+   */
+  async getEventGroups(eventId) {
+    const response = await this.api.get(ENDPOINTS.events.getGroups(eventId));
+    return response.data.groups;
+  }
+
+  /**
+   * Generate grouped round robin matches
+   */
+  async generateGroupRoundRobin(eventId, groupCount, groupSizes) {
+    const response = await this.api.post(ENDPOINTS.events.generateGroupRoundRobin(eventId), {
+      groupCount,
+      groupSizes
+    });
+    return response.data;
   }
 }
 

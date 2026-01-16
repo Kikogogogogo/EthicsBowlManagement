@@ -1,4 +1,5 @@
 const { prisma } = require('../config/database');
+const MatchService = require('./match.service');
 
 class EventService {
   /**
@@ -1264,6 +1265,293 @@ class EventService {
       console.error('Error deleting score diff log:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get groups and their teams for an event
+   * @param {string} eventId - Event ID
+   * @returns {Array} Groups with teams
+   */
+  async getEventGroups(eventId) {
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      const groups = await prisma.group.findMany({
+        where: { eventId },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          teams: {
+            orderBy: { slotOrder: 'asc' },
+            include: {
+              team: {
+                select: { id: true, name: true, school: true }
+              }
+            }
+          }
+        }
+      });
+
+      return groups.map(group => ({
+        id: group.id,
+        eventId: group.eventId,
+        name: group.name,
+        sortOrder: group.sortOrder,
+        teams: group.teams.map(entry => ({
+          id: entry.team.id,
+          name: entry.team.name,
+          school: entry.team.school,
+          slotOrder: entry.slotOrder
+        }))
+      }));
+    } catch (error) {
+      console.error('Error fetching event groups:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate grouped round robin matches (max 5 rounds, group size <= 6)
+   * @param {string} eventId - Event ID
+   * @param {number} groupCount - Number of groups
+   * @param {number[]} groupSizes - Size per group
+   * @returns {Object} Generation result
+   */
+  async generateGroupRoundRobin(eventId, groupCount, groupSizes) {
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        include: { teams: true }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      if (event.status === 'completed') {
+        throw new Error('Cannot generate matches for completed events');
+      }
+
+      if (!Array.isArray(groupSizes) || groupSizes.length !== groupCount) {
+        throw new Error('Group sizes must match group count');
+      }
+
+      const totalTeams = event.teams.length;
+      if (totalTeams < 2) {
+        throw new Error('Need at least 2 teams to generate grouped round robin');
+      }
+
+      const normalizedSizes = groupSizes.map(size => parseInt(size, 10));
+      if (normalizedSizes.some(size => Number.isNaN(size))) {
+        throw new Error('Group sizes must be valid numbers');
+      }
+
+      const totalGroupSize = normalizedSizes.reduce((sum, size) => sum + size, 0);
+
+      if (totalGroupSize !== totalTeams) {
+        throw new Error(`Total group size (${totalGroupSize}) must equal team count (${totalTeams})`);
+      }
+
+      if (normalizedSizes.some(size => size > 6)) {
+        throw new Error('Each group size must be 6 or less');
+      }
+
+      if (normalizedSizes.some(size => size < 2)) {
+        throw new Error('Each group must have at least 2 teams');
+      }
+
+      if (event.totalRounds > 5) {
+        throw new Error('Event total rounds cannot exceed 5 for grouped round robin');
+      }
+
+      const maxRoundsNeeded = Math.max(...normalizedSizes.map(teamCount => {
+        return teamCount % 2 === 0 ? teamCount - 1 : teamCount;
+      }));
+
+      if (maxRoundsNeeded > 5) {
+        throw new Error('Group size requires more than 5 rounds');
+      }
+
+      const existingMatches = await prisma.match.count({
+        where: {
+          eventId,
+          roundNumber: { in: [1, 2, 3, 4, 5] }
+        }
+      });
+
+      if (existingMatches > 0) {
+        throw new Error('Cannot generate grouped round robin: existing matches found in rounds 1-5');
+      }
+
+      if (event.totalRounds < maxRoundsNeeded) {
+        await prisma.event.update({
+          where: { id: eventId },
+          data: { totalRounds: maxRoundsNeeded }
+        });
+      }
+
+      // Clear existing groups if any (safe since no matches in rounds 1-5)
+      await prisma.groupTeam.deleteMany({
+        where: { group: { eventId } }
+      });
+      await prisma.group.deleteMany({
+        where: { eventId }
+      });
+
+      const shuffledTeams = this.shuffleArray([...event.teams]);
+      const matchService = new MatchService();
+
+      let cursor = 0;
+      const groups = [];
+      let totalMatchesCreated = 0;
+
+      for (let i = 0; i < groupCount; i++) {
+        const groupSize = normalizedSizes[i];
+        const groupTeams = shuffledTeams.slice(cursor, cursor + groupSize);
+        cursor += groupSize;
+
+        const groupName = `Group ${String.fromCharCode(65 + i)}`;
+        const createdGroup = await prisma.group.create({
+          data: {
+            eventId,
+            name: groupName,
+            sortOrder: i
+          }
+        });
+
+        await prisma.groupTeam.createMany({
+          data: groupTeams.map((team, index) => ({
+            groupId: createdGroup.id,
+            teamId: team.id,
+            slotOrder: index
+          }))
+        });
+
+        const rounds = this.generateRoundRobinRounds(groupTeams);
+
+        for (let roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
+          const roundNumber = roundIndex + 1;
+          const roundPairings = rounds[roundIndex];
+
+          for (const pairing of roundPairings) {
+            if (!pairing.teamB) {
+              await matchService.createMatch({
+                eventId,
+                roundNumber,
+                teamAId: pairing.teamA.id,
+                teamBId: null,
+                status: 'completed',
+                winnerId: pairing.teamA.id,
+                room: 'Bye',
+                groupId: createdGroup.id
+              });
+              totalMatchesCreated += 1;
+              continue;
+            }
+
+            await matchService.createMatch({
+              eventId,
+              roundNumber,
+              teamAId: pairing.teamA.id,
+              teamBId: pairing.teamB.id,
+              status: 'draft',
+              scheduledTime: null,
+              room: null,
+              groupId: createdGroup.id
+            });
+            totalMatchesCreated += 1;
+          }
+        }
+
+        groups.push({
+          id: createdGroup.id,
+          name: createdGroup.name,
+          sortOrder: createdGroup.sortOrder,
+          teams: groupTeams.map((team, index) => ({
+            id: team.id,
+            name: team.name,
+            school: team.school,
+            slotOrder: index
+          }))
+        });
+      }
+
+      return {
+        groups,
+        matchesCreated: totalMatchesCreated,
+        roundsUsed: maxRoundsNeeded
+      };
+    } catch (error) {
+      console.error('Error generating grouped round robin:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate round robin rounds using circle method
+   * @param {Array} teams - Array of team objects
+   * @returns {Array} Array of rounds with pairings
+   */
+  generateRoundRobinRounds(teams) {
+    const teamList = [...teams];
+    const hasBye = teamList.length % 2 === 1;
+
+    if (hasBye) {
+      teamList.push(null);
+    }
+
+    const totalTeams = teamList.length;
+    const rounds = totalTeams - 1;
+    const roundsOutput = [];
+
+    for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
+      const pairings = [];
+      for (let i = 0; i < totalTeams / 2; i++) {
+        const teamA = teamList[i];
+        const teamB = teamList[totalTeams - 1 - i];
+
+        if (!teamA && !teamB) {
+          continue;
+        }
+
+        if (!teamA || !teamB) {
+          const byeTeam = teamA || teamB;
+          pairings.push({ teamA: byeTeam, teamB: null });
+          continue;
+        }
+
+        pairings.push({ teamA, teamB });
+      }
+
+      roundsOutput.push(pairings);
+
+      const fixed = teamList[0];
+      const rotating = teamList.slice(1);
+      rotating.unshift(rotating.pop());
+      teamList.splice(0, teamList.length, fixed, ...rotating);
+    }
+
+    return roundsOutput;
+  }
+
+  /**
+   * Shuffle array (Fisher-Yates)
+   * @param {Array} items - Items to shuffle
+   * @returns {Array} Shuffled items
+   */
+  shuffleArray(items) {
+    const result = [...items];
+    for (let i = result.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
   }
 
   /**

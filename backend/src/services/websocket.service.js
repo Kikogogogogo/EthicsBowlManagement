@@ -49,30 +49,6 @@ class WebSocketService {
         return true;
       }
       
-      // Check if user is in allowed judges list
-      if (event.allowedJudges) {
-        try {
-          const allowedJudges = JSON.parse(event.allowedJudges);
-          if (Array.isArray(allowedJudges) && allowedJudges.includes(userId)) {
-            return true;
-          }
-        } catch (error) {
-          console.error('Error parsing allowedJudges:', error);
-        }
-      }
-      
-      // Check if user is in allowed moderators list
-      if (event.allowedModerators) {
-        try {
-          const allowedModerators = JSON.parse(event.allowedModerators);
-          if (Array.isArray(allowedModerators) && allowedModerators.includes(userId)) {
-            return true;
-          }
-        } catch (error) {
-          console.error('Error parsing allowedModerators:', error);
-        }
-      }
-      
       // Check if user is assigned to any matches in this event (for judges/moderators)
       if (userRole === USER_ROLES.JUDGE || userRole === USER_ROLES.MODERATOR) {
         const matchAssignment = await prisma.matchAssignment.findFirst({

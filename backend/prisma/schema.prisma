@@ -52,6 +52,7 @@ model Event {
   creator         User      @relation(fields: [createdBy], references: [id])
   matches         Match[]
   teams           Team[]
+  groups          Group[]
 
   @@map("events")
 }
@@ -69,6 +70,7 @@ model Team {
   teamBMatches Match[]  @relation("TeamBMatches")
   teamAMatches Match[]  @relation("TeamAMatches")
   scores       Score[]
+  groupTeams   GroupTeam[]
   event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("teams")
@@ -102,6 +104,7 @@ model Match {
   status        String            @default("draft")
   currentStep   String            @default("intro") @map("current_step")
   winnerId      String?           @map("winner_id")
+  groupId       String?           @map("group_id")
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
   assignments   MatchAssignment[]
@@ -111,9 +114,38 @@ model Match {
   teamA         Team?             @relation("TeamAMatches", fields: [teamAId], references: [id])
   event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   roomRef       Room?             @relation("MatchRoom", fields: [roomId], references: [id])
+  group         Group?            @relation(fields: [groupId], references: [id])
   scores        Score[]
 
   @@map("matches")
+}
+
+model Group {
+  id        String      @id @default(uuid())
+  eventId   String      @map("event_id")
+  name      String
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teams     GroupTeam[]
+  matches   Match[]
+
+  @@map("groups")
+}
+
+model GroupTeam {
+  id        String   @id @default(uuid())
+  groupId   String   @map("group_id")
+  teamId    String   @map("team_id")
+  slotOrder Int      @default(0) @map("slot_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, teamId])
+  @@unique([groupId, slotOrder])
+  @@map("group_teams")
 }
 
 model MatchAssignment {

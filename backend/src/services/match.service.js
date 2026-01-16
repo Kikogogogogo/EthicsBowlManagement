@@ -102,7 +102,7 @@ class MatchService {
    */
   async createMatch(matchData) {
     try {
-      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, location, scheduledTime, status, winnerId } = matchData;
+      const { eventId, roundNumber, teamAId, teamBId, moderatorId, room, location, scheduledTime, status, winnerId, groupId } = matchData;
 
       // Verify event exists and is not completed
       const event = await prisma.event.findUnique({
@@ -231,7 +231,8 @@ class MatchService {
           scheduledTime: finalScheduledTime,
           status: matchStatus,
           currentStep: MATCH_STEPS.INTRO,
-          winnerId: matchWinnerId
+          winnerId: matchWinnerId,
+          groupId: groupId || null
         },
         include: {
           teamA: {
@@ -822,30 +823,6 @@ class MatchService {
 
       if (existingAssignment) {
         throw new Error('Judge is already assigned to this match');
-      }
-
-      // Check if judge has access to this event
-      const event = await prisma.event.findUnique({
-        where: { id: match.eventId },
-        select: { allowedJudges: true, allowedModerators: true }
-      });
-
-      let hasEventAccess = false;
-      
-      // Check if judge is in allowed judges list
-      if (event.allowedJudges) {
-        try {
-          const allowedJudges = JSON.parse(event.allowedJudges);
-          if (Array.isArray(allowedJudges) && allowedJudges.includes(judgeId)) {
-            hasEventAccess = true;
-          }
-        } catch (error) {
-          console.error('Error parsing allowedJudges:', error);
-        }
-      }
-
-      if (!hasEventAccess) {
-        throw new Error('Judge does not have access to this event');
       }
 
       // Get current assignments to determine judge number

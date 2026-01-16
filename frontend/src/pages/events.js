@@ -602,9 +602,6 @@ class EventsPage {
     // For new events, set up the status selector with all options available
     this.updateStatusOptions('draft');
     
-    // Populate judge and moderator selection
-    await this.populateJudgeModeratorSelection();
-    
     this.showEventModal();
   }
 
@@ -803,9 +800,6 @@ class EventsPage {
     
     // Populate round names
     this.populateRoundNames(event.totalRounds || 3, event.roundNames);
-    
-    // Populate judge and moderator selection
-    await this.populateJudgeModeratorSelection(event.allowedJudges, event.allowedModerators);
   }
 
   /**
@@ -849,96 +843,6 @@ class EventsPage {
     }
   }
 
-  /**
-   * Populate judge and moderator selection checkboxes
-   */
-  async populateJudgeModeratorSelection(eventAllowedJudges = null, eventAllowedModerators = null) {
-    // Ensure users are loaded before populating
-    if (!Array.isArray(this.users) || this.users.length === 0) {
-      console.log('Users not loaded yet, loading now...');
-      await this.loadUsers();
-    }
-    
-    this.populateUserSelection('judges', eventAllowedJudges);
-    this.populateUserSelection('moderators', eventAllowedModerators);
-  }
-
-  /**
-   * Populate user selection for judges or moderators
-   */
-  populateUserSelection(userType, allowedUserIds = null) {
-    const containerId = userType === 'judges' ? 'allowed-judges-container' : 'allowed-moderators-container';
-    const loadingId = userType === 'judges' ? 'judges-loading' : 'moderators-loading';
-    const roleFilter = userType === 'judges' ? 'judge' : 'moderator';
-    
-    console.log(`🔍 [EventsPage] populateUserSelection called for ${userType}`);
-    console.log(`🔍 [EventsPage] Total users available:`, this.users?.length || 0);
-    console.log(`🔍 [EventsPage] Users data:`, this.users);
-    
-    const container = document.getElementById(containerId);
-    const loadingDiv = document.getElementById(loadingId);
-    
-    if (!container) {
-      console.warn(`Container ${containerId} not found`);
-      return;
-    }
-    
-    // Ensure users is an array before filtering
-    if (!Array.isArray(this.users)) {
-      console.warn('Users is not an array:', this.users);
-      this.users = [];
-    }
-    
-    // Filter users by role (judge/moderator as requested)
-    const filteredUsers = this.users.filter(user => user.role === roleFilter);
-    
-    console.log(`🔍 [EventsPage] Filtered ${roleFilter}s (${filteredUsers.length} total):`, filteredUsers);
-    
-    if (filteredUsers.length === 0) {
-      container.innerHTML = `<div class="text-sm text-gray-500">No ${roleFilter}s found in the system</div>`;
-      return;
-    }
-    
-    // Hide loading indicator
-    if (loadingDiv) {
-      loadingDiv.style.display = 'none';
-    }
-    
-    // Parse allowed user IDs if provided
-    let allowedIds = [];
-    if (allowedUserIds) {
-      try {
-        allowedIds = Array.isArray(allowedUserIds) ? allowedUserIds : JSON.parse(allowedUserIds);
-      } catch (e) {
-        console.warn(`Failed to parse allowed ${userType}:`, e);
-      }
-    }
-    
-    // Generate checkboxes
-    const checkboxesHtml = filteredUsers.map(user => {
-      const isChecked = allowedIds.length === 0 || allowedIds.includes(user.id) ? 'checked' : '';
-      const isInactive = !user.isActive;
-      return `
-        <div class="flex items-center ${isInactive ? 'opacity-60' : ''}">
-          <input 
-            type="checkbox" 
-            id="${userType}-${user.id}" 
-            name="allowed${userType.charAt(0).toUpperCase() + userType.slice(1)}" 
-            value="${user.id}" 
-            ${isChecked}
-            ${isInactive ? 'disabled' : ''}
-            class="h-4 w-4 text-black focus:ring-black border-gray-300 rounded"
-          >
-          <label for="${userType}-${user.id}" class="ml-2 text-sm ${isInactive ? 'text-gray-400' : 'text-gray-700'}">
-            ${user.firstName} ${user.lastName} (${user.email}) - Role: ${user.role}
-            ${isInactive ? '<span class="text-red-500 text-xs ml-1">(Inactive)</span>' : '<span class="text-green-500 text-xs ml-1">(Active)</span>'}
-          </label>
-        </div>
-      `;
-    }).join('');
-    
-    container.innerHTML = checkboxesHtml;
-  }
 
   /**
    * Collect round names from form data
@@ -958,23 +862,6 @@ class EventsPage {
     return Object.keys(roundNames).length > 0 ? JSON.stringify(roundNames) : null;
   }
 
-  /**
-   * Collect selected judges from form
-   */
-  collectSelectedJudges() {
-    const judgeCheckboxes = document.querySelectorAll('input[name="allowedJudges"]:checked');
-    const selectedJudges = Array.from(judgeCheckboxes).map(checkbox => checkbox.value);
-    return selectedJudges.length > 0 ? selectedJudges : null;
-  }
-
-  /**
-   * Collect selected moderators from form
-   */
-  collectSelectedModerators() {
-    const moderatorCheckboxes = document.querySelectorAll('input[name="allowedModerators"]:checked');
-    const selectedModerators = Array.from(moderatorCheckboxes).map(checkbox => checkbox.value);
-    return selectedModerators.length > 0 ? selectedModerators : null;
-  }
 
   /**
    * Update status options based on current event status
@@ -1055,9 +942,7 @@ class EventsPage {
         status: formData.get('status'),
         totalRounds: parseInt(formData.get('totalRounds')) || 3,
         currentRound: parseInt(formData.get('currentRound')) || 1,
-        roundNames: this.collectRoundNames(formData),
-        allowedJudges: this.collectSelectedJudges(),
-        allowedModerators: this.collectSelectedModerators()
+        roundNames: this.collectRoundNames(formData)
       };
 
       // Validate status transition for existing events

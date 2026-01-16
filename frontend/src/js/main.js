@@ -1791,6 +1791,38 @@ class App {
  */
 let app; // Global variable for onclick handlers
 
+function setupDateInputToggles() {
+  const inputs = document.querySelectorAll('input[data-date-toggle="true"]');
+  inputs.forEach((input) => {
+    const placeholder = input.getAttribute('placeholder') || 'yyyy-mm-dd';
+
+    const ensureTextModeWhenEmpty = () => {
+      if (!input.value) {
+        input.type = 'text';
+        input.placeholder = placeholder;
+      }
+    };
+
+    // Start in text mode to avoid locale-specific placeholders (e.g. Chinese "日")
+    ensureTextModeWhenEmpty();
+
+    input.addEventListener('focus', () => {
+      input.type = 'date';
+      input.lang = 'en';
+      input.removeAttribute('placeholder');
+    });
+
+    input.addEventListener('blur', () => {
+      // Keep the value visible; switch back to text so the UI doesn't show locale placeholder when empty
+      input.type = 'text';
+      input.lang = 'en';
+      if (!input.value) {
+        input.placeholder = placeholder;
+      }
+    });
+  });
+}
+
 function bootstrapApp() {
   if (app) return; // Prevent multiple initializations
   app = new App();
@@ -1803,6 +1835,8 @@ function bootstrapApp() {
   window.userService = userService;
   window.roomService = roomService;
   window.preApprovedEmailService = preApprovedEmailService;
+
+  setupDateInputToggles();
 }
 
 if (document.readyState === 'loading') {
