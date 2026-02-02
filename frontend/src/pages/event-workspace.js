@@ -54,6 +54,16 @@ class EventWorkspacePage {
     this.autoRefreshEnabled = false;
     this.refreshInterval = 30000; // 30 seconds default
     this.lastRefreshTime = null;
+
+    // Bulk match creation state
+    this.bulkCreateState = {
+      roundNumber: 1,
+      matchSlots: [],
+      usedTeamIds: new Set(),
+      page: 1,
+      pageSize: 4
+    };
+    this.bulkCreateListenersInitialized = false;
     
     this.initializeEventListeners();
   }
@@ -265,8 +275,9 @@ class EventWorkspacePage {
       // Only handle clicks within the workspace page
       if (!e.target.closest('#event-workspace-page')) return;
       
-      if (e.target.matches('[data-modal-close]')) {
-        this.closeModal(e.target.getAttribute('data-modal-close'));
+      const modalCloseElement = e.target.closest('[data-modal-close]');
+      if (modalCloseElement) {
+        this.closeModal(modalCloseElement.getAttribute('data-modal-close'));
       }
       
       const actionElement = e.target.closest('[data-action]');
@@ -276,6 +287,77 @@ class EventWorkspacePage {
     };
     document.addEventListener('click', modalClickHandler);
     this.eventListeners.push({ type: 'click', handler: modalClickHandler });
+
+    // Bulk create round selector changes
+    const bulkRoundChangeHandler = (e) => {
+      if (this.isCleaningUp) return;
+      const workspacePage = document.getElementById('event-workspace-page');
+      if (!workspacePage || workspacePage.classList.contains('hidden')) return;
+      if (e.target.matches('#bulkRoundSelect')) {
+        const newRound = parseInt(e.target.value, 10);
+        if (!Number.isNaN(newRound)) {
+          this.initializeBulkCreateState(newRound);
+          this.renderBulkCreateModal();
+        }
+      }
+    };
+    document.addEventListener('change', bulkRoundChangeHandler);
+    this.eventListeners.push({ type: 'change', handler: bulkRoundChangeHandler });
+
+    // Bulk create drag and drop handlers
+    const bulkDragStartHandler = (e) => {
+      if (this.isCleaningUp) return;
+      const teamItem = e.target.closest('[data-bulk-team-id]');
+      if (!teamItem) return;
+      if (teamItem.getAttribute('draggable') !== 'true') return;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', teamItem.getAttribute('data-bulk-team-id'));
+      teamItem.classList.add('ring-2', 'ring-blue-400');
+    };
+    document.addEventListener('dragstart', bulkDragStartHandler);
+    this.eventListeners.push({ type: 'dragstart', handler: bulkDragStartHandler });
+
+    const bulkDragEndHandler = (e) => {
+      const teamItem = e.target.closest('[data-bulk-team-id]');
+      if (teamItem) {
+        teamItem.classList.remove('ring-2', 'ring-blue-400');
+      }
+    };
+    document.addEventListener('dragend', bulkDragEndHandler);
+    this.eventListeners.push({ type: 'dragend', handler: bulkDragEndHandler });
+
+    const bulkDragOverHandler = (e) => {
+      const dropZone = e.target.closest('[data-bulk-drop-zone]');
+      if (!dropZone) return;
+      if (dropZone.getAttribute('data-drop-disabled') === 'true') return;
+      e.preventDefault();
+      dropZone.classList.add('ring-2', 'ring-blue-300', 'bg-blue-50');
+    };
+    document.addEventListener('dragover', bulkDragOverHandler);
+    this.eventListeners.push({ type: 'dragover', handler: bulkDragOverHandler });
+
+    const bulkDragLeaveHandler = (e) => {
+      const dropZone = e.target.closest('[data-bulk-drop-zone]');
+      if (!dropZone) return;
+      dropZone.classList.remove('ring-2', 'ring-blue-300', 'bg-blue-50');
+    };
+    document.addEventListener('dragleave', bulkDragLeaveHandler);
+    this.eventListeners.push({ type: 'dragleave', handler: bulkDragLeaveHandler });
+
+    const bulkDropHandler = async (e) => {
+      const dropZone = e.target.closest('[data-bulk-drop-zone]');
+      if (!dropZone) return;
+      if (dropZone.getAttribute('data-drop-disabled') === 'true') return;
+      e.preventDefault();
+      dropZone.classList.remove('ring-2', 'ring-blue-300', 'bg-blue-50');
+      const teamId = e.dataTransfer.getData('text/plain');
+      const matchIndex = parseInt(dropZone.getAttribute('data-match-index'), 10);
+      const slotKey = dropZone.getAttribute('data-slot-key');
+      if (!teamId || Number.isNaN(matchIndex) || !slotKey) return;
+      await this.handleBulkTeamDrop(teamId, matchIndex, slotKey);
+    };
+    document.addEventListener('drop', bulkDropHandler);
+    this.eventListeners.push({ type: 'drop', handler: bulkDropHandler });
 
     // Back to Events button - specific to workspace
     const backToEventsHandler = (e) => {
@@ -1365,6 +1447,9 @@ class EventWorkspacePage {
                     <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
                       Create Match
                     </button>
+                    <button data-action="bulk-create-matches" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                      Batch Create Matches
+                    </button>
                     <button data-action="advance-round" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium" 
                             ${this.currentEvent.currentRound >= this.currentEvent.totalRounds ? 'disabled' : ''}>
                       Advance Round
@@ -1701,6 +1786,9 @@ class EventWorkspacePage {
               <div class="p-6 space-y-4">
                 <button data-action="create-match" class="w-full bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
                   Create New Match
+                </button>
+                <button data-action="bulk-create-matches" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                  Batch Create Matches
                 </button>
                 <button data-action="export-results" class="w-full bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
                   Export Results
@@ -2040,6 +2128,10 @@ class EventWorkspacePage {
     const isAdmin = effectiveRole === 'admin';
     const isModerator = effectiveRole === 'moderator';
     const isJudge = effectiveRole === 'judge';
+    const hasGroupView = (this.groups && this.groups.length > 0) && this.matches.length > 0;
+    if (!hasGroupView && this.matchesSubpage === 'group') {
+      this.matchesSubpage = 'schedule';
+    }
     
     // Store all matches for filtering
     this.allMatches = [...this.matches];
@@ -2102,13 +2194,10 @@ class EventWorkspacePage {
                 <button data-action="create-match" class="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
                   Create Match
                 </button>
-                <button data-action="generate-round-robin" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
-                  Generate Round Robin
+                <button data-action="bulk-create-matches" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                  Batch Create Matches
                 </button>
-                <button data-action="generate-swiss" 
-                        class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors font-medium">
-                  Generate Swiss
-                </button>
+                
               </div>
             </div>
           </div>
@@ -2121,14 +2210,16 @@ class EventWorkspacePage {
                     class="px-3 py-1.5 rounded-md text-sm font-medium ${this.matchesSubpage === 'schedule' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
               Schedule
             </button>
-            <button data-action="switch-matches-subpage" data-subpage="group"
-                    class="px-3 py-1.5 rounded-md text-sm font-medium ${this.matchesSubpage === 'group' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-              Group
-            </button>
+            ${hasGroupView ? `
+              <button data-action="switch-matches-subpage" data-subpage="group"
+                      class="px-3 py-1.5 rounded-md text-sm font-medium ${this.matchesSubpage === 'group' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+                Group
+              </button>
+            ` : ''}
           </div>
         </div>
 
-        ${this.matchesSubpage === 'schedule' ? scheduleContent : this.renderGroupView()}
+        ${this.matchesSubpage === 'schedule' || !hasGroupView ? scheduleContent : this.renderGroupView()}
       </div>
     `;
   }
@@ -2965,6 +3056,96 @@ class EventWorkspacePage {
         </div>
       </div>
 
+      <!-- Bulk Create Matches Modal -->
+      <div id="bulkCreateMatchesModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] flex flex-col">
+          <div class="px-6 py-4 border-b border-gray-300 flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">Batch Create Matches</h3>
+              <p class="text-xs text-gray-500 mt-1">Drag teams into brackets to build matches. Click a match to edit details.</p>
+            </div>
+            <button type="button" data-modal-close="bulkCreateMatchesModal" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-hidden">
+            <div class="grid grid-cols-12 gap-4 p-6 h-full">
+              <!-- Team Toolbar -->
+              <div class="col-span-4 lg:col-span-3 border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-medium text-gray-900">Teams</h4>
+                    <span id="bulkTeamsCount" class="text-xs text-gray-500">${this.teams.length} total</span>
+                  </div>
+                </div>
+                <div id="bulkTeamsList" class="p-3 space-y-2 overflow-y-auto"></div>
+              </div>
+
+              <!-- Match Board -->
+              <div class="col-span-8 lg:col-span-9 border border-gray-200 rounded-lg flex flex-col min-h-0 overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center space-x-3">
+                      <label class="text-sm font-medium text-gray-700">Round</label>
+                      <select id="bulkRoundSelect" class="border-gray-300 rounded-md focus:border-gray-500 focus:ring-gray-500 text-sm">
+                        ${Array.from({length: this.currentEvent.totalRounds}, (_, i) => i + 1).map(round => 
+                          `<option value="${round}" ${round === this.currentEvent.currentRound ? 'selected' : ''}>Round ${round}</option>`
+                        ).join('')}
+                      </select>
+                      <span id="bulkRoundSummary" class="text-xs text-gray-500"></span>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-wrap">
+                      <button data-action="bulk-refresh-matches" class="bg-white text-black border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium">
+                        Refresh
+                      </button>
+                      <button data-action="bulk-add-match" class="bg-black text-white px-3 py-1.5 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium">
+                        Add Match
+                      </button>
+                      <button data-action="generate-round-robin" class="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
+                        Generate Round Robin
+                      </button>
+                      <button data-action="generate-swiss" class="bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition-colors text-sm font-medium">
+                        Generate Swiss
+                      </button>
+                      ${this.teams.length % 2 === 1 ? `
+                        <button data-action="bulk-apply-bye-generator" class="bg-green-600 text-white px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${this.shouldDisableBulkByeGenerator() ? 'cursor-not-allowed opacity-50' : 'hover:bg-green-700'}" ${this.shouldDisableBulkByeGenerator() ? 'disabled' : ''}>
+                          Apply Bye Generator
+                        </button>
+                      ` : ''}
+                      <button data-action="bulk-delete-all" class="bg-white text-red-600 border border-red-300 px-3 py-1.5 rounded-md transition-colors text-sm font-medium">
+                        Delete All
+                      </button>
+                    </div>
+                  </div>
+                  ${this.teams.length % 2 === 1 ? `
+                    <p class="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                      Odd number of teams detected. Bye generator is available only before any matches are added.
+                    </p>
+                  ` : ''}
+                </div>
+                <div class="p-2 flex-1 min-h-0">
+                  <div id="bulkMatchBoard"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-gray-300 flex items-center justify-end space-x-3">
+            <button data-action="bulk-page-prev" class="bg-white text-black border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium">
+              Previous
+            </button>
+            <button data-action="bulk-page-next" class="bg-white text-black border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium">
+              Next
+            </button>
+            <span id="bulkPageIndicator" class="text-xs text-gray-500"></span>
+            <button type="button" data-modal-close="bulkCreateMatchesModal" class="bg-white text-black border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors font-medium">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Edit Match Modal -->
       <div id="editMatchModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
         <div class="bg-white border border-gray-300 rounded-lg shadow-xl max-w-2xl w-full mx-4">
@@ -3265,7 +3446,7 @@ class EventWorkspacePage {
               <div id="groupSizesContainer" class="border border-gray-300 rounded-md p-3 space-y-2 bg-gray-50"></div>
               <div class="mt-2 flex justify-between items-center">
                 <p class="text-xs text-gray-500">
-                  <span class="text-red-600 font-medium">Required:</span> Total must equal ${this.teams.length} teams (max 6 per group)
+                  <span class="text-red-600 font-medium">Required:</span> Total must equal ${this.teams.length} teams (max ${this.currentEvent.totalRounds + 1} per group)
                 </p>
                 <span id="groupSizeTotal" class="text-xs text-gray-600 font-medium">0 / ${this.teams.length} teams</span>
               </div>
@@ -3479,6 +3660,468 @@ class EventWorkspacePage {
   }
 
   /**
+   * Open bulk create matches modal
+   */
+  async openBulkCreateMatchesModal() {
+    if (this.getEffectiveRole() !== 'admin') {
+      this.ui.showError('Permission Denied', 'Only admins can bulk create matches.');
+      return;
+    }
+
+    this.showModal('bulkCreateMatchesModal');
+
+    const defaultRound = this.bulkCreateState.roundNumber || this.currentEvent?.currentRound || 1;
+    this.initializeBulkCreateState(defaultRound);
+    this.renderBulkCreateModal();
+  }
+
+  shouldDisableBulkByeGenerator() {
+    if (this.currentEvent?.status !== 'draft') return true;
+    if (this.teams.length % 2 === 0) return true;
+    const hasAnySlots = (this.bulkCreateState?.matchSlots?.length || 0) > 0;
+    return this.matches.length > 0 || hasAnySlots;
+  }
+
+  /**
+   * Initialize bulk create state for a round
+   */
+  initializeBulkCreateState(roundNumber) {
+    const roundMatches = this.matches.filter(match => match.roundNumber === roundNumber);
+    const matchSlots = roundMatches.map(match => ({
+      id: match.id,
+      teamAId: match.teamAId,
+      teamBId: match.teamBId,
+      status: match.status,
+      isBye: !match.teamBId
+    }));
+
+    this.bulkCreateState = {
+      roundNumber,
+      matchSlots,
+      usedTeamIds: new Set(),
+      page: 1,
+      pageSize: this.bulkCreateState?.pageSize || 4
+    };
+
+    this.updateBulkUsedTeams();
+  }
+
+  /**
+   * Update used teams set for bulk create
+   */
+  updateBulkUsedTeams() {
+    const usedTeamIds = new Set();
+    this.bulkCreateState.matchSlots.forEach(slot => {
+      if (slot.teamAId) usedTeamIds.add(slot.teamAId);
+      if (slot.teamBId) usedTeamIds.add(slot.teamBId);
+    });
+    this.bulkCreateState.usedTeamIds = usedTeamIds;
+  }
+
+  /**
+   * Render bulk create modal content
+   */
+  renderBulkCreateModal() {
+    const roundSelect = document.getElementById('bulkRoundSelect');
+    if (roundSelect) {
+      roundSelect.value = String(this.bulkCreateState.roundNumber);
+    }
+
+    const teamsList = document.getElementById('bulkTeamsList');
+    if (teamsList) {
+      const teamItems = this.teams.map(team => {
+        const isUsed = this.bulkCreateState.usedTeamIds.has(team.id);
+        return `
+          <div 
+            class="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2 text-sm ${isUsed ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 cursor-move'}"
+            data-bulk-team-id="${team.id}"
+            draggable="${isUsed ? 'false' : 'true'}"
+          >
+            <span class="truncate">${team.name}</span>
+            <span class="text-xs text-gray-400">${team.school || ''}</span>
+          </div>
+        `;
+      }).join('');
+
+      teamsList.innerHTML = teamItems || `<div class="text-sm text-gray-500">No teams available.</div>`;
+    }
+
+    const roundSummary = document.getElementById('bulkRoundSummary');
+    if (roundSummary) {
+      roundSummary.textContent = `Matches: ${this.bulkCreateState.matchSlots.length}`;
+    }
+
+    const byeButton = document.querySelector('[data-action="bulk-apply-bye-generator"]');
+    if (byeButton) {
+      const disabled = this.shouldDisableBulkByeGenerator();
+      byeButton.disabled = disabled;
+      byeButton.className = `bg-green-600 text-white px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-green-700'}`;
+    }
+
+    const deleteAllButton = document.querySelector('[data-action="bulk-delete-all"]');
+    if (deleteAllButton) {
+      const disabled = (this.bulkCreateState.matchSlots?.length || 0) === 0;
+      deleteAllButton.disabled = disabled;
+      deleteAllButton.className = `bg-white text-red-600 border border-red-300 px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-red-50'}`;
+    }
+
+    const board = document.getElementById('bulkMatchBoard');
+    const totalMatches = this.bulkCreateState.matchSlots.length;
+    const pageSize = this.bulkCreateState.pageSize || 6;
+    const totalPages = Math.max(1, Math.ceil(totalMatches / pageSize));
+    if (this.bulkCreateState.page > totalPages) {
+      this.bulkCreateState.page = totalPages;
+    }
+    const currentPage = this.bulkCreateState.page || 1;
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const pageSlots = this.bulkCreateState.matchSlots.slice(startIndex, endIndex);
+
+    if (board) {
+      if (totalMatches === 0) {
+        board.innerHTML = `
+          <div class="text-sm text-gray-500 border border-dashed border-gray-300 rounded-md p-6 text-center">
+            No matches in this round yet. Add a match to get started.
+          </div>
+        `;
+      } else {
+        board.innerHTML = `
+          <div class="space-y-2">
+            ${pageSlots.map((slot, index) => this.renderBulkMatchCard(slot, startIndex + index)).join('')}
+          </div>
+        `;
+      }
+    }
+
+    const pageIndicator = document.getElementById('bulkPageIndicator');
+    if (pageIndicator) {
+      pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+    }
+
+    const prevBtn = document.querySelector('[data-action="bulk-page-prev"]');
+    const nextBtn = document.querySelector('[data-action="bulk-page-next"]');
+    if (prevBtn) {
+      const disabled = currentPage <= 1;
+      prevBtn.disabled = disabled;
+      prevBtn.className = `bg-white text-black border border-gray-300 px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-50'}`;
+    }
+    if (nextBtn) {
+      const disabled = currentPage >= totalPages;
+      nextBtn.disabled = disabled;
+      nextBtn.className = `bg-white text-black border border-gray-300 px-3 py-1.5 rounded-md transition-colors text-sm font-medium ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-50'}`;
+    }
+  }
+
+  renderBulkMatchCard(slot, index) {
+    const teamA = this.teams.find(team => team.id === slot.teamAId);
+    const teamB = this.teams.find(team => team.id === slot.teamBId);
+    const hasMatch = Boolean(slot.id);
+    const isComplete = Boolean(slot.teamAId && slot.teamBId);
+    const canDeleteAny = this.currentEvent?.status === 'draft';
+    const deleteDisabled = !canDeleteAny && slot.status !== 'draft';
+
+    const statusLabel = slot.status ? this.getMatchStatusText(slot.status) : 'Draft';
+    const statusClasses = slot.status ? this.getMatchStatusClasses(slot.status) : 'bg-gray-100 text-gray-800 border border-gray-300';
+
+    const teamADropDisabled = hasMatch || Boolean(slot.teamAId);
+    const teamBDropDisabled = hasMatch || Boolean(slot.teamBId);
+
+    return `
+      <div class="border border-gray-200 rounded-lg p-3 bg-white">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-medium text-gray-900">Match ${index + 1}</div>
+          <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClasses}">
+              ${statusLabel}
+            </span>
+            ${hasMatch ? `
+              <button data-action="bulk-edit-match" data-match-id="${slot.id}" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                Edit
+              </button>
+            ` : ''}
+            <button data-action="bulk-delete-match" data-match-index="${index}" ${slot.id ? `data-match-id="${slot.id}"` : ''} class="text-xs ${deleteDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-800'} font-medium" ${deleteDisabled ? 'disabled' : ''}>
+              Delete
+            </button>
+          </div>
+        </div>
+        <div class="mt-3 space-y-2">
+          <div 
+            class="bulk-drop-zone flex items-center justify-between border border-dashed rounded-md px-3 py-2 text-sm ${teamADropDisabled ? 'bg-gray-50 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300'}"
+            data-bulk-drop-zone="true"
+            data-drop-disabled="${teamADropDisabled ? 'true' : 'false'}"
+            data-match-index="${index}"
+            data-slot-key="teamAId"
+          >
+            <span>${teamA ? teamA.name : 'Drop Team A here'}</span>
+            ${!hasMatch && teamA ? `
+              <button data-action="bulk-clear-slot" data-match-index="${index}" data-slot-key="teamAId" class="text-xs text-gray-400 hover:text-gray-600">
+                Clear
+              </button>
+            ` : ''}
+          </div>
+          <div 
+            class="bulk-drop-zone flex items-center justify-between border border-dashed rounded-md px-3 py-2 text-sm ${teamBDropDisabled ? 'bg-gray-50 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300'}"
+            data-bulk-drop-zone="true"
+            data-drop-disabled="${teamBDropDisabled ? 'true' : 'false'}"
+            data-match-index="${index}"
+            data-slot-key="teamBId"
+          >
+            <span>${teamB ? teamB.name : 'Drop Team B here'}</span>
+            ${!hasMatch && teamB ? `
+              <button data-action="bulk-clear-slot" data-match-index="${index}" data-slot-key="teamBId" class="text-xs text-gray-400 hover:text-gray-600">
+                Clear
+              </button>
+            ` : ''}
+          </div>
+        </div>
+        ${!hasMatch && slot.teamAId && !slot.teamBId ? `
+          <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
+            <span>Team ${teamA?.name || ''} vs ???</span>
+            <button data-action="bulk-mark-bye" data-match-index="${index}" class="text-xs text-green-600 hover:text-green-800 font-medium">
+              Mark as Bye
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  addBulkMatchSlot() {
+    this.bulkCreateState.matchSlots.push({
+      id: null,
+      teamAId: null,
+      teamBId: null,
+      status: 'draft',
+      isBye: false
+    });
+    const pageSize = this.bulkCreateState.pageSize || 6;
+    const totalPages = Math.max(1, Math.ceil(this.bulkCreateState.matchSlots.length / pageSize));
+    this.bulkCreateState.page = totalPages;
+    this.renderBulkCreateModal();
+  }
+
+  clearBulkMatchSlot(element) {
+    const matchIndex = parseInt(element.getAttribute('data-match-index'), 10);
+    const slotKey = element.getAttribute('data-slot-key');
+    if (Number.isNaN(matchIndex) || !slotKey) return;
+    const slot = this.bulkCreateState.matchSlots[matchIndex];
+    if (!slot || slot.id) return;
+    slot[slotKey] = null;
+    this.updateBulkUsedTeams();
+    this.renderBulkCreateModal();
+  }
+
+  async deleteBulkMatch(element) {
+    const matchId = element.getAttribute('data-match-id');
+    const matchIndex = parseInt(element.getAttribute('data-match-index'), 10);
+    const slot = this.bulkCreateState.matchSlots[matchIndex];
+
+    if (!slot) return;
+
+    if (!matchId) {
+      this.bulkCreateState.matchSlots.splice(matchIndex, 1);
+      this.updateBulkUsedTeams();
+      this.renderBulkCreateModal();
+      return;
+    }
+
+    if (this.currentEvent?.status !== 'draft' && slot.status !== 'draft') {
+      this.ui.showError('Error', 'Only draft matches can be deleted once the event has started.');
+      return;
+    }
+
+    const teamAName = this.teams.find(t => t.id === slot.teamAId)?.name || 'Unknown Team';
+    const teamBName = this.teams.find(t => t.id === slot.teamBId)?.name || 'Bye';
+    const confirmed = confirm(`Delete match?\n\n${teamAName} vs ${teamBName}\nRound ${this.bulkCreateState.roundNumber}`);
+    if (!confirmed) return;
+
+    try {
+      await this.matchService.deleteEventMatch(this.currentEventId, matchId);
+      this.matches = this.matches.filter(match => match.id !== matchId);
+      this.bulkCreateState.matchSlots.splice(matchIndex, 1);
+      this.updateBulkUsedTeams();
+      this.renderBulkCreateModal();
+      this.ui.showSuccess('Success', 'Match deleted successfully.');
+    } catch (error) {
+      console.error('Failed to delete match:', error);
+      this.ui.showError('Error', 'Failed to delete match: ' + error.message);
+    }
+  }
+
+  async markBulkMatchAsBye(element) {
+    const matchIndex = parseInt(element.getAttribute('data-match-index'), 10);
+    const slot = this.bulkCreateState.matchSlots[matchIndex];
+    if (!slot || slot.id || !slot.teamAId || slot.teamBId) return;
+
+    try {
+      const byeMatchData = {
+        roundNumber: this.bulkCreateState.roundNumber,
+        teamAId: slot.teamAId,
+        teamBId: null,
+        status: 'completed',
+        winnerId: slot.teamAId,
+        room: 'Bye'
+      };
+
+      const response = await this.matchService.createEventMatch(this.currentEventId, byeMatchData);
+      const createdMatch = response.data || response;
+      slot.id = createdMatch.id;
+      slot.status = createdMatch.status || 'completed';
+      slot.isBye = true;
+      this.matches.push(createdMatch);
+      this.updateBulkUsedTeams();
+      this.renderBulkCreateModal();
+      this.ui.showSuccess('Success', 'Bye match created.');
+    } catch (error) {
+      console.error('Failed to create bye match:', error);
+      this.ui.showError('Error', 'Failed to create bye match: ' + error.message);
+    }
+  }
+
+  async openBulkEditMatch(element) {
+    const matchId = element.getAttribute('data-match-id');
+    if (!matchId) return;
+    this.closeModal('bulkCreateMatchesModal');
+    await this.openEditMatchModal(matchId);
+  }
+
+  setBulkPage(nextPage) {
+    const totalMatches = this.bulkCreateState.matchSlots.length;
+    const pageSize = this.bulkCreateState.pageSize || 6;
+    const totalPages = Math.max(1, Math.ceil(totalMatches / pageSize));
+    const normalizedPage = Math.max(1, Math.min(totalPages, nextPage));
+    if (normalizedPage === this.bulkCreateState.page) return;
+    this.bulkCreateState.page = normalizedPage;
+    this.renderBulkCreateModal();
+  }
+
+  async refreshBulkCreateMatches() {
+    await this.loadEventData();
+    this.initializeBulkCreateState(this.bulkCreateState.roundNumber);
+    this.renderBulkCreateModal();
+  }
+
+  async deleteAllBulkMatches() {
+    const roundNumber = this.bulkCreateState.roundNumber;
+    const hasSlots = (this.bulkCreateState.matchSlots?.length || 0) > 0;
+    if (!hasSlots) {
+      this.ui.showError('Info', 'No matches to delete in this round.');
+      return;
+    }
+
+    const confirmed = confirm(`Delete all matches in Round ${roundNumber}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const slots = [...this.bulkCreateState.matchSlots];
+    for (const slot of slots) {
+      if (!slot.id) {
+        continue;
+      }
+      try {
+        await this.matchService.deleteEventMatch(this.currentEventId, slot.id);
+        this.matches = this.matches.filter(match => match.id !== slot.id);
+        this.allMatches = (this.allMatches || []).filter(match => match.id !== slot.id);
+      } catch (error) {
+        console.error('Failed to delete match:', error);
+        this.ui.showError('Error', 'Failed to delete some matches: ' + error.message);
+        return;
+      }
+    }
+
+    this.bulkCreateState.matchSlots = [];
+    this.bulkCreateState.page = 1;
+    this.updateBulkUsedTeams();
+    this.renderBulkCreateModal();
+    this.ui.showSuccess('Success', `Deleted all matches in Round ${roundNumber}.`);
+  }
+
+  async applyBulkByeGenerator() {
+    if (this.shouldDisableBulkByeGenerator()) {
+      if (this.matches.length > 0) {
+        this.ui.showError('Error', 'Bye generator is only available when no matches have been added.');
+        return;
+      }
+      this.ui.showError('Error', 'Bye generator can only run before the event starts and requires an odd number of teams.');
+      return;
+    }
+
+    const createdByes = [];
+
+    for (let roundNumber = 1; roundNumber <= this.currentEvent.totalRounds; roundNumber++) {
+      const byeTeam = this.teams[roundNumber % this.teams.length];
+      const byeMatchData = {
+        roundNumber,
+        teamAId: byeTeam.id,
+        teamBId: null,
+        status: 'completed',
+        winnerId: byeTeam.id,
+        room: 'Bye'
+      };
+
+      try {
+        const response = await this.matchService.createEventMatch(this.currentEventId, byeMatchData);
+        const createdMatch = response.data || response;
+        this.matches.push(createdMatch);
+        createdByes.push({ roundNumber, teamName: byeTeam.name });
+      } catch (error) {
+        console.error('Failed to create bye match:', error);
+      }
+    }
+
+    this.initializeBulkCreateState(this.bulkCreateState.roundNumber);
+    this.renderBulkCreateModal();
+
+    if (createdByes.length === 0) {
+      this.ui.showError('Info', 'No bye matches were created.');
+      return;
+    }
+
+    let message = `Created ${createdByes.length} bye match(es).\n\n` + createdByes.map(item => `Round ${item.roundNumber}: ${item.teamName}`).join('\n');
+    this.ui.showSuccess('Success', message);
+  }
+
+  async handleBulkTeamDrop(teamId, matchIndex, slotKey) {
+    const slot = this.bulkCreateState.matchSlots[matchIndex];
+    if (!slot || slot.id) return;
+
+    if (slot[slotKey] === teamId) return;
+
+    if (this.bulkCreateState.usedTeamIds.has(teamId)) {
+      this.ui.showError('Error', 'This team is already assigned in this round.');
+      return;
+    }
+
+    slot[slotKey] = teamId;
+    this.updateBulkUsedTeams();
+    this.renderBulkCreateModal();
+
+    if (slot.teamAId && slot.teamBId) {
+      try {
+        const matchData = {
+          roundNumber: this.bulkCreateState.roundNumber,
+          teamAId: slot.teamAId,
+          teamBId: slot.teamBId,
+          status: 'draft'
+        };
+
+        const response = await this.matchService.createEventMatch(this.currentEventId, matchData);
+        const createdMatch = response.data || response;
+
+        slot.id = createdMatch.id;
+        slot.status = createdMatch.status || 'draft';
+        this.matches.push(createdMatch);
+        this.updateBulkUsedTeams();
+        this.renderBulkCreateModal();
+        this.ui.showSuccess('Success', 'Match created.');
+      } catch (error) {
+        console.error('Failed to create match:', error);
+        this.ui.showError('Error', 'Failed to create match: ' + error.message);
+      }
+    }
+  }
+
+
+  /**
    * Handle various actions
    */
   async handleAction(action, element) {
@@ -3500,6 +4143,50 @@ class EventWorkspacePage {
             const errorDiv = document.getElementById('judgeValidationError');
             if (errorDiv) errorDiv.classList.add('hidden');
           }
+          break;
+
+        case 'bulk-create-matches':
+          await this.openBulkCreateMatchesModal();
+          break;
+
+        case 'bulk-add-match':
+          this.addBulkMatchSlot();
+          break;
+
+        case 'bulk-refresh-matches':
+          await this.refreshBulkCreateMatches();
+          break;
+
+        case 'bulk-apply-bye-generator':
+          await this.applyBulkByeGenerator();
+          break;
+
+        case 'bulk-delete-match':
+          await this.deleteBulkMatch(element);
+          break;
+
+        case 'bulk-clear-slot':
+          this.clearBulkMatchSlot(element);
+          break;
+
+        case 'bulk-mark-bye':
+          await this.markBulkMatchAsBye(element);
+          break;
+
+        case 'bulk-edit-match':
+          await this.openBulkEditMatch(element);
+          break;
+
+        case 'bulk-page-prev':
+          this.setBulkPage(this.bulkCreateState.page - 1);
+          break;
+
+        case 'bulk-page-next':
+          this.setBulkPage(this.bulkCreateState.page + 1);
+          break;
+
+        case 'bulk-delete-all':
+          await this.deleteAllBulkMatches();
           break;
           
         case 'edit-match':
@@ -5497,10 +6184,10 @@ class EventWorkspacePage {
         return;
       }
 
-      if (match.status !== 'draft') {
-        this.ui.showError('Error', 'Only draft matches can be deleted');
-        return;
-      }
+    if (match.status !== 'draft' && this.currentEvent?.status !== 'draft') {
+      this.ui.showError('Error', 'Only draft matches can be deleted after the event starts');
+      return;
+    }
 
       // Get team names for confirmation
       const teamA = this.teams.find(t => t.id === match.teamAId);
@@ -6015,6 +6702,13 @@ class EventWorkspacePage {
   closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
     document.getElementById(modalId).classList.remove('flex');
+
+    if (modalId === 'bulkCreateMatchesModal') {
+      const workspaceContent = document.getElementById('workspace-content');
+      if (workspaceContent) {
+        workspaceContent.innerHTML = this.renderTabContent();
+      }
+    }
   }
 
   /**
@@ -8782,12 +9476,13 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     if (!container) return;
 
     const count = Math.max(1, parseInt(groupCount, 10) || 1);
+    const maxGroupSize = Math.max(2, this.currentEvent.totalRounds + 1);
     container.innerHTML = Array.from({ length: count }, (_, index) => {
       const defaultSize = presetSizes[index] || 2;
       return `
         <div class="flex items-center justify-between">
           <label class="text-sm font-medium text-gray-700">Group ${String.fromCharCode(65 + index)}</label>
-          <input type="number" name="groupSize" min="2" max="6" value="${defaultSize}"
+          <input type="number" name="groupSize" min="2" max="${maxGroupSize}" value="${defaultSize}"
                  class="w-24 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
       `;
@@ -8829,7 +9524,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
     }
 
     const totalTeams = this.teams.length;
-    const defaultGroupCount = Math.max(1, Math.ceil(totalTeams / 6));
+    const maxGroupSize = Math.max(2, this.currentEvent.totalRounds + 1);
+    const defaultGroupCount = Math.max(1, Math.ceil(totalTeams / maxGroupSize));
     const groupCountInput = document.getElementById('groupCountInput');
     if (groupCountInput) {
       groupCountInput.value = defaultGroupCount;
@@ -8895,8 +9591,8 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       const groupCount = parseInt(formData.get('groupCount'), 10) || 1;
       const groupSizes = formData.getAll('groupSize').map(size => parseInt(size, 10));
 
-      if (this.currentEvent.totalRounds > 5) {
-        this.ui.showError('Validation Error', 'Event total rounds cannot exceed 5 for grouped round robin');
+      if (this.currentEvent.totalRounds < 1) {
+        this.ui.showError('Validation Error', 'Event must have at least 1 round');
         return;
       }
 
@@ -8905,8 +9601,9 @@ Note: Judges typically score each question individually (First, Second, Third Qu
         return;
       }
 
-      if (groupSizes.some(size => size > 6)) {
-        this.ui.showError('Validation Error', 'Each group size must be 6 or less');
+      const maxGroupSize = this.currentEvent.totalRounds + 1;
+      if (groupSizes.some(size => size > maxGroupSize)) {
+        this.ui.showError('Validation Error', `Each group size must be ${maxGroupSize} or less`);
         return;
       }
 
@@ -8927,9 +9624,16 @@ Note: Judges typically score each question individually (First, Second, Third Qu
       // Refresh data and switch to Group subpage
       await this.loadEventData();
       this.matchesSubpage = 'group';
+      this.renderWorkspace();
 
       // Close modal
       this.closeModal('roundRobinModal');
+
+      const bulkModal = document.getElementById('bulkCreateMatchesModal');
+      if (bulkModal && !bulkModal.classList.contains('hidden')) {
+        this.initializeBulkCreateState(this.bulkCreateState.roundNumber);
+        this.renderBulkCreateModal();
+      }
       
     } catch (error) {
       console.error('Error handling Round Robin form:', error);

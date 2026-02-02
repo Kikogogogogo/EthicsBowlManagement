@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const { 
   MATCH_STATUSES, 
+  EVENT_STATUS,
   MATCH_STEPS, 
   USER_ROLES, 
   getValidMatchStatuses,
@@ -1537,25 +1538,24 @@ class MatchService {
         throw new Error('Match does not belong to this event');
       }
 
-      // Only allow deletion of draft matches
-      if (match.status !== MATCH_STATUSES.DRAFT) {
-        throw new Error('Cannot delete match that is not in draft status. Only draft matches can be deleted.');
+      const isDraftEvent = match.event?.status === EVENT_STATUS.DRAFT;
+
+      // Only allow deletion of non-draft matches if event is still draft
+      if (!isDraftEvent && match.status !== MATCH_STATUSES.DRAFT) {
+        throw new Error('Cannot delete match that is not in draft status. Only draft matches can be deleted after the event starts.');
       }
 
       // Check if any scores have been submitted
       const submittedScores = match.scores.filter(score => score.isSubmitted);
-      if (submittedScores.length > 0) {
+      if (!isDraftEvent && submittedScores.length > 0) {
         throw new Error('Cannot delete match with submitted scores');
       }
 
       // Delete match and related data in transaction
       await prisma.$transaction([
-        // Delete unsubmitted scores
+        // Delete scores (all if event is draft)
         prisma.score.deleteMany({
-          where: {
-            matchId,
-            isSubmitted: false
-          }
+          where: isDraftEvent ? { matchId } : { matchId, isSubmitted: false }
         }),
         // Delete judge assignments
         prisma.matchAssignment.deleteMany({
