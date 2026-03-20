@@ -92,19 +92,24 @@ class TestUsersPage {
         <div class="bg-white border-b border-gray-200">
           <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="py-6">
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between gap-3">
                 <div>
                   <h1 class="text-2xl font-bold text-gray-900">Test Users</h1>
                   <p class="mt-1 text-sm text-gray-600">
                     Manage virtual test users for development and testing
                   </p>
                 </div>
-                <button id="backToDashboardBtn" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                  </svg>
-                  Back to Dashboard
-                </button>
+                <div class="flex items-center gap-3">
+                  <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="Toggle color mode" title="Toggle color mode">
+                    <span data-theme-icon aria-hidden="true"></span>
+                  </button>
+                  <button id="backToDashboardBtn" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back to Dashboard
+                  </button>
+                </div>
               </div>
             </div>
           </div>

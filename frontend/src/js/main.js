@@ -54,6 +54,83 @@ import '../pages/test-users.js';
 
 import '../pages/event-workspace.js';
 
+const THEME_STORAGE_KEY = 'preferred-theme';
+
+class ThemeManager {
+  constructor() {
+    this.storageKey = THEME_STORAGE_KEY;
+    this.darkModeClass = 'app-dark-mode';
+    this.theme = this.getStoredTheme();
+    this.applyTheme(this.theme);
+  }
+
+  getStoredTheme() {
+    const storedTheme = localStorage.getItem(this.storageKey);
+    return storedTheme === 'dark' ? 'dark' : 'light';
+  }
+
+  getTheme() {
+    return this.theme;
+  }
+
+  isDarkMode() {
+    return this.theme === 'dark';
+  }
+
+  toggleTheme() {
+    const nextTheme = this.isDarkMode() ? 'light' : 'dark';
+    this.applyTheme(nextTheme);
+    localStorage.setItem(this.storageKey, nextTheme);
+    return nextTheme;
+  }
+
+  applyTheme(theme) {
+    this.theme = theme === 'dark' ? 'dark' : 'light';
+    document.body.classList.toggle(this.darkModeClass, this.isDarkMode());
+    document.documentElement.classList.toggle(this.darkModeClass, this.isDarkMode());
+    document.documentElement.setAttribute('data-theme', this.theme);
+    this.updateToggleButtons();
+  }
+
+  getToggleLabel() {
+    return this.isDarkMode() ? '切换到浅色模式' : '切换到深色模式';
+  }
+
+  getToggleIcon() {
+    if (this.isDarkMode()) {
+      return `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path stroke-linecap="round" d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"></path>
+        </svg>
+      `;
+    }
+
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"></path>
+      </svg>
+    `;
+  }
+
+  updateToggleButtons(root = document) {
+    const buttons = root.querySelectorAll('[data-theme-toggle]');
+    const label = this.getToggleLabel();
+    const iconMarkup = this.getToggleIcon();
+
+    buttons.forEach((button) => {
+      button.setAttribute('title', label);
+      button.setAttribute('aria-label', label);
+      button.setAttribute('aria-pressed', String(this.isDarkMode()));
+
+      const iconTarget = button.querySelector('[data-theme-icon]');
+      if (iconTarget) {
+        iconTarget.innerHTML = iconMarkup;
+      }
+    });
+  }
+}
+
 /**
  * UI Manager - handles DOM manipulation and page routing
  */
@@ -719,7 +796,10 @@ class UIManager {
  */
 class App {
   constructor() {
+    this.themeManager = window.themeManager || new ThemeManager();
+    window.themeManager = this.themeManager;
     this.ui = new UIManager();
+    this.themeManager.updateToggleButtons();
     
     // Initialize page classes - these are defined as global classes in their respective script files
     this.dashboardPage = new DashboardPage(this.ui);
@@ -781,6 +861,16 @@ class App {
       this.ui.elements.learnMoreBtn.addEventListener('click', handler);
       this.navigationListeners.push({ element: this.ui.elements.learnMoreBtn, event: 'click', handler });
     }
+
+    document.addEventListener('click', (event) => {
+      const themeToggleButton = event.target.closest('[data-theme-toggle]');
+      if (!themeToggleButton) {
+        return;
+      }
+
+      event.preventDefault();
+      this.themeManager.toggleTheme();
+    });
     
     // Google Sign In button
     // User dropdown toggle
@@ -1566,6 +1656,7 @@ class App {
       const pageElement = this.ui.elements.testUsersPage;
       if (pageElement) {
         pageElement.innerHTML = await this.testUsersPage.render();
+        this.themeManager.updateToggleButtons(pageElement);
       }
       
       // Finally bind event listeners after the DOM is updated

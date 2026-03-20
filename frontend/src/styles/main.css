@@ -519,4 +519,1015 @@
     font-size: 0.875rem;
     min-height: 44px;
   }
-} 
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  color: #4b5563;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  background-color: #f9fafb;
+  color: #111827;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.theme-toggle-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+body.app-dark-mode {
+  color-scheme: dark;
+}
+
+body.app-dark-mode #score-match-page {
+  --dm-bg: #0b1220;
+  --dm-surface: #111827;
+  --dm-surface-2: #1f2937;
+  --dm-surface-3: #0f172a;
+  --dm-border: #334155;
+  --dm-text: #f8fafc;
+  --dm-muted: #cbd5e1;
+  --dm-subtle: #94a3b8;
+  --dm-accent: #60a5fa;
+  background-color: var(--dm-bg) !important;
+  color: var(--dm-text);
+}
+
+body.app-dark-mode #score-match-page .bg-white {
+  background-color: var(--dm-surface) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-gray-50 {
+  background-color: var(--dm-surface-2) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-gray-100,
+body.app-dark-mode #score-match-page .bg-gray-200 {
+  background-color: var(--dm-surface-3) !important;
+}
+
+body.app-dark-mode #score-match-page .text-gray-900,
+body.app-dark-mode #score-match-page .text-black {
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode #score-match-page .text-gray-800,
+body.app-dark-mode #score-match-page .text-gray-700 {
+  color: var(--dm-muted) !important;
+}
+
+body.app-dark-mode #score-match-page .text-gray-600,
+body.app-dark-mode #score-match-page .text-gray-500,
+body.app-dark-mode #score-match-page .text-gray-400 {
+  color: var(--dm-subtle) !important;
+}
+
+body.app-dark-mode #score-match-page .border-gray-200,
+body.app-dark-mode #score-match-page .border-gray-300,
+body.app-dark-mode #score-match-page .border-gray-400 {
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode #score-match-page .border-black {
+  border-color: var(--dm-accent) !important;
+}
+
+body.app-dark-mode #score-match-page button.bg-black,
+body.app-dark-mode #score-match-page a.bg-black,
+body.app-dark-mode #score-match-page .bg-black.text-white {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+body.app-dark-mode #score-match-page .shadow,
+body.app-dark-mode #score-match-page .shadow-sm,
+body.app-dark-mode #score-match-page .shadow-lg {
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.35) !important;
+}
+
+body.app-dark-mode #score-match-page .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+body.app-dark-mode #score-match-page .divide-gray-300 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode #score-match-page input,
+body.app-dark-mode #score-match-page select,
+body.app-dark-mode #score-match-page textarea {
+  background-color: var(--dm-surface) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode #score-match-page select option,
+body.app-dark-mode #score-match-page select optgroup {
+  background-color: var(--dm-surface) !important;
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode #score-match-page select option:disabled {
+  color: var(--dm-subtle) !important;
+}
+
+body.app-dark-mode #score-match-page input::placeholder,
+body.app-dark-mode #score-match-page textarea::placeholder {
+  color: #64748b !important;
+}
+
+body.app-dark-mode #score-match-page .hover\:bg-gray-50:hover,
+body.app-dark-mode #score-match-page .hover\:bg-gray-100:hover {
+  background-color: #1e293b !important;
+}
+
+body.app-dark-mode #score-match-page .hover\:text-gray-700:hover,
+body.app-dark-mode #score-match-page .hover\:text-gray-900:hover {
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode #score-match-page .text-blue-600,
+body.app-dark-mode #score-match-page .text-blue-700,
+body.app-dark-mode #score-match-page .text-blue-800 {
+  color: #93c5fd !important;
+}
+
+body.app-dark-mode #score-match-page .bg-blue-50 {
+  background-color: rgba(30, 64, 175, 0.16) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.22) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-green-50 {
+  background-color: rgba(20, 83, 45, 0.22) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-yellow-50 {
+  background-color: rgba(133, 77, 14, 0.24) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-orange-50 {
+  background-color: rgba(124, 45, 18, 0.24) !important;
+}
+
+body.app-dark-mode #score-match-page .bg-orange-100 {
+  background-color: rgba(154, 52, 18, 0.28) !important;
+}
+
+body.app-dark-mode #score-match-page .border-orange-200 {
+  border-color: rgba(251, 146, 60, 0.45) !important;
+}
+
+body.app-dark-mode #score-match-page .border-orange-400 {
+  border-color: rgba(251, 146, 60, 0.72) !important;
+}
+
+body.app-dark-mode #score-match-page .text-orange-700,
+body.app-dark-mode #score-match-page .text-orange-800,
+body.app-dark-mode #score-match-page .text-orange-900 {
+  color: #fdba74 !important;
+}
+
+body.app-dark-mode #score-match-page .text-green-700,
+body.app-dark-mode #score-match-page .text-green-800 {
+  color: #86efac !important;
+}
+
+body.app-dark-mode #score-match-page .text-yellow-700,
+body.app-dark-mode #score-match-page .text-yellow-800 {
+  color: #fde68a !important;
+}
+
+body.app-dark-mode .theme-toggle-btn {
+  background-color: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.app-dark-mode .theme-toggle-btn:hover {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+body.app-dark-mode .active-tab {
+  color: #f8fafc;
+  border-bottom-color: #60a5fa;
+}
+
+body.app-dark-mode .inactive-tab {
+  color: #94a3b8;
+}
+
+body.app-dark-mode .inactive-tab:hover {
+  color: #e2e8f0;
+  border-bottom-color: #475569;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) {
+  --dm-bg: #0b1220;
+  --dm-surface: #111827;
+  --dm-surface-2: #1f2937;
+  --dm-surface-3: #0f172a;
+  --dm-border: #334155;
+  --dm-text: #f8fafc;
+  --dm-muted: #cbd5e1;
+  --dm-subtle: #94a3b8;
+  --dm-accent: #60a5fa;
+  color: var(--dm-text);
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page
+) {
+  background-color: var(--dm-bg) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-white {
+  background-color: var(--dm-surface) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-gray-50 {
+  background-color: var(--dm-surface-2) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-gray-100,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-gray-200 {
+  background-color: var(--dm-surface-3) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-900,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-black {
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-800,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-700 {
+  color: var(--dm-muted) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-600,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-500,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-gray-400 {
+  color: var(--dm-subtle) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .border-gray-200,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .border-gray-300,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .border-gray-400 {
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .border-black {
+  border-color: var(--dm-accent) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) button.bg-black,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) a.bg-black,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-black.text-white {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .shadow,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .shadow-sm,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .shadow-lg {
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.35) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .divide-gray-300 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) input,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) select,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) textarea {
+  background-color: var(--dm-surface) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) select option,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) select optgroup {
+  background-color: var(--dm-surface) !important;
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) select option:disabled {
+  color: var(--dm-subtle) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) input::placeholder,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) textarea::placeholder {
+  color: #64748b !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .hover\:bg-gray-50:hover,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .hover\:bg-gray-100:hover {
+  background-color: #1e293b !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .hover\:text-gray-700:hover,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .hover\:text-gray-900:hover {
+  color: var(--dm-text) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-blue-600,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-blue-700,
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-blue-800 {
+  color: #93c5fd !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-blue-50 {
+  background-color: rgba(30, 64, 175, 0.16) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-red-50 {
+  background-color: rgba(127, 29, 29, 0.22) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-green-50 {
+  background-color: rgba(20, 83, 45, 0.22) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-yellow-50 {
+  background-color: rgba(133, 77, 14, 0.24) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.26) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .border-amber-200 {
+  border-color: rgba(251, 191, 36, 0.5) !important;
+}
+
+body.app-dark-mode :is(
+  #dashboard-page,
+  #change-name-page,
+  #events-page,
+  #teams-page,
+  #users-page,
+  #test-users-page,
+  #event-workspace-page,
+  #team-modal,
+  #user-modal,
+  #preapproved-email-modal,
+  #import-preapproved-emails-modal,
+  #event-modal,
+  #globalErrorModal
+) .text-amber-800 {
+  color: #fde68a !important;
+}

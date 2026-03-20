@@ -1441,6 +1441,9 @@ class EventWorkspacePage {
               </div>
               
               <div class="flex items-center space-x-3">
+                <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="Toggle color mode" title="Toggle color mode">
+                  <span data-theme-icon aria-hidden="true"></span>
+                </button>
                 ${this.renderRoleSwitcher()}
                 ${isAdmin ? `
                   <div class="flex space-x-3">
@@ -1506,6 +1509,9 @@ class EventWorkspacePage {
     }
     console.log('✅ [EventWorkspace] Found event-workspace-page element, setting innerHTML...');
     eventWorkspaceElement.innerHTML = workspaceHTML;
+    if (window.themeManager?.updateToggleButtons) {
+      window.themeManager.updateToggleButtons(eventWorkspaceElement);
+    }
     console.log('✅ [EventWorkspace] HTML content set successfully');
     
     // Ensure page is visible immediately after content is set
@@ -1746,101 +1752,164 @@ class EventWorkspacePage {
       `;
     }
 
+    const eventControls = this.currentEvent.status === 'draft' ? `
+      <div class="bg-white border border-gray-300 rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">Event Controls</h3>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-gray-600">
+            This event is still in draft mode. Start the event when pairings and assignments are ready.
+          </p>
+          <button 
+            id="start-event-btn" 
+            class="inline-flex w-full items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+          >
+            <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Start Event
+          </button>
+        </div>
+      </div>
+    ` : '';
+
+    const completeEventControls = this.currentEvent.status === 'active' && (isAdmin || isModerator) ? `
+      <div class="bg-white border border-gray-300 rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">Event Controls</h3>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-gray-600">
+            ${completedMatches < totalMatches
+              ? `All matches must be completed before the event can be finalized (${completedMatches}/${totalMatches} completed).`
+              : 'All matches are complete. You can finalize the event now.'}
+          </p>
+          <button 
+            id="complete-event-btn" 
+            ${completedMatches < totalMatches ? 'disabled' : ''}
+            class="inline-flex w-full items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white ${completedMatches < totalMatches ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            title="${completedMatches < totalMatches ? `Complete all matches first (${completedMatches}/${totalMatches} completed)` : 'Mark event as completed'}"
+          >
+            <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Complete Event
+          </button>
+        </div>
+      </div>
+    ` : '';
+
+    const sidebarContent = `
+      <div class="bg-white border border-gray-300 rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
+        </div>
+        <div class="p-6 space-y-4">
+          ${isAdmin ? `
+            <button data-action="create-match" class="w-full bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+              Create New Match
+            </button>
+            <button data-action="bulk-create-matches" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
+              Batch Create Matches
+            </button>
+          ` : ''}
+          <button data-action="export-results" class="w-full bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
+            Export Results
+          </button>
+        </div>
+      </div>
+      ${eventControls}
+      ${completeEventControls}
+    `.trim();
+
+    const eventDescription = `
+      <div class="bg-white border border-gray-300 rounded-lg h-full">
+        <div class="px-6 py-4 border-b border-gray-300">
+          <h3 class="text-lg font-medium text-gray-900">Event Description</h3>
+        </div>
+        <div class="p-6 space-y-5">
+          <div class="space-y-2">
+            <p class="text-sm text-gray-700 leading-6">
+              This panel is intended for judges and moderators working the event floor. Use it as a quick guide for scoring, status control, and match supervision.
+            </p>
+            <p class="text-sm text-gray-700 leading-6">
+              Go to the Matches tab to find the matches assigned to you and follow the instructions below based on your role.
+            </p>
+          </div>
+          <div class="rounded-lg bg-gray-50 border border-gray-200 p-4">
+            <h4 class="text-sm font-semibold text-gray-900">If You Are a Judge</h4>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              Enter the Matches tab and you will see the matches assigned to you. Based on the live room situation and the current stage status controlled by the moderator, open the Score option and follow the on-screen instructions to record scores.
+            </p>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              If anything is unclear during scoring, contact the on-site moderator first. If the issue still cannot be resolved, ask the admin for help.
+            </p>
+          </div>
+          <div class="rounded-lg bg-blue-50 border border-blue-200 p-4">
+            <h4 class="text-sm font-semibold text-gray-900">If You Are a Moderator</h4>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              Enter the Matches tab and you will see the matches assigned to you. After confirming that all judges are present, click Start Match for the correct match, then use Manage Status to update the stage as the live round progresses.
+            </p>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              Moderators are responsible for monitoring the match and helping judges when issues come up. If the problem cannot be resolved on site, report it to the admin, especially for score adjustments, ranking adjustments, or other escalation cases.
+            </p>
+          </div>
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-4">
+            <h4 class="text-sm font-semibold text-gray-900">Starting the Event</h4>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              The Event Start button on the right should be clicked by any participant assigned to the first match of this event, either a moderator or a judge, after confirming that the scheduled time has arrived and all teams and staff are present.
+            </p>
+            <p class="mt-3 text-sm text-gray-700 leading-6">
+              In normal cases, the moderator should click Start Event. In special situations, another judge may start the event only after confirming that communication is clear and everyone is aligned.
+            </p>
+            <p class="mt-3 text-sm text-amber-800 leading-6 font-medium">
+              Once the event starts, it moves into active mode and cannot return to draft mode. Please confirm carefully before starting.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
     return `
       <div class="space-y-8">
         <!-- Role Info -->
           ${roleInfo}
           
         <!-- Top Section: Statistics and Quick Actions -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
           <!-- Statistics Cards -->
-          <div class="lg:col-span-3">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-            ${isAdmin ? `
-              <div class="bg-white border border-gray-300 p-6 rounded-lg">
-                <div class="text-2xl font-bold text-gray-900">${this.teams.length}</div>
-                <div class="text-gray-600">Teams</div>
-              </div>
-            ` : ''}
+          <div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
-                          <div class="text-2xl font-bold text-gray-900">${draftMatches}</div>
-                <div class="text-gray-600">${isAdmin ? 'Draft Matches' : 'My Drafts'}</div>
+              <div class="text-2xl font-bold text-gray-900">${this.teams.length}</div>
+              <div class="text-gray-600">Teams</div>
+            </div>
+            <div class="bg-white border border-gray-300 p-6 rounded-lg">
+              <div class="text-2xl font-bold text-gray-900">${draftMatches}</div>
+              <div class="text-gray-600">${isAdmin ? 'Draft Matches' : 'My Drafts'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${inProgressMatches}</div>
-                <div class="text-gray-600">${isAdmin ? 'Active Matches' : 'My Active'}</div>
+              <div class="text-gray-600">${isAdmin ? 'Active Matches' : 'My Active'}</div>
             </div>
             <div class="bg-white border border-gray-300 p-6 rounded-lg">
               <div class="text-2xl font-bold text-gray-900">${completedMatches}</div>
-                <div class="text-gray-600">Completed</div>
+              <div class="text-gray-600">Completed</div>
             </div>
+          </div>
+          <div class="mt-6">
+            ${eventDescription}
           </div>
         </div>
 
-        <!-- Quick Actions -->
-          ${isAdmin ? `
-            <div class="bg-white border border-gray-300 rounded-lg">
-              <div class="px-6 py-4 border-b border-gray-300">
-                <h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
-              </div>
-              <div class="p-6 space-y-4">
-                <button data-action="create-match" class="w-full bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
-                  Create New Match
-                </button>
-                <button data-action="bulk-create-matches" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">
-                  Batch Create Matches
-                </button>
-                <button data-action="export-results" class="w-full bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors font-medium">
-                  Export Results
-                </button>
-              </div>
+          ${sidebarContent ? `
+            <div class="space-y-6">
+              ${sidebarContent}
             </div>
           ` : ''}
         </div>
-
-        <!-- Start Event Button (for Draft events) -->
-        ${this.currentEvent.status === 'draft' ? `
-          <div class="flex justify-center mb-6">
-            <button 
-              id="start-event-btn" 
-              class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-            >
-              <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              Start Event
-            </button>
-          </div>
-        ` : ''}
-
-        <!-- Complete Event Button (for Active events) -->
-        ${this.currentEvent.status === 'active' && (isAdmin || isModerator) ? `
-          <div class="flex justify-center mb-6">
-            <div class="text-center">
-              <button 
-                id="complete-event-btn" 
-                ${completedMatches < totalMatches ? 'disabled' : ''}
-                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white ${completedMatches < totalMatches ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                title="${completedMatches < totalMatches ? `Complete all matches first (${completedMatches}/${totalMatches} completed)` : 'Mark event as completed'}"
-              >
-                <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                Complete Event
-              </button>
-              ${completedMatches < totalMatches ? `
-                <p class="mt-2 text-sm text-gray-600">
-                  All matches must be completed first (${completedMatches}/${totalMatches} completed)
-                </p>
-              ` : `
-                <p class="mt-2 text-sm text-gray-600">
-                  All matches completed! Ready to finalize event.
-                </p>
-              `}
-            </div>
-          </div>
-        ` : ''}
 
         <!-- Middle Section: Rounds Overview and Recent Activity -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
